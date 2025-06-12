@@ -3,10 +3,11 @@
 # Configuration
 INPUT_FILE="all_gt_bs_rooted_48.tre"  # Change this to your input file
 OUTPUT_DIR="benchmark_results"
-ORIGINAL_JAR="/mnt/H/Research/STELAR-extension/STELAR/STELAR.jar"
+# ORIGINAL_JAR="/mnt/H/Research/STELAR-extension/STELAR/STELAR.jar"
+ORIGINAL_JAR="/mnt/nvme/anik/phylogeny/STELAR-MP/original/STELAR/STELAR.jar"
 
 # Computation modes to test
-COMPUTATION_MODES=("CPU_SINGLE" "CPU_PARALLEL" "ORIGINAL")  # GPU_PARALLEL commented out for now
+COMPUTATION_MODES=("CPU_SINGLE" "CPU_PARALLEL" "GPU_PARALLEL" "ORIGINAL")
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -17,6 +18,14 @@ NC='\033[0m' # No Color
 echo
 echo "=== STELAR-MP Benchmark Script ==="
 echo "Input file: $INPUT_FILE"
+echo
+
+# Debug information for GPU
+echo -e "${YELLOW}Debug Information:${NC}"
+echo "Current directory: $(pwd)"
+echo "Library path: $(pwd)/cuda"
+echo "Library exists: $(if [ -f "$(pwd)/cuda/libweight_calc.so" ]; then echo "Yes"; else echo "No"; fi)"
+echo "Library permissions: $(ls -l "$(pwd)/cuda/libweight_calc.so" 2>/dev/null || echo "Not found")"
 echo
 
 # Get current time in milliseconds
@@ -64,12 +73,18 @@ for mode in "${COMPUTATION_MODES[@]}"; do
     if [ "$mode" = "ORIGINAL" ]; then
         java -jar "$ORIGINAL_JAR" -i "$INPUT_FILE" -o "$output_file"
     else
-        # GPU_PARALLEL handling commented out for now
-        # if [ "$mode" = "GPU_PARALLEL" ]; then
-        #     java -Djava.library.path=cuda -cp target/stelar-mp-1.0-SNAPSHOT.jar Main -i "$INPUT_FILE" -o "$output_file" -m "$mode"
-        # else
+        if [ "$mode" = "GPU_PARALLEL" ]; then
+            java -Djava.library.path="$(pwd)/cuda" \
+                 -Djna.debug_load=true \
+                 -Djna.debug_load.jna=true \
+                 -Djna.platform.library.path="$(pwd)/cuda" \
+                 -Djna.memory.contiguous=true \
+                 -Djna.memory.contiguous.alignment=8 \
+                 -Djna.memory.contiguous.size=1024 \
+                 -cp target/stelar-mp-1.0-SNAPSHOT.jar Main -i "$INPUT_FILE" -o "$output_file" -m "$mode"
+        else
             java -cp target/stelar-mp-1.0-SNAPSHOT.jar Main -i "$INPUT_FILE" -o "$output_file" -m "$mode"
-        # fi
+        fi
     fi
     end_time=$(get_time_ms)
     execution_time=$((end_time - start_time))

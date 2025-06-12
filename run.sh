@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Default configuration
-DEFAULT_INPUT_FILE="all_gt_bs_rooted_48.tre"
+DEFAULT_INPUT_FILE="all_gt_bs_rooted_100.tre"
 DEFAULT_OUTPUT_FILE="out.tre"
 DEFAULT_COMPUTATION_MODE="CPU_PARALLEL"
 
@@ -17,7 +17,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Validate computation mode
-VALID_MODES=("CPU_SINGLE" "CPU_PARALLEL")  # GPU_PARALLEL removed for now
+VALID_MODES=("CPU_SINGLE" "CPU_PARALLEL" "GPU_PARALLEL")
 if [[ ! " ${VALID_MODES[@]} " =~ " ${COMPUTATION_MODE} " ]]; then
     echo -e "${RED}Error: Invalid computation mode '$COMPUTATION_MODE'${NC}"
     echo "Valid modes: ${VALID_MODES[*]}"
@@ -48,9 +48,24 @@ if [ ! -d "$OUTPUT_DIR" ]; then
     mkdir -p "$OUTPUT_DIR"
 fi
 
-# Run the program
+# Debug information
+echo -e "${YELLOW}Debug Information:${NC}"
+echo "Current directory: $(pwd)"
+echo "Library path: $(pwd)/cuda"
+echo "Library exists: $(if [ -f "$(pwd)/cuda/libweight_calc.so" ]; then echo "Yes"; else echo "No"; fi)"
+echo "Library permissions: $(ls -l "$(pwd)/cuda/libweight_calc.so" 2>/dev/null || echo "Not found")"
+echo
+
+# Run the program with the library path set for this run only
 echo -e "${YELLOW}Running STELAR-MP...${NC}"
-java -cp target/stelar-mp-1.0-SNAPSHOT.jar Main -i "$INPUT_FILE" -o "$OUTPUT_FILE" -m "$COMPUTATION_MODE"
+java -Djava.library.path="$(pwd)/cuda" \
+     -Djna.debug_load=true \
+     -Djna.debug_load.jna=true \
+     -Djna.platform.library.path="$(pwd)/cuda" \
+     -Djna.memory.contiguous=true \
+     -Djna.memory.contiguous.alignment=8 \
+     -Djna.memory.contiguous.size=1024 \
+     -cp target/stelar-mp-1.0-SNAPSHOT.jar Main -i "$INPUT_FILE" -o "$OUTPUT_FILE" -m "$COMPUTATION_MODE"
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}Program execution failed!${NC}"

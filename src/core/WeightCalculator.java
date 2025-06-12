@@ -33,6 +33,14 @@ public class WeightCalculator {
             public Pointer cluster1;
             public Pointer cluster2;
             public int bitsetSize;
+            
+            public Bipartition() {
+                super();
+            }
+            
+            public Bipartition(Pointer p) {
+                super(p);
+            }
         }
         
         void launchWeightCalculation(
@@ -166,41 +174,76 @@ public class WeightCalculator {
     
     private Map<STBipartition, Double> calculateWeightsGPU(List<STBipartition> candidates) {
         try {
+            System.out.println("Starting GPU weight calculation...");
             // Convert Java data structures to CUDA-compatible format
             int numCandidates = candidates.size();
             int numGeneTreeBips = geneTrees.stBipartitions.size();
             int bitsetSize = (geneTrees.realTaxaCount + 63) / 64; // Size in 64-bit words
             
-            // Allocate arrays for CUDA
-            WeightCalcLib.Bipartition[] cudaCandidates = new WeightCalcLib.Bipartition[numCandidates];
-            WeightCalcLib.Bipartition[] cudaGeneTreeBips = new WeightCalcLib.Bipartition[numGeneTreeBips];
+            System.out.println("Number of candidates: " + numCandidates);
+            System.out.println("Number of gene tree bipartitions: " + numGeneTreeBips);
+            System.out.println("Bitset size: " + bitsetSize);
+            
+            // Allocate arrays for CUDA with proper memory alignment
+            WeightCalcLib.Bipartition[] cudaCandidates = (WeightCalcLib.Bipartition[]) new WeightCalcLib.Bipartition().toArray(numCandidates);
+            WeightCalcLib.Bipartition[] cudaGeneTreeBips = (WeightCalcLib.Bipartition[]) new WeightCalcLib.Bipartition().toArray(numGeneTreeBips);
             int[] frequencies = new int[numGeneTreeBips];
             double[] weights = new double[numCandidates];
+            
+            // Allocate contiguous memory for all bit arrays
+            Memory candidateCluster1 = new Memory(numCandidates * bitsetSize * 8);
+            Memory candidateCluster2 = new Memory(numCandidates * bitsetSize * 8);
+            Memory geneTreeCluster1 = new Memory(numGeneTreeBips * bitsetSize * 8);
+            Memory geneTreeCluster2 = new Memory(numGeneTreeBips * bitsetSize * 8);
+            
+            System.out.println("Allocated memory for bit arrays");
             
             // Convert candidates
             for (int i = 0; i < numCandidates; i++) {
                 STBipartition stb = candidates.get(i);
-                WeightCalcLib.Bipartition bip = new WeightCalcLib.Bipartition();
-                bip.cluster1 = convertBitSetToPointer(stb.cluster1);
-                bip.cluster2 = convertBitSetToPointer(stb.cluster2);
+                WeightCalcLib.Bipartition bip = cudaCandidates[i];
+                
+                // Copy bit arrays to contiguous memory
+                long[] cluster1Words = stb.cluster1.toLongArray();
+                long[] cluster2Words = stb.cluster2.toLongArray();
+                candidateCluster1.write(i * bitsetSize * 8, cluster1Words, 0, cluster1Words.length);
+                candidateCluster2.write(i * bitsetSize * 8, cluster2Words, 0, cluster2Words.length);
+                
+                // Set pointers to contiguous memory
+                bip.cluster1 = candidateCluster1.share(i * bitsetSize * 8);
+                bip.cluster2 = candidateCluster2.share(i * bitsetSize * 8);
                 bip.bitsetSize = bitsetSize;
-                cudaCandidates[i] = bip;
+                bip.write();
             }
+            
+            System.out.println("Converted candidates to CUDA format");
             
             // Convert gene tree bipartitions
             int idx = 0;
             for (Map.Entry<STBipartition, Integer> entry : geneTrees.stBipartitions.entrySet()) {
                 STBipartition stb = entry.getKey();
-                WeightCalcLib.Bipartition bip = new WeightCalcLib.Bipartition();
-                bip.cluster1 = convertBitSetToPointer(stb.cluster1);
-                bip.cluster2 = convertBitSetToPointer(stb.cluster2);
+                WeightCalcLib.Bipartition bip = cudaGeneTreeBips[idx];
+                
+                // Copy bit arrays to contiguous memory
+                long[] cluster1Words = stb.cluster1.toLongArray();
+                long[] cluster2Words = stb.cluster2.toLongArray();
+                geneTreeCluster1.write(idx * bitsetSize * 8, cluster1Words, 0, cluster1Words.length);
+                geneTreeCluster2.write(idx * bitsetSize * 8, cluster2Words, 0, cluster2Words.length);
+                
+                // Set pointers to contiguous memory
+                bip.cluster1 = geneTreeCluster1.share(idx * bitsetSize * 8);
+                bip.cluster2 = geneTreeCluster2.share(idx * bitsetSize * 8);
                 bip.bitsetSize = bitsetSize;
-                cudaGeneTreeBips[idx] = bip;
+                bip.write();
+                
                 frequencies[idx] = entry.getValue();
                 idx++;
             }
             
+            System.out.println("Converted gene tree bipartitions to CUDA format");
+            
             // Launch CUDA kernel
+            System.out.println("Launching CUDA kernel...");
             WeightCalcLib.INSTANCE.launchWeightCalculation(
                 cudaCandidates,
                 cudaGeneTreeBips,
@@ -211,16 +254,31 @@ public class WeightCalculator {
                 bitsetSize
             );
             
+            System.out.println("CUDA kernel completed");
+            
             // Convert results back to Java Map
             Map<STBipartition, Double> result = new HashMap<>();
             for (int i = 0; i < numCandidates; i++) {
                 result.put(candidates.get(i), weights[i]);
             }
             
+            // Print some sample weights for debugging
+            System.out.println("Sample weights:");
+            int count = 0;
+            for (Map.Entry<STBipartition, Double> entry : result.entrySet()) {
+                if (count < 5) {
+                    System.out.println("Weight " + count + ": " + entry.getValue());
+                    count++;
+                } else {
+                    break;
+                }
+            }
+            
             return result;
             
         } catch (Exception e) {
             System.err.println("GPU computation failed, falling back to CPU: " + e.getMessage());
+            e.printStackTrace();  // Add stack trace for debugging
             return calculateWeightsMultiThread(candidates);
         }
     }

@@ -88,7 +88,7 @@ public class Main {
 
         // Write output
         try (FileWriter writer = new FileWriter(outputFilePath)) {
-            writer.write(resultTree.toString());
+            writer.write(resultTree.getNewickFormat());
         }
 
         long endTime = System.nanoTime();
@@ -96,6 +96,8 @@ public class Main {
 
         System.out.println("Score: " + score);
         System.out.println("Time taken: " + duration + " seconds");
+        System.out.println("Program completed successfully!");
+        System.out.println("Output written to: " + outputFilePath);
     }
 
     /**

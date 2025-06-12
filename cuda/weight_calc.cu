@@ -79,16 +79,47 @@ extern "C" {
         Bipartition *dCandidates, *dGeneTreeBips;
         int *dFrequencies;
         double *dWeights;
+        unsigned long long *dCandidateCluster1, *dCandidateCluster2;
+        unsigned long long *dGeneTreeCluster1, *dGeneTreeCluster2;
         
-        // Allocate device memory
+        // Allocate device memory for Bipartition structures
         cudaMalloc(&dCandidates, numCandidates * sizeof(Bipartition));
         cudaMalloc(&dGeneTreeBips, numGeneTreeBips * sizeof(Bipartition));
+        
+        // Allocate device memory for bit arrays
+        cudaMalloc(&dCandidateCluster1, numCandidates * bitsetSize * sizeof(unsigned long long));
+        cudaMalloc(&dCandidateCluster2, numCandidates * bitsetSize * sizeof(unsigned long long));
+        cudaMalloc(&dGeneTreeCluster1, numGeneTreeBips * bitsetSize * sizeof(unsigned long long));
+        cudaMalloc(&dGeneTreeCluster2, numGeneTreeBips * bitsetSize * sizeof(unsigned long long));
+        
+        // Copy bit arrays to device
+        for (int i = 0; i < numCandidates; i++) {
+            cudaMemcpy(dCandidateCluster1 + i * bitsetSize, hCandidates[i].cluster1, bitsetSize * sizeof(unsigned long long), cudaMemcpyHostToDevice);
+            cudaMemcpy(dCandidateCluster2 + i * bitsetSize, hCandidates[i].cluster2, bitsetSize * sizeof(unsigned long long), cudaMemcpyHostToDevice);
+            
+            Bipartition dBip;
+            dBip.cluster1 = dCandidateCluster1 + i * bitsetSize;
+            dBip.cluster2 = dCandidateCluster2 + i * bitsetSize;
+            dBip.bitsetSize = bitsetSize;
+            
+            cudaMemcpy(&dCandidates[i], &dBip, sizeof(Bipartition), cudaMemcpyHostToDevice);
+        }
+        
+        for (int i = 0; i < numGeneTreeBips; i++) {
+            cudaMemcpy(dGeneTreeCluster1 + i * bitsetSize, hGeneTreeBips[i].cluster1, bitsetSize * sizeof(unsigned long long), cudaMemcpyHostToDevice);
+            cudaMemcpy(dGeneTreeCluster2 + i * bitsetSize, hGeneTreeBips[i].cluster2, bitsetSize * sizeof(unsigned long long), cudaMemcpyHostToDevice);
+            
+            Bipartition dBip;
+            dBip.cluster1 = dGeneTreeCluster1 + i * bitsetSize;
+            dBip.cluster2 = dGeneTreeCluster2 + i * bitsetSize;
+            dBip.bitsetSize = bitsetSize;
+            
+            cudaMemcpy(&dGeneTreeBips[i], &dBip, sizeof(Bipartition), cudaMemcpyHostToDevice);
+        }
+        
+        // Allocate and copy other arrays
         cudaMalloc(&dFrequencies, numGeneTreeBips * sizeof(int));
         cudaMalloc(&dWeights, numCandidates * sizeof(double));
-        
-        // Copy data to device
-        cudaMemcpy(dCandidates, hCandidates, numCandidates * sizeof(Bipartition), cudaMemcpyHostToDevice);
-        cudaMemcpy(dGeneTreeBips, hGeneTreeBips, numGeneTreeBips * sizeof(Bipartition), cudaMemcpyHostToDevice);
         cudaMemcpy(dFrequencies, hFrequencies, numGeneTreeBips * sizeof(int), cudaMemcpyHostToDevice);
         
         // Launch kernel
@@ -108,5 +139,9 @@ extern "C" {
         cudaFree(dGeneTreeBips);
         cudaFree(dFrequencies);
         cudaFree(dWeights);
+        cudaFree(dCandidateCluster1);
+        cudaFree(dCandidateCluster2);
+        cudaFree(dGeneTreeCluster1);
+        cudaFree(dGeneTreeCluster2);
     }
 } 
