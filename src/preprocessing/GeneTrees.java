@@ -171,6 +171,7 @@ public class GeneTrees {
      */
     public void readGeneTrees(double[][] distanceMatrix) throws FileNotFoundException{
         int internalNodesCount = 0;
+        int skippedTrees = 0;
 
         Scanner scanner = new Scanner(new File(path));
 
@@ -178,31 +179,36 @@ public class GeneTrees {
         while (scanner.hasNextLine()) {
 
             String line = scanner.nextLine();
-            // System.out.println(line);
             if(line.trim().length() == 0) continue;
             
-            // Parse tree with consistent taxon mapping
-            var tree = new Tree(line, this.taxaMap);
-            
-            // Trees are assumed to be properly rooted and binary
-            // No polytomy resolution needed
-            
-            // System.out.println(tree.root);
-            
-            // Calculate tripartition frequencies for Algorithm 1
-            tree.calculateFrequencies(triPartitions);
-            
-            // Calculate STBipartitions for rooted trees
-            calculateSTBipartitions(tree);
-            
-            geneTrees.add(tree);
-            
-            // Track internal node count for complexity analysis
-            internalNodesCount += tree.nodes.size() - tree.leavesCount;
-
+            try {
+                // Parse tree with consistent taxon mapping
+                var tree = new Tree(line, this.taxaMap);
+                
+                // Trees are assumed to be properly rooted and binary
+                // No polytomy resolution needed
+                
+                // Calculate tripartition frequencies for Algorithm 1
+                tree.calculateFrequencies(triPartitions);
+                
+                // Calculate STBipartitions for rooted trees
+                calculateSTBipartitions(tree);
+                
+                geneTrees.add(tree);
+                
+                // Track internal node count for complexity analysis
+                internalNodesCount += tree.nodes.size() - tree.leavesCount;
+            } catch (RuntimeException e) {
+                skippedTrees++;
+                // Continue with next tree
+            }
         }
         
         scanner.close();
+        
+        if (skippedTrees > 0) {
+            System.err.println("Warning: Skipped " + skippedTrees + " invalid or empty gene trees.");
+        }
         
         // Build efficient lookup arrays for Algorithm 2 operations
         this.taxonIdToLabel = new String[this.taxaMap.size()];

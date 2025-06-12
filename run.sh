@@ -3,7 +3,7 @@
 # Compile all Java files in src directory to bin directory
 javac -sourcepath src -d bin $(find src -name "*.java")
 
-input="all_gt_bs_rooted_48.tre"
+input="all_gt_bs_rooted_37.tre"
 # input="in.tre"
 
 # Check if compilation was successful

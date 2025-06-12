@@ -251,4 +251,27 @@ public class Tree {
         }
         return result;
     }
+    
+    // Structural equality check (ignores child order)
+    public boolean equalsStructure(Tree other) {
+        if (other == null || this.root == null || other.root == null) return false;
+        return equalsStructureHelper(this.root, other.root);
+    }
+
+    private boolean equalsStructureHelper(TreeNode n1, TreeNode n2) {
+        if (n1.isLeaf() && n2.isLeaf()) {
+            return n1.taxon.label.equals(n2.taxon.label);
+        }
+        if (n1.isLeaf() || n2.isLeaf()) {
+            return false;
+        }
+        // Both are internal nodes with two children (rooted binary trees)
+        if (n1.childs.size() != 2 || n2.childs.size() != 2) return false;
+        // Compare both possible child orderings
+        TreeNode a1 = n1.childs.get(0), b1 = n1.childs.get(1);
+        TreeNode a2 = n2.childs.get(0), b2 = n2.childs.get(1);
+        boolean direct = equalsStructureHelper(a1, a2) && equalsStructureHelper(b1, b2);
+        boolean swapped = equalsStructureHelper(a1, b2) && equalsStructureHelper(b1, a2);
+        return direct || swapped;
+    }
 }
