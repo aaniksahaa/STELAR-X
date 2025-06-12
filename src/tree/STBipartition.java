@@ -28,7 +28,16 @@ public class STBipartition {
 	@Override
 	public int hashCode() {
 		if (_hash == 0) {
-			_hash = cluster1.hashCode() * 31 + cluster2.hashCode();
+			long[] words1 = cluster1.toLongArray();
+			long[] words2 = cluster2.toLongArray();
+			int result = 1;
+			for (long word : words1) {
+				result = 31 * result + (int)(word ^ (word >>> 32));
+			}
+			for (long word : words2) {
+				result = 31 * result + (int)(word ^ (word >>> 32));
+			}
+			_hash = result;
 		}
 		return _hash;
 	}

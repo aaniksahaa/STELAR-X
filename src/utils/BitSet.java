@@ -560,6 +560,11 @@ public class BitSet
         return b.toString();
     }
 
+    // Returns a copy of the internal words array up to wordsInUse
+    public long[] toLongArray() {
+        return Arrays.copyOf(words, wordsInUse);
+    }
+
     private static final int ADDRESS_BITS_PER_WORD = 6;
     private static final int BITS_PER_WORD = 64;
     private static final int BIT_INDEX_MASK = 63;

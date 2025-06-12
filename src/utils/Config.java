@@ -27,4 +27,18 @@ public class Config {
      * Current non-quartet type setting
      */
     public static NonQuartetType NON_QUARTET_TYPE = NonQuartetType.A;
+
+    /**
+     * Computation mode for weight calculation
+     */
+    public enum ComputationMode {
+        CPU_SINGLE,    // Single-threaded CPU computation
+        CPU_PARALLEL,  // Multi-threaded CPU computation
+        GPU_PARALLEL   // GPU-accelerated computation
+    }
+
+    /**
+     * Current computation mode setting
+     */
+    public static ComputationMode COMPUTATION_MODE = ComputationMode.CPU_PARALLEL;
 }

@@ -26,6 +26,7 @@ public class Main {
 
         String inputFilePath = null;
         String outputFilePath = null;
+        String computationMode = null;
 
         // Parse command line arguments
         for (int i = 0; i < args.length; i++) {
@@ -35,12 +36,16 @@ public class Main {
             } else if (args[i].equals("-o") && i + 1 < args.length) {
                 outputFilePath = args[i + 1];
                 i++; // Skip next argument as it's the file path
+            } else if (args[i].equals("-m") && i + 1 < args.length) {
+                computationMode = args[i + 1];
+                i++; // Skip next argument as it's the mode
             }
         }
 
         // Validate required arguments
         if (inputFilePath == null || outputFilePath == null) {
-            System.out.println("Usage: java Main -i <input_file> -o <output_file>");
+            System.out.println("Usage: java Main -i <input_file> -o <output_file> [-m <computation_mode>]");
+            System.out.println("Computation modes: CPU_SINGLE, CPU_PARALLEL, GPU_PARALLEL");
             System.exit(-1);
         }
 
@@ -51,31 +56,46 @@ public class Main {
             System.exit(-1);
         }
 
+        // Set computation mode if specified
+        if (computationMode != null) {
+            try {
+                Config.COMPUTATION_MODE = Config.ComputationMode.valueOf(computationMode);
+            } catch (IllegalArgumentException e) {
+                System.err.println("Error: Invalid computation mode '" + computationMode + "'");
+                System.err.println("Valid modes: CPU_SINGLE, CPU_PARALLEL, GPU_PARALLEL");
+                System.exit(-1);
+            }
+        }
+
         System.out.println("Input file: " + inputFilePath);
         System.out.println("Output file: " + outputFilePath);
+        System.out.println("Computation mode: " + Config.COMPUTATION_MODE);
 
         long startTime = System.nanoTime();
 
-        try {
-            // Process gene trees and generate analysis results
-            String analysisResult = processGeneTrees(inputFilePath);
-            
-            // Write results to output file
-            writeResults(outputFilePath, analysisResult);
-            
-            long endTime = System.nanoTime();
-            double elapsedSeconds = (endTime - startTime) / 1_000_000_000.0;
-            System.out.println();
-            System.out.printf("Inferring species tree took %.3f seconds\n", elapsedSeconds);
-            System.out.println();
+        // Process gene trees
+        GeneTrees geneTrees = new GeneTrees(inputFilePath);
+        geneTrees.readTaxaNames(); // Ensure taxaMap is initialized
+        geneTrees.readGeneTrees(null);
 
-            System.out.println("Analysis complete! Results written to: " + outputFilePath);
+        // Generate candidate bipartitions
+        List<STBipartition> candidates = geneTrees.generateCandidateBipartitions();
 
-        } catch (Exception e) {
-            System.err.println("Error during analysis: " + e.getMessage());
-            e.printStackTrace();
-            System.exit(-1);
+        // Run inference
+        InferenceDP inference = new InferenceDP(geneTrees, candidates);
+        double score = inference.solve();
+        Tree resultTree = inference.reconstructTree();
+
+        // Write output
+        try (FileWriter writer = new FileWriter(outputFilePath)) {
+            writer.write(resultTree.toString());
         }
+
+        long endTime = System.nanoTime();
+        double duration = (endTime - startTime) / 1_000_000_000.0; // Convert to seconds
+
+        System.out.println("Score: " + score);
+        System.out.println("Time taken: " + duration + " seconds");
     }
 
     /**

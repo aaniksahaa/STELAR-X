@@ -8,6 +8,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.Set;
+import java.util.List;
 
 import utils.Config;
 import utils.BitSet;
@@ -298,6 +299,97 @@ public class GeneTrees {
     private void calculateSTBipartitions(Tree tree) {
         if (tree.isRooted()) {
             calculateSTBipartitionsUtil(tree.root, tree);
+        }
+    }
+
+    /**
+     * Generates candidate bipartitions for the inference algorithm.
+     * This method creates a list of candidate bipartitions from the gene tree bipartitions,
+     * ensuring that each candidate is a valid bipartition of the taxa set.
+     * 
+     * @return List of candidate bipartitions for inference
+     */
+    public List<STBipartition> generateCandidateBipartitions() {
+        List<STBipartition> candidates = new ArrayList<>();
+        Set<BitSet> processedClusters = new HashSet<>();
+        
+        // First, add all bipartitions from gene trees
+        for (STBipartition stb : stBipartitions.keySet()) {
+            candidates.add(stb);
+            processedClusters.add(stb.cluster1);
+            processedClusters.add(stb.cluster2);
+        }
+        
+        // Generate complementary bipartitions for each cluster
+        for (STBipartition stb : stBipartitions.keySet()) {
+            BitSet cluster1 = stb.cluster1;
+            BitSet cluster2 = stb.cluster2;
+            
+            // Add complementary bipartition if not already processed
+            if (!processedClusters.contains(cluster1)) {
+                BitSet complement = new BitSet(realTaxaCount);
+                complement.set(0, realTaxaCount);
+                complement.andNot(cluster1);
+                if (complement.cardinality() > 0) {
+                    candidates.add(new STBipartition(cluster1, complement));
+                    processedClusters.add(cluster1);
+                    processedClusters.add(complement);
+                }
+            }
+            
+            if (!processedClusters.contains(cluster2)) {
+                BitSet complement = new BitSet(realTaxaCount);
+                complement.set(0, realTaxaCount);
+                complement.andNot(cluster2);
+                if (complement.cardinality() > 0) {
+                    candidates.add(new STBipartition(cluster2, complement));
+                    processedClusters.add(cluster2);
+                    processedClusters.add(complement);
+                }
+            }
+        }
+        
+        // Add all possible valid bipartitions for small clusters (size <= 3)
+        for (int size = 1; size <= 3; size++) {
+            for (int i = 0; i < realTaxaCount; i++) {
+                BitSet cluster1 = new BitSet(realTaxaCount);
+                cluster1.set(i);
+                
+                // Add all possible combinations of size 'size'
+                for (int j = i + 1; j < realTaxaCount; j++) {
+                    if (size > 1) {
+                        cluster1.set(j);
+                        if (size > 2) {
+                            for (int k = j + 1; k < realTaxaCount; k++) {
+                                cluster1.set(k);
+                                addValidBipartition(cluster1, candidates, processedClusters);
+                                cluster1.clear(k);
+                            }
+                        } else {
+                            addValidBipartition(cluster1, candidates, processedClusters);
+                        }
+                        cluster1.clear(j);
+                    } else {
+                        addValidBipartition(cluster1, candidates, processedClusters);
+                    }
+                }
+            }
+        }
+        
+        return candidates;
+    }
+    
+    private void addValidBipartition(BitSet cluster1, List<STBipartition> candidates, Set<BitSet> processedClusters) {
+        if (!processedClusters.contains(cluster1)) {
+            BitSet cluster2 = new BitSet(realTaxaCount);
+            cluster2.set(0, realTaxaCount);
+            cluster2.andNot(cluster1);
+            
+            if (cluster2.cardinality() > 0) {
+                candidates.add(new STBipartition(cluster1, cluster2));
+                processedClusters.add(cluster1);
+                processedClusters.add(cluster2);
+            }
         }
     }
 } 

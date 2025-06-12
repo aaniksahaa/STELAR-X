@@ -131,16 +131,13 @@ public class InferenceDP {
                 }
                 return tree.addInternalNode(children);
             }
-            return null;
+            throw new RuntimeException("No valid bipartition found for cluster: " + cluster + ", taxaCount: " + taxaCount);
         }
-        
         TreeNode leftChild = buildTreeNode(choice.cluster1, tree);
         TreeNode rightChild = buildTreeNode(choice.cluster2, tree);
-        
         ArrayList<TreeNode> children = new ArrayList<>();
         children.add(leftChild);
         children.add(rightChild);
-        
         return tree.addInternalNode(children);
     }
     
