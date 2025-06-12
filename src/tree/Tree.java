@@ -7,28 +7,11 @@ import java.util.Stack;
 
 import taxon.Taxon;
 
-/**
- * Tree: Core tree data structure for wQFM-TREE algorithm.
- * 
- * This class implements the phylogenetic tree representation used throughout
- * the wQFM-TREE algorithm. It handles various tree operations essential for
- * the divide-and-conquer approach:
- * 
- * 1. Gene tree parsing from Newick format
- * 2. Consensus tree construction and manipulation
- * 3. Tree balancing and re-rooting operations
- * 4. Support for Algorithm 2 scoring through efficient tree traversal
- * 5. Final species tree output generation
- * 
- * Trees in wQFM-TREE contain real taxa as leaves and support dummy taxa
- * through special node markings. The tree structure enables efficient
- * quartet evaluation and the mathematical formulations from Section 2.5.
- */
 public class Tree {
     
     // Core tree structure
-    public ArrayList<TreeNode> nodes;               // All nodes in tree (internal + leaves)
-    public ArrayList<TreeNode> topSortedNodes;      // Nodes in topological order for traversal
+    public ArrayList<TreeNode> nodes;               
+    public ArrayList<TreeNode> topSortedNodes;      
     
     public TreeNode root;                           // Root node of the tree
     public Map<String, Taxon> taxaMap;          // Mapping from taxon names to RealTaxon objects
@@ -37,6 +20,7 @@ public class Tree {
     public TreeNode[] leaves;                       // Fast access to leaf nodes by taxon ID
     public int leavesCount;                         // Number of leaves in tree
     
+    public boolean isRooted;
 
     /**
      * Creates a new internal or leaf tree node.
@@ -46,7 +30,6 @@ public class Tree {
      * subproblem solutions.
      */
     public TreeNode addNode(ArrayList<TreeNode> children, TreeNode parent){
-
         TreeNode nd = new TreeNode().setIndex(nodes.size()).setChilds(children).setParent(parent);
         nodes.add(nd);
         return nd;
@@ -92,97 +75,88 @@ public class Tree {
      * through the provided taxaMap for consistent taxon identification.
      */
     private void parseFromNewick(String newickLine){
-
-        // Map<String, RealTaxon> taxaMap = new HashMap<>();
         int leavesCount = 0;
-
         nodes = new ArrayList<>();
-    
-        Stack<TreeNode> nodes = new Stack<>();
-        newickLine.replaceAll("\\s", "");
-    
-        int n =  newickLine.length();
-    
+        Stack<TreeNode> nodeStack = new Stack<>();
+        newickLine = newickLine.replaceAll("\\s", "");
+        
+        int n = newickLine.length();
         int i = 0, j = 0;
-    
-        // Standard Newick parsing with stack-based approach
+        
         while(i < n){
             char curr = newickLine.charAt(i);
             if(curr == '('){
-                // Start of internal node - push sentinel
-                nodes.push(null);
+                nodeStack.push(null);
             }
             else if(curr == ')'){
-                // End of internal node - collect children and create internal node
-                ArrayList<TreeNode> arr = new ArrayList<>();
-                while( !nodes.isEmpty() && nodes.peek() != null){
-                    arr.add(nodes.pop());
+                ArrayList<TreeNode> children = new ArrayList<>();
+                while(!nodeStack.isEmpty() && nodeStack.peek() != null){
+                    children.add(nodeStack.pop());
                 }
-                if(!nodes.isEmpty())
-                    nodes.pop();
-                nodes.push(addInternalNode(arr));
-                
+                if(!nodeStack.isEmpty())
+                    nodeStack.pop();
+                nodeStack.push(addInternalNode(children));
             }
             else if(curr == ',' || curr == ';'){
-                // Separators - skip
+                // Skip separators
             }
             else{
-                // Taxon name - parse and create leaf node
                 StringBuilder taxa = new StringBuilder();
                 j = i;
                 TreeNode newNode = null;
                 while(j < n){
                     char curr_j = newickLine.charAt(j);
                     if(curr_j == ')' || curr_j == ','){
-                        Taxon taxon;
-                        // Lookup taxon in provided mapping for consistent IDs
-                        taxon = this.taxaMap.get(taxa.toString());
+                        Taxon taxon = this.taxaMap.get(taxa.toString());
                         newNode = addLeaf(taxon);
                         leavesCount++;
-
                         break;
                     }
                     taxa.append(curr_j);
                     ++j;
                 }
                 if(j == n){
-                    // End of string - final taxon
                     leavesCount++;
-                    Taxon taxon;
-                    taxon = this.taxaMap.get(taxa.toString());
+                    Taxon taxon = this.taxaMap.get(taxa.toString());
                     newNode = addLeaf(taxon);
                 }
                 i = j - 1;
-                nodes.push(newNode);
+                nodeStack.push(newNode);
             }
             ++i;
         }
 
         this.leavesCount = leavesCount;
-    
-        root = nodes.lastElement();
-    
-        // Ensure binary tree structure for efficient Algorithm 2 operations
-        if(root.childs.size() > 2)
-            balanceRoot();
+        root = nodeStack.lastElement();
         
-        // Set up data structures for efficient tree operations
+        // Determine if tree is rooted or unrooted
+        determineRootedness();
+        
+        // Handle tree structure based on rootedness
+        if(!isRooted && root.childs != null && root.childs.size() > 2){
+            balanceRoot();
+        }
+        
         filterLeaves();
         topSort();
+    }
 
-        // System.out.println(this.leavesCount);
-        // for( i = 0; i < this.leaves.length; ++i){
-        //     if(this.leaves[i] == null){
-        //         System.out.println("Error: Taxon " + i + " is not present in tree");
-        //         System.exit(-1);
-        //     }
-        //     if(this.leaves[i].taxon.id != i){
-        //         System.out.println("Error: Taxon " + i + " not matching");
-        //         System.exit(-1);
-        //     }
-        // }
-        // bringLeafsToFront();
+    private void determineRootedness(){
+        if(root.childs == null){
+            isRooted = true; // Single leaf case
+            return;
+        }
+        
+        // Unrooted trees typically have 3 children at root
+        // Rooted trees typically have 2 children at root
+        isRooted = (root.childs.size() <= 2);
+    }
 
+    public void setRooted(boolean rooted){
+        this.isRooted = rooted;
+        if(!isRooted && root.childs != null && root.childs.size() > 2){
+            balanceRoot();
+        }
     }
 
     /**
@@ -216,65 +190,68 @@ public class Tree {
             return new ArrayList<>(Arrays.asList(node.taxon.id));
         }
         
-        // Collect taxa reachable from each child subtree
-        var reachableFromChilds = new ArrayList<ArrayList<Integer>>();
-        for(var x : node.childs){
-            reachableFromChilds.add(resolveNonBinaryUtil(x, distanceMatrix));
-        }
-        var allReachableFromChilds = new ArrayList<Integer>();
-        for(var x : reachableFromChilds){
-            allReachableFromChilds.addAll(x);
+        if(node.childs.size() <= 2){
+            ArrayList<Integer> result = new ArrayList<>();
+            for(var child : node.childs){
+                result.addAll(resolveNonBinaryUtil(child, distanceMatrix));
+            }
+            return result;
         }
 
-        // Resolve polytomy if more than 2 children
-        if(node.childs.size() > 2){
-            double mxDist = Double.MIN_VALUE;
-            int mxIndex = -1;
+        double maxDistance = -1;
+        int maxIndex = -1;
+        
+        for(int i = 0; i < node.childs.size(); i++){
+            var childTaxa = resolveNonBinaryUtil(node.childs.get(i), distanceMatrix);
+            double totalDistance = 0;
             
-            // Find child subtree with maximum total distance to all others
-            for(int i = 0; i < node.childs.size(); ++i){
-                double currDist = 0;
-                for(var a : allReachableFromChilds){
-                    for(var b : reachableFromChilds.get(i)){
-                        currDist += distanceMatrix[a][b];
+            for(int taxon1 : childTaxa){
+                for(int j = 0; j < node.childs.size(); j++){
+                    if(i == j) continue;
+                    var otherChildTaxa = resolveNonBinaryUtil(node.childs.get(j), distanceMatrix);
+                    for(int taxon2 : otherChildTaxa){
+                        totalDistance += distanceMatrix[taxon1][taxon2];
                     }
                 }
-                if(currDist > mxDist){
-                    mxDist = currDist;
-                    mxIndex = i;
-                }
             }
-
-            // Separate the maximum distance child from others
-            var branchI = node.childs.get(mxIndex);
-            node.childs.remove(mxIndex);
             
-            // Create new internal node for remaining children
-            var newNode = addInternalNode(node.childs);
-            newNode.setParent(node);
-            node.childs = new ArrayList<>();
-            node.childs.add(branchI);
-            node.childs.add(newNode);
-            
-            // Recursively resolve the new internal node
-            resolveNonBinaryUtil(newNode, distanceMatrix);
-
+            if(totalDistance > maxDistance){
+                maxDistance = totalDistance;
+                maxIndex = i;
+            }
         }
-        return allReachableFromChilds;
+
+        TreeNode maxChild = node.childs.get(maxIndex);
+        ArrayList<TreeNode> remainingChildren = new ArrayList<>();
+        for(int i = 0; i < node.childs.size(); i++){
+            if(i != maxIndex){
+                remainingChildren.add(node.childs.get(i));
+            }
+        }
+
+        TreeNode newInternalNode = addInternalNode(remainingChildren);
+        
+        ArrayList<TreeNode> newChildren = new ArrayList<>();
+        newChildren.add(maxChild);
+        newChildren.add(newInternalNode);
+        
+        node.childs = newChildren;
+        maxChild.parent = node;
+        newInternalNode.parent = node;
+
+        ArrayList<Integer> result = new ArrayList<>();
+        result.addAll(resolveNonBinaryUtil(maxChild, distanceMatrix));
+        result.addAll(resolveNonBinaryUtil(newInternalNode, distanceMatrix));
+        return result;
     }
 
     public void resolveNonBinary(double[][] distanceMatrix){
-        // System.out.println(root.childs.size());
-        resolveNonBinaryUtil(root, distanceMatrix);
-        topSort();
+        for(var node : nodes){
+            if(node.childs != null && node.childs.size() > 2){
+                resolveNonBinaryUtil(node, distanceMatrix);
+            }
+        }
     }
-
-    
-    
-    // public Tree(String newickLine){
-    //     taxaMap = null;
-    //     parseFromNewick(newickLine);
-    // }
 
     public Tree(String newickLine, Map<String, Taxon> taxaMap){
         this.taxaMap = taxaMap;
@@ -282,39 +259,23 @@ public class Tree {
     }
 
     public Tree(){
-        taxaMap = null;
         nodes = new ArrayList<>();
     }
 
-
     public int dfs(TreeNode node, ArrayList<Integer> subTreeNodeCount){
-        if(node.childs == null){
+        if(node.isLeaf()){
             subTreeNodeCount.set(node.index, 1);
             return 1;
         }
-        int res = 0;
-        for(var x : node.childs){
-            res += dfs(x, subTreeNodeCount);
+        
+        int count = 1;
+        for(var child : node.childs){
+            count += dfs(child, subTreeNodeCount);
         }
-        subTreeNodeCount.set(node.index, res + 1);
-        return res + 1;
+        subTreeNodeCount.set(node.index, count);
+        return count;
     }
 
-    // private void bringLeafsToFront(){
-    //     for(int i = 0; i < nodes.size(); ++i){
-    //         if(nodes.get(i).isLeaf()){
-
-    //             var curr = nodes.get(i);
-    //             var tmp = nodes.get(curr.taxon.id);
-                
-    //             nodes.set(curr.taxon.id, curr);
-    //             nodes.set(i, tmp);
-    //             curr.index = curr.taxon.id;
-    //             tmp.index = i;
-    //         }
-    //     }
-    // }
-    
     public void reRootTree(TreeNode newRootNode){
         TreeNode newRootP = newRootNode.parent;
         if(newRootP == null) return;
@@ -330,16 +291,15 @@ public class Tree {
             currP = currP.parent;
             temp.parent = curr;
             curr = temp;
-            // System.out.println(curr.index);
         }
         if(newRootNode.isLeaf())
             newRootNode.childs = new ArrayList<>();
         newRootNode.childs.add(newRootP);
         this.root = newRootNode;
+        this.isRooted = true;
     }
 
     private void balanceRoot(){
-
         int n = nodes.size();
         ArrayList<Integer> subTreeNodeCount = new ArrayList<>(n);
         for(int i = 0; i < n; ++i)
@@ -356,8 +316,10 @@ public class Tree {
                 closest = nodes.get(i);
             }
         }
-        // System.out.println("diff : " + diff + " node: " + closest.index);
+        
         TreeNode closestP = closest.parent;
+        if(closestP == null) return;
+        
         closestP.childs.remove(closest);
 
         TreeNode curr = closestP;
@@ -376,23 +338,17 @@ public class Tree {
         arr.add(closest);
         arr.add(closestP);
 
-        root = addInternalNode(arr) ;
-        // root = new TreeNode(nodes.size(),null, arr, null);
-        // nodes.add(root);
-
-        // System.out.println(root.toString());
-
+        root = addInternalNode(arr);
     }
     
-    
-    private String newickFormatUitl(TreeNode node){
+    private String newickFormatUtil(TreeNode node){
         if(node.isLeaf()){
             return node.taxon.label;
         }
         StringBuilder sb = new StringBuilder();
         sb.append("(");
         for(int i = 0; i < node.childs.size(); ++i){
-            sb.append(newickFormatUitl(node.childs.get(i)));
+            sb.append(newickFormatUtil(node.childs.get(i)));
             if(i != node.childs.size() - 1)
                 sb.append(",");
         }
@@ -400,16 +356,14 @@ public class Tree {
         return sb.toString();
     }
 
-
     public String getNewickFormat(){
-        return newickFormatUitl(root) + ";";
+        return newickFormatUtil(root) + ";";
     }
 
     public boolean isTaxonPresent(int id){
         return this.leaves[id] != null;
     }
     
-
     private ArrayList<Integer> getChildrens(TreeNode node, Map<String, TreeNode> triPartitionsMap){
         if(node.isLeaf()){
             ArrayList<Integer> arr = new ArrayList<>();
@@ -421,9 +375,7 @@ public class Tree {
             reachableFromChilds.add(getChildrens(child, triPartitionsMap));
         }
 
-        // flag all elems in left and right partition to find elems of third partition
         boolean[] mark = new boolean[this.taxaMap.size()];
-
         for(var childTaxa : reachableFromChilds){
             for(var x : childTaxa){
                 mark[x] = true;
@@ -435,19 +387,14 @@ public class Tree {
             if(!mark[i] && isTaxonPresent(i)){
                 arr.add(i);
             }
-            // else if(!isTaxonPresent(i)){
-            //     System.out.println("No. " + i + " is not present in tree");
-            // }
         }
 
         reachableFromChilds.add(arr);
-
         String[] partitionStrings = new String[reachableFromChilds.size()];
 
         for(var x : reachableFromChilds){
             x.sort((a, b) -> a - b);
         }
-
 
         for(int i = 0; i < reachableFromChilds.size(); ++i){
             var sb = new StringBuilder();
@@ -456,7 +403,6 @@ public class Tree {
         }
         
         Arrays.sort(partitionStrings);
-        // String key;
         StringBuilder sb = new StringBuilder();
         for(var x : partitionStrings){
             sb.append(x + '|');
@@ -486,15 +432,12 @@ public class Tree {
     }
 
     private void topSortUtil(TreeNode node, ArrayList<TreeNode> topSort){
-        if(node.isLeaf()){
-        }
-        else{
+        if(!node.isLeaf()){
             for(var x : node.childs){
                 topSortUtil(x, topSort);
             }
         }
         topSort.add(node);
-
     }
 
     public void topSort(){
@@ -505,10 +448,31 @@ public class Tree {
 
     public boolean checkIfNonBinary(){
         for(var x : nodes){
-            if( x.childs != null && x.childs.size() > 2)
+            if(x.childs != null && x.childs.size() > 2)
                 return true;
         }
         return false;
     }
 
+    public boolean isRooted(){
+        return isRooted;
+    }
+
+    public void forceUnrooted(){
+        this.isRooted = false;
+        if(root.childs != null && root.childs.size() == 2){
+            // Convert rooted to unrooted by adding artificial root
+            TreeNode oldRoot = root;
+            ArrayList<TreeNode> newRootChildren = new ArrayList<>();
+            newRootChildren.addAll(oldRoot.childs);
+            root = addInternalNode(newRootChildren);
+        }
+    }
+
+    public void forceRooted(){
+        this.isRooted = true;
+        if(root.childs != null && root.childs.size() > 2){
+            balanceRoot();
+        }
+    }
 }

@@ -1,17 +1,14 @@
 #!/bin/bash
 
-# Compile Java files to bin directory
-# echo "Compiling Java files..."
-javac -sourcepath src -d bin src/Main.java src/utils/Config.java
+# Compile all Java files in src directory to bin directory
+javac -sourcepath src -d bin $(find src -name "*.java")
 
 # Check if compilation was successful
 if [ $? -eq 0 ]; then
+    # echo "Compilation successful!"
     # echo ""
-    echo "Compilation successful!"
-    echo ""
 
     # Run the program with in.tre and out.tre
-    # echo "Running phylogeny analysis..."
     java -cp bin Main -i in.tre -o out.tre
     
     # Check if execution was successful

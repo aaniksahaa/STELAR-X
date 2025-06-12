@@ -1,1 +1,22 @@
-    Number of gene trees: 8
+    === Gene Tree Analysis Results ===
+    Number of gene trees: 5
+    Number of taxa: 4
+    Unique tripartitions: 10
+    Unique STBipartitions: 12
+    Taxa names: A, B, C, D
+    STBipartitions:
+      (A) | (B,C) : 1
+      (C) | (D) : 2
+      (A,B,C) | (D) : 1
+      (B) | (C) : 2
+      (A) | (D) : 1
+      (A,D) | (B,C) : 1
+      (A) | (B,C,D) : 2
+      (B) | (D) : 1
+      (A,B) | (C,D) : 1
+      (A) | (B) : 1
+      (B,D) | (C) : 1
+      (B) | (C,D) : 1
+    DP Algorithm Results:
+      Maximum score: 11.0
+      Reconstructed tree: (A,(B,(C,D)));

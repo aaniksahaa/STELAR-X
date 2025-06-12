@@ -10,9 +10,11 @@ import java.util.Scanner;
 import java.util.Set;
 
 import utils.Config;
+import utils.BitSet;
 import taxon.Taxon;
 import tree.Tree;
 import tree.TreeNode;
+import tree.STBipartition;
 
 /**
  * GeneTrees: Preprocessing and management of input gene trees for wQFM-TREE.
@@ -39,6 +41,7 @@ public class GeneTrees {
     public String[] taxonIdToLabel;                 // ID to label mapping for output
     public Taxon[] taxa;                        // Array of all real taxa (indexed by ID)
     public Map<String, TreeNode> triPartitions;     // Tripartition frequency data for consensus
+    public Map<STBipartition, Integer> stBipartitions; // STBipartition frequency map
     public Map<String, Taxon> taxaMap;          // Label to RealTaxon mapping
     public int realTaxaCount;                       // Total number of real taxa
     public String path;                             // Input file path
@@ -173,6 +176,10 @@ public class GeneTrees {
 
             // Calculate tripartition frequencies for Algorithm 1
             tree.calculateFrequencies(triPartitions);
+            
+            // Calculate STBipartitions for rooted trees
+            calculateSTBipartitions(tree);
+            
             geneTrees.add(tree);
             
             // Track internal node count for complexity analysis
@@ -198,6 +205,7 @@ public class GeneTrees {
         System.out.println("Gene trees count : " + geneTrees.size());
         System.out.println( "total internal nodes : " + internalNodesCount);
         System.out.println( "unique partitions : " + triPartitions.size());
+        System.out.println( "unique STBipartitions : " + stBipartitions.size());
 
         // if(internalNodesCount == 50000){
         //     System.out.println("No polytomy, skipping");
@@ -217,6 +225,7 @@ public class GeneTrees {
 
         this.geneTrees = new ArrayList<>();
         this.triPartitions = new HashMap<>();
+        this.stBipartitions = new HashMap<>();
         this.path = path;
     }
 
@@ -231,12 +240,45 @@ public class GeneTrees {
 
         this.geneTrees = new ArrayList<>();
         this.triPartitions = new HashMap<>();
+        this.stBipartitions = new HashMap<>();
         this.path = path;
         this.taxaMap = taxaMap;
 
         this.readGeneTrees(null);
     }
     
+    private BitSet calculateSTBipartitionsUtil(TreeNode node, Tree tree) {
+        if (node.isLeaf()) {
+            BitSet leafSet = new BitSet(realTaxaCount);
+            leafSet.set(node.taxon.id);
+            return leafSet;
+        }
+        
+        if (node.childs.size() == 2 && tree.isRooted()) {
+            BitSet leftCluster = calculateSTBipartitionsUtil(node.childs.get(0), tree);
+            BitSet rightCluster = calculateSTBipartitionsUtil(node.childs.get(1), tree);
+            
+            STBipartition stb = new STBipartition(leftCluster, rightCluster);
+            stBipartitions.merge(stb, 1, Integer::sum);
+            
+            BitSet nodeCluster = (BitSet) leftCluster.clone();
+            nodeCluster.or(rightCluster);
+            return nodeCluster;
+        } else {
+            BitSet nodeCluster = new BitSet(realTaxaCount);
+            for (TreeNode child : node.childs) {
+                BitSet childCluster = calculateSTBipartitionsUtil(child, tree);
+                nodeCluster.or(childCluster);
+            }
+            return nodeCluster;
+        }
+    }
+    
+    private void calculateSTBipartitions(Tree tree) {
+        if (tree.isRooted()) {
+            calculateSTBipartitionsUtil(tree.root, tree);
+        }
+    }
 } 
 
 
