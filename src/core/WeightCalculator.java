@@ -3,10 +3,14 @@ package core;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import preprocessing.GeneTrees;
 import tree.STBipartition;
 import utils.BitSet;
+import utils.Threading;
 
 public class WeightCalculator {
     
@@ -51,20 +55,54 @@ public class WeightCalculator {
     }
     
     public Map<STBipartition, Double> calculateWeights(List<STBipartition> candidates) {
-        Map<STBipartition, Double> weights = new HashMap<>();
+        // Use ConcurrentHashMap for thread-safe operations
+        Map<STBipartition, Double> weights = new ConcurrentHashMap<>();
+        int numThreads = Runtime.getRuntime().availableProcessors();
         
-        for (STBipartition candidate : candidates) {
-            double totalScore = 0.0;
+        // Initialize thread pool with available processors
+        Threading.startThreading(numThreads);
+        
+        int chunkSize = (candidates.size() + numThreads - 1) / numThreads;
+        CountDownLatch latch = new CountDownLatch(numThreads);
+        
+        // Create and submit tasks for each thread
+        for (int i = 0; i < numThreads; i++) {
+            final int startIdx = i * chunkSize;
+            final int endIdx = Math.min(startIdx + chunkSize, candidates.size());
             
-            for (Map.Entry<STBipartition, Integer> entry : geneTrees.stBipartitions.entrySet()) {
-                STBipartition geneTreeSTB = entry.getKey();
-                int frequency = entry.getValue();
-                
-                double score = calculateScore(candidate, geneTreeSTB);
-                totalScore += score * frequency;
-            }
-            
-            weights.put(candidate, totalScore);
+            Threading.execute(() -> {
+                try {
+                    for (int j = startIdx; j < endIdx; j++) {
+                        STBipartition candidate = candidates.get(j);
+                        double totalScore = 0.0;
+                        
+                        // Create a local copy of stBipartitions to avoid concurrent modification
+                        Map<STBipartition, Integer> localBipartitions = new HashMap<>(geneTrees.stBipartitions);
+                        
+                        for (Map.Entry<STBipartition, Integer> entry : localBipartitions.entrySet()) {
+                            STBipartition geneTreeSTB = entry.getKey();
+                            int frequency = entry.getValue();
+                            
+                            double score = calculateScore(candidate, geneTreeSTB);
+                            totalScore += score * frequency;
+                        }
+                        
+                        weights.put(candidate, totalScore);
+                    }
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+        
+        try {
+            // Wait for all threads to complete
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Weight calculation was interrupted", e);
+        } finally {
+            Threading.shutdown();
         }
         
         return weights;
