@@ -54,6 +54,8 @@ public class Main {
         System.out.println("Input file: " + inputFilePath);
         System.out.println("Output file: " + outputFilePath);
 
+        long startTime = System.nanoTime();
+
         try {
             // Process gene trees and generate analysis results
             String analysisResult = processGeneTrees(inputFilePath);
@@ -61,6 +63,12 @@ public class Main {
             // Write results to output file
             writeResults(outputFilePath, analysisResult);
             
+            long endTime = System.nanoTime();
+            double elapsedSeconds = (endTime - startTime) / 1_000_000_000.0;
+            System.out.println();
+            System.out.printf("Inferring species tree took %.3f seconds\n", elapsedSeconds);
+            System.out.println();
+
             System.out.println("Analysis complete! Results written to: " + outputFilePath);
 
         } catch (Exception e) {
@@ -83,12 +91,42 @@ public class Main {
         // Create GeneTrees object and read taxa names
         GeneTrees geneTrees = new GeneTrees(inputFilePath);
         var taxaMap = geneTrees.readTaxaNames();
+
         
         System.out.println("Reading and parsing gene trees...");
         
         // Read and process all gene trees
         geneTrees.readGeneTrees(null); // No distance matrix needed for basic analysis
         
+        // Debug output
+        // debugOutput(geneTrees);
+
+        System.out.println(geneTrees.geneTrees.get(0).isRooted);
+        
+        // Test InferenceDP algorithm
+        System.out.println("Testing InferenceDP algorithm...");
+        List<STBipartition> candidates = new ArrayList<>(geneTrees.stBipartitions.keySet());
+        
+        if (!candidates.isEmpty()) {
+            InferenceDP dp = new InferenceDP(geneTrees, candidates);
+            double maxScore = dp.solve();
+            
+            System.out.println("DP Algorithm completed with maximum score: " + maxScore);
+            
+            Tree reconstructedTree = dp.reconstructTree();
+            if (reconstructedTree != null && reconstructedTree.root != null) {
+                System.out.println("Tree reconstruction successful");
+                return reconstructedTree.getNewickFormat();
+            }
+        }
+        
+        return "";
+    }
+    
+    /**
+     * Debug function that prints detailed analysis information to console
+     */
+    private static void debugOutput(GeneTrees geneTrees) {
         // Gather analysis information
         int geneTreeCount = geneTrees.geneTrees.size();
         int taxaCount = geneTrees.realTaxaCount;
@@ -101,87 +139,19 @@ public class Main {
         System.out.println("  - Unique tripartitions: " + uniquePartitions);
         System.out.println("  - Unique STBipartitions: " + uniqueSTBipartitions);
         
-        // Build analysis result with proper spacing from Config
-        StringBuilder result = new StringBuilder();
-        
-        // Add n spaces before output
-        for (int i = 0; i < Config.n; i++) {
-            result.append(" ");
-        }
-        
-        result.append("=== Gene Tree Analysis Results ===\n");
-        
-        for (int i = 0; i < Config.n; i++) {
-            result.append(" ");
-        }
-        result.append("Number of gene trees: ").append(geneTreeCount).append("\n");
-        
-        for (int i = 0; i < Config.n; i++) {
-            result.append(" ");
-        }
-        result.append("Number of taxa: ").append(taxaCount).append("\n");
-        
-        for (int i = 0; i < Config.n; i++) {
-            result.append(" ");
-        }
-        result.append("Unique tripartitions: ").append(uniquePartitions).append("\n");
-        
-        for (int i = 0; i < Config.n; i++) {
-            result.append(" ");
-        }
-        result.append("Unique STBipartitions: ").append(uniqueSTBipartitions).append("\n");
-        
-        // Add taxa names
-        for (int i = 0; i < Config.n; i++) {
-            result.append(" ");
-        }
-        result.append("Taxa names: ");
+        // Print taxa names
+        System.out.print("Taxa names: ");
         for (int i = 0; i < geneTrees.taxonIdToLabel.length; i++) {
-            if (i > 0) result.append(", ");
-            result.append(geneTrees.taxonIdToLabel[i]);
+            if (i > 0) System.out.print(", ");
+            System.out.print(geneTrees.taxonIdToLabel[i]);
         }
-        result.append("\n");
+        System.out.println();
         
-        // Add STBipartitions with counts
-        for (int i = 0; i < Config.n; i++) {
-            result.append(" ");
-        }
-        result.append("STBipartitions:\n");
+        // Print STBipartitions with counts
+        System.out.println("STBipartitions:");
         for (var entry : geneTrees.stBipartitions.entrySet()) {
-            for (int i = 0; i < Config.n; i++) {
-                result.append(" ");
-            }
-            result.append("  ").append(entry.getKey().print(geneTrees.taxonIdToLabel))
-                  .append(" : ").append(entry.getValue()).append("\n");
+            System.out.println("  " + entry.getKey().print(geneTrees.taxonIdToLabel) + " : " + entry.getValue());
         }
-        
-        // Test InferenceDP algorithm
-        System.out.println("Testing InferenceDP algorithm...");
-        List<STBipartition> candidates = new ArrayList<>(geneTrees.stBipartitions.keySet());
-        
-        if (!candidates.isEmpty()) {
-            InferenceDP dp = new InferenceDP(geneTrees, candidates);
-            double maxScore = dp.solve();
-            
-            for (int i = 0; i < Config.n; i++) {
-                result.append(" ");
-            }
-            result.append("DP Algorithm Results:\n");
-            for (int i = 0; i < Config.n; i++) {
-                result.append(" ");
-            }
-            result.append("  Maximum score: ").append(maxScore).append("\n");
-            
-            Tree reconstructedTree = dp.reconstructTree();
-            if (reconstructedTree != null && reconstructedTree.root != null) {
-                for (int i = 0; i < Config.n; i++) {
-                    result.append(" ");
-                }
-                result.append("  Reconstructed tree: ").append(reconstructedTree.getNewickFormat()).append("\n");
-            }
-        }
-        
-        return result.toString();
     }
 
     /**

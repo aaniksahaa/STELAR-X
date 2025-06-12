@@ -55,47 +55,68 @@ public class GeneTrees {
      * the algorithm.
      */
     private void parseTaxa(String newickLine, Set<String> taxaSet){
-        newickLine.replaceAll("\\s", "");
+        newickLine = newickLine.replaceAll("\\s", "");
     
-        int n =  newickLine.length();
-    
-        int i = 0, j = 0;
+        int n = newickLine.length();
+        int i = 0;
     
         // Parse Newick format to extract taxon names
         while(i < n){
             char curr = newickLine.charAt(i);
             if(curr == '('){
                 // Start of internal node - skip
+                i++;
             }
             else if(curr == ')'){
-                // End of internal node - skip
+                // End of internal node - skip any support values or branch lengths
+                i++;
+                i = skipBranchInfo(newickLine, i);
             }
             else if(curr == ',' || curr == ';'){
                 // Separators - skip
+                i++;
             }
             else{
                 // Taxon name - extract and add to set
-                StringBuilder taxa = new StringBuilder();
-                j = i;
-                while(j < n){
-                    char curr_j = newickLine.charAt(j);
-                    if(curr_j == ')' || curr_j == ','){
-                        String label = taxa.toString();
-                        taxaSet.add(label);
+                StringBuilder taxaName = new StringBuilder();
+                while(i < n){
+                    char c = newickLine.charAt(i);
+                    if(c == ')' || c == ',' || c == ':' || c == ';'){
                         break;
                     }
-                    taxa.append(curr_j);
-                    ++j;
+                    taxaName.append(c);
+                    i++;
                 }
-                if(j == n){
-                    // End of string - final taxon
-                    String label = taxa.toString();
+                
+                String label = taxaName.toString();
+                if (!label.isEmpty()) {
                     taxaSet.add(label);
                 }
-                i = j - 1;
+                
+                // Skip any branch length information
+                i = skipBranchInfo(newickLine, i);
             }
-            ++i;
         }
+    }
+    
+    private int skipBranchInfo(String newickLine, int startIndex) {
+        int i = startIndex;
+        int n = newickLine.length();
+        
+        // Skip branch length (starts with ':')
+        if (i < n && newickLine.charAt(i) == ':') {
+            i++; // skip ':'
+            // Skip the numeric value (including scientific notation)
+            while (i < n) {
+                char c = newickLine.charAt(i);
+                if (c == ',' || c == ')' || c == ';') {
+                    break;
+                }
+                i++;
+            }
+        }
+        
+        return i;
     }
     
 
@@ -163,17 +184,11 @@ public class GeneTrees {
             // Parse tree with consistent taxon mapping
             var tree = new Tree(line, this.taxaMap);
             
-            // Optional polytomy resolution for binary tree structure
-            if(Config.RESOLVE_POLYTOMY){
-                tree.resolveNonBinary(distanceMatrix);
-            }
-
+            // Trees are assumed to be properly rooted and binary
+            // No polytomy resolution needed
+            
             // System.out.println(tree.root);
             
-            // if(tree.checkIfNonBinary()){
-            //     continue;
-            // }
-
             // Calculate tripartition frequencies for Algorithm 1
             tree.calculateFrequencies(triPartitions);
             
