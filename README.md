@@ -5,9 +5,86 @@ This project implements a massively parallel version of the STELAR algorithm for
 ## Prerequisites
 
 - Java 11 or higher
-- CUDA Toolkit 11.0 or higher
+- Nvidia CUDA Toolkit 11.0 or higher
 - NVIDIA GPU with compute capability 3.5 or higher
 - Maven 3.6 or higher
+
+We recommend checking whether the following is supported in your machine, and installing in case they do not exist currently.
+
+1. Check whether nvcc is there.
+
+```bash
+nvcc --version
+```
+
+If not, install with,
+
+```bash
+sudo apt update
+sudo apt-get install nvidia-cuda-toolkit
+```
+
+And then check,
+
+```bash
+nvcc --version
+```
+
+
+This may require almost 7GB of disk space. Note that `nvcc` is only needed if you want to test with GPU parallelism.
+
+2. Check whether java is there.
+
+```bash
+java -version
+```
+
+If not, install Java. We tested with JDK 21.
+
+```bash
+# Update package index
+sudo apt update
+# Check if OpenJDK 21 is available in default repositories
+sudo apt install openjdk-21-jdk
+```
+
+Then check again,
+
+```bash
+java -version
+```
+
+Expected output:
+openjdk 21.x.x ...
+
+
+Finally set up JAVA_HOME,
+
+```bash
+# Set JAVA_HOME (adjust path if different)
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+# Make it persistent
+echo 'export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64' >> ~/.bashrc
+source ~/.bashrc
+```
+
+3. Install Maven
+
+```bash
+# Install Maven
+sudo apt install maven
+```
+
+```bash
+# Verify Maven installation and Java version
+mvn -version
+```
+
+Expected output:
+Apache Maven 3.x.x ...
+Java version: 21.x.x ...
+
+
 
 ## Building the Project
 
