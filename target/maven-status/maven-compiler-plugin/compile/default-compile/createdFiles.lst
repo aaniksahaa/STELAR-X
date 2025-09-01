@@ -1,5 +1,5 @@
-core/WeightCalculator$1.class
 core/WeightCalculator$WeightCalcLib$Bipartition.class
+core/WeightCalculator$1.class
 core/WeightCalculator$WeightCalcLib.class
 utils/BitSet.class
 tree/ConsoleColors.class
@@ -7,8 +7,8 @@ preprocessing/GeneTrees.class
 tree/STBipartition.class
 tree/TreeNode.class
 tree/TreePrinter$PrintableNode.class
-tree/Tree.class
 utils/Helper.class
+tree/Tree.class
 Main.class
 CompareTrees.class
 tree/TreePrinter.class
@@ -16,6 +16,6 @@ core/WeightCalculator.class
 utils/Config$NonQuartetType.class
 core/InferenceDP.class
 taxon/Taxon.class
-utils/Config$ComputationMode.class
 utils/Threading.class
+utils/Config$ComputationMode.class
 utils/Config.class
