@@ -19,6 +19,7 @@ import utils.BitSet;
 import utils.Config;
 import utils.Threading;
 
+// The parallelism is mainly happening here
 public class WeightCalculator {
     
     private GeneTrees geneTrees;
