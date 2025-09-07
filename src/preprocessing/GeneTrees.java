@@ -10,7 +10,6 @@ import java.util.Scanner;
 import java.util.Set;
 import java.util.List;
 
-import utils.Config;
 import utils.BitSet;
 import taxon.Taxon;
 import tree.Tree;
@@ -310,6 +309,16 @@ public class GeneTrees {
      * @return List of candidate bipartitions for inference
      */
     public List<STBipartition> generateCandidateBipartitions() {
+        return generateCandidateBipartitions(true);
+    }
+    
+    /**
+     * Generates candidate bipartitions with optional expansion.
+     * 
+     * @param useExpansion Whether to apply bipartition expansion techniques
+     * @return List of candidate bipartitions for inference
+     */
+    public List<STBipartition> generateCandidateBipartitions(boolean useExpansion) {
         List<STBipartition> candidates = new ArrayList<>();
         Set<BitSet> processedClusters = new HashSet<>();
         
@@ -374,6 +383,13 @@ public class GeneTrees {
                     }
                 }
             }
+        }
+        
+        // Apply bipartition expansion if enabled
+        if (useExpansion && utils.BipartitionExpansionConfig.isExpansionEnabled()) {
+            expansion.BipartitionExpansionManager expansionManager = 
+                new expansion.BipartitionExpansionManager(this);
+            candidates = expansionManager.expandBipartitions(candidates);
         }
         
         return candidates;

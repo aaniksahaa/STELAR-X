@@ -9,7 +9,6 @@ import utils.Config;
 import core.InferenceDP;
 import tree.STBipartition;
 import tree.Tree;
-import utils.BitSet;
 
 /**
  * Main entry point for phylogeny project with GeneTrees processing.
@@ -27,6 +26,10 @@ public class Main {
         String inputFilePath = null;
         String outputFilePath = null;
         String computationMode = null;
+        String expansionMethod = null;
+        String distanceMethod = null;
+        boolean verboseExpansion = false;
+        boolean disableExpansion = false;
 
         // Parse command line arguments
         for (int i = 0; i < args.length; i++) {
@@ -39,13 +42,28 @@ public class Main {
             } else if (args[i].equals("-m") && i + 1 < args.length) {
                 computationMode = args[i + 1];
                 i++; // Skip next argument as it's the mode
+            } else if (args[i].equals("-e") && i + 1 < args.length) {
+                expansionMethod = args[i + 1];
+                i++; // Skip next argument as it's the expansion method
+            } else if (args[i].equals("-d") && i + 1 < args.length) {
+                distanceMethod = args[i + 1];
+                i++; // Skip next argument as it's the distance method
+            } else if (args[i].equals("-v")) {
+                verboseExpansion = true;
+            } else if (args[i].equals("--no-expansion")) {
+                disableExpansion = true;
             }
         }
 
         // Validate required arguments
         if (inputFilePath == null || outputFilePath == null) {
-            System.out.println("Usage: java Main -i <input_file> -o <output_file> [-m <computation_mode>]");
-            System.out.println("Computation modes: CPU_SINGLE, CPU_PARALLEL, GPU_PARALLEL");
+            System.out.println("Usage: java Main -i <input_file> -o <output_file> [options]");
+            System.out.println("Options:");
+            System.out.println("  -m <mode>     Computation mode: CPU_SINGLE, CPU_PARALLEL, GPU_PARALLEL");
+            System.out.println("  -e <method>   Expansion method: NONE, DISTANCE_ONLY, CONSENSUS_ONLY, DISTANCE_CONSENSUS, FULL");
+            System.out.println("  -d <method>   Distance method: UPGMA, NEIGHBOR_JOINING, BOTH");
+            System.out.println("  -v            Verbose expansion output");
+            System.out.println("  --no-expansion Disable bipartition expansion");
             System.exit(-1);
         }
 
@@ -66,10 +84,46 @@ public class Main {
                 System.exit(-1);
             }
         }
+        
+        // Configure bipartition expansion
+        if (disableExpansion) {
+            utils.BipartitionExpansionConfig.EXPANSION_METHOD = utils.BipartitionExpansionConfig.ExpansionMethod.NONE;
+        } else if (expansionMethod != null) {
+            try {
+                utils.BipartitionExpansionConfig.EXPANSION_METHOD = 
+                    utils.BipartitionExpansionConfig.ExpansionMethod.valueOf(expansionMethod);
+            } catch (IllegalArgumentException e) {
+                System.err.println("Error: Invalid expansion method '" + expansionMethod + "'");
+                System.err.println("Valid methods: NONE, DISTANCE_ONLY, CONSENSUS_ONLY, DISTANCE_CONSENSUS, FULL");
+                System.exit(-1);
+            }
+        }
+        
+        // Set distance method if specified
+        if (distanceMethod != null) {
+            try {
+                utils.BipartitionExpansionConfig.DISTANCE_METHOD = 
+                    utils.BipartitionExpansionConfig.DistanceMethod.valueOf(distanceMethod);
+            } catch (IllegalArgumentException e) {
+                System.err.println("Error: Invalid distance method '" + distanceMethod + "'");
+                System.err.println("Valid methods: UPGMA, NEIGHBOR_JOINING, BOTH");
+                System.exit(-1);
+            }
+        }
+        
+        // Set verbose expansion if specified
+        if (verboseExpansion) {
+            utils.BipartitionExpansionConfig.VERBOSE_EXPANSION = true;
+            System.out.println("Verbose expansion output enabled.");
+        }
 
         System.out.println("Input file: " + inputFilePath);
         System.out.println("Output file: " + outputFilePath);
         System.out.println("Computation mode: " + Config.COMPUTATION_MODE);
+        System.out.println("Expansion method: " + utils.BipartitionExpansionConfig.EXPANSION_METHOD);
+        if (utils.BipartitionExpansionConfig.isDistanceExpansionEnabled()) {
+            System.out.println("Distance method: " + utils.BipartitionExpansionConfig.DISTANCE_METHOD);
+        }
 
         long startTime = System.nanoTime();
 
@@ -79,7 +133,9 @@ public class Main {
         geneTrees.readGeneTrees(null);
 
         // Generate candidate bipartitions
+        System.out.println("Generating candidate bipartitions...");
         List<STBipartition> candidates = geneTrees.generateCandidateBipartitions();
+        System.out.println("Total candidate bipartitions: " + candidates.size());
 
         // Run inference
         InferenceDP inference = new InferenceDP(geneTrees, candidates);

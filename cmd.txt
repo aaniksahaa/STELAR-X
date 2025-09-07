@@ -1,0 +1,1 @@
+./run.sh all_gt_500.tre out.tre GPU_PARALLEL NONE
