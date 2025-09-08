@@ -4,7 +4,7 @@ This project implements a massively parallel version of the STELAR algorithm for
 
 ## Prerequisites
 
-- Java 11 or higher
+- Java 11 or higher (Tested with 17, 21)
 - Nvidia CUDA Toolkit 11.0 or higher
 - NVIDIA GPU with compute capability 3.5 or higher
 - Maven 3.6 or higher
@@ -108,6 +108,15 @@ mvn clean package
 
 ## Running the Program
 
+Please note that, if you have made any change in the Java codebase, you must run the command,
+
+```bash
+chmod +x build.sh
+./build.sh
+```
+
+This will re-compile and re-generate the jar file.
+
 Use the provided `run.sh` script to run the program:
 
 ```bash
@@ -134,6 +143,15 @@ Example:
 2. **CPU_PARALLEL**: Uses multiple CPU threads for weight calculation, with the number of threads equal to the number of available CPU cores. This provides good performance on systems without a GPU.
 
 3. **GPU_PARALLEL**: Uses NVIDIA GPU for weight calculation, providing massive parallelism for large datasets. This is the fastest mode when a compatible GPU is available.
+
+
+## Generation of Simulated Datasets
+
+To test STELAR-MP with large simulated datasets, we use Simphy (https://github.com/adamallo/SimPhy). Please look at the `simphy` directory to generate simulated datasets. Please read `cmd.txt` there.
+
+## Calculation of RF rate
+
+Please use `RF/getFpFn.py`
 
 ## Performance Considerations
 

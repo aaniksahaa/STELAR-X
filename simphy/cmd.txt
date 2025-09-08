@@ -1,0 +1,30 @@
+First we need to run the simphy command to generate simulated trees.
+
+Then
+
+python concat_gene_trees.py out/1
+
+python reorganize_trees.py out 
+
+thus we can get gene trees and species tree in replicate folders like Rn....
+
+Example simphy commands:
+
+// 5 taxa 10 gene trees
+
+./simphy_lnx64 -sb f:0.000001 -ld f:0 -lb f:0 -lt f:0 -rs 2 -rl f:10 -rg 1 -o out -sp f:10000 -su f:0.00001 -sg f:1 -sl f:5 -st f:1000000 -om 1 -v 2 -od 1 -op 1 -oc 1 -on 1 -cs 22 -ll 5 -ls 5
+
+// 500 taxa 1000 gene trees
+
+./simphy_lnx64 -sb f:0.000001 -ld f:0 -lb f:0 -lt f:0 -rs 1 -rl f:1000 -rg 1 -o out -sp f:10000 -su f:0.00001 -sg f:1 -sl f:500 -st f:1000000 -om 1 -v 2 -od 1 -op 1 -oc 1 -on 1 -cs 22 -ll 500 -ls 500
+
+// 10000 taxa 1000 gene trees
+
+./simphy_lnx64 -sb f:0.000001 -ld f:0 -lb f:0 -lt f:0 -rs 1 -rl f:1000 -rg 1 -o 10k -sp f:10000 -su f:0.00001 -sg f:1 -sl f:10000 -st f:1000000 -om 1 -v 2 -od 1 -op 1 -oc 1 -on 1 -cs 22 -ll 10000 -ls 10000
+
+./simphy_lnx64 -sb f:0.000001 -ld f:0.0000005 -lb f:0.0000005 -lt f:0.0000005 -rs 1 -rl f:1000 -rg 1 -o 500-taxon_test -sp f:10000 -su f:0.00001 -sg f:1 -sl f:500 -st f:1000000 -om 1 -v 2 -od 1 -op 1 -oc 1 -on 1 -cs 22
+
+
+
+
+

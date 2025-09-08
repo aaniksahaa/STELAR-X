@@ -1,0 +1,1 @@
+./simphy_lnx64 -sb f:0.000001 -ld f:0 -lb f:0 -lt f:0 -rs 2 -rl f:10 -rg 1 -o out -sp f:10000 -su f:0.00001 -sg f:1 -sl f:5 -st f:1000000 -om 1 -v 2 -od 1 -op 1 -oc 1 -on 1 -cs 22 -ll 5 -ls 5 
