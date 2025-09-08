@@ -1,12 +1,15 @@
 package expansion;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import preprocessing.GeneTrees;
 import tree.STBipartition;
 import tree.Tree;
 import tree.TreeNode;
 import utils.BitSet;
 import utils.BipartitionExpansionConfig;
+import utils.Threading;
 
 /**
  * Consensus tree builder for bipartition expansion.
@@ -63,7 +66,15 @@ public class ConsensusTreeBuilder {
      * Count frequency of each bipartition across all gene trees
      */
     private Map<STBipartition, Integer> countBipartitionFrequencies() {
-        Map<STBipartition, Integer> counts = new HashMap<>();
+        return countBipartitionFrequenciesParallel();
+    }
+    
+    /**
+     * Parallel version of bipartition frequency counting for improved performance.
+     * Divides the gene trees among multiple threads for concurrent processing.
+     */
+    private Map<STBipartition, Integer> countBipartitionFrequenciesParallel() {
+        Map<STBipartition, Integer> counts = new ConcurrentHashMap<>();
         
         // Use existing bipartition counts from GeneTrees
         for (Map.Entry<STBipartition, Integer> entry : geneTrees.stBipartitions.entrySet()) {
@@ -71,11 +82,70 @@ public class ConsensusTreeBuilder {
         }
         
         // Also extract bipartitions directly from gene trees to ensure completeness
-        for (Tree geneTree : geneTrees.geneTrees) {
-            List<STBipartition> treeBipartitions = extractBipartitionsFromTree(geneTree);
-            for (STBipartition bip : treeBipartitions) {
-                counts.merge(bip, 1, Integer::sum);
-            }
+        List<Tree> geneTrees = this.geneTrees.geneTrees;
+        
+        if (geneTrees.isEmpty()) {
+            return counts;
+        }
+        
+        if (BipartitionExpansionConfig.VERBOSE_EXPANSION) {
+            System.out.println("Counting bipartition frequencies from " + geneTrees.size() + " gene trees in parallel...");
+        }
+        
+        int numThreads = Runtime.getRuntime().availableProcessors();
+        Threading.startThreading(numThreads);
+        
+        int chunkSize = (geneTrees.size() + numThreads - 1) / numThreads;
+        CountDownLatch latch = new CountDownLatch(numThreads);
+        
+        // Process gene trees in parallel chunks
+        for (int i = 0; i < numThreads; i++) {
+            final int startIdx = i * chunkSize;
+            final int endIdx = Math.min(startIdx + chunkSize, geneTrees.size());
+            final int threadId = i;
+            
+            Threading.execute(() -> {
+                try {
+                    Map<STBipartition, Integer> localCounts = new HashMap<>();
+                    
+                    if (BipartitionExpansionConfig.VERBOSE_EXPANSION) {
+                        System.out.println("Thread " + threadId + " extracting bipartitions from trees " + startIdx + " to " + (endIdx-1));
+                    }
+                    
+                    for (int j = startIdx; j < endIdx; j++) {
+                        Tree geneTree = geneTrees.get(j);
+                        List<STBipartition> treeBipartitions = extractBipartitionsFromTree(geneTree);
+                        for (STBipartition bip : treeBipartitions) {
+                            localCounts.merge(bip, 1, Integer::sum);
+                        }
+                    }
+                    
+                    // Merge local counts into global counts
+                    for (Map.Entry<STBipartition, Integer> entry : localCounts.entrySet()) {
+                        counts.merge(entry.getKey(), entry.getValue(), Integer::sum);
+                    }
+                    
+                    if (BipartitionExpansionConfig.VERBOSE_EXPANSION) {
+                        System.out.println("Thread " + threadId + " completed: found " + localCounts.size() + " unique bipartitions");
+                    }
+                    
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+        
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Bipartition frequency counting was interrupted", e);
+        } finally {
+            Threading.shutdown();
+        }
+        
+        if (BipartitionExpansionConfig.VERBOSE_EXPANSION) {
+            System.out.println("Parallel bipartition frequency counting completed. Total unique bipartitions: " + counts.size());
         }
         
         return counts;

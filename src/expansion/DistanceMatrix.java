@@ -1,12 +1,14 @@
 package expansion;
 
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
 import preprocessing.GeneTrees;
 import tree.STBipartition;
 import tree.Tree;
 import tree.TreeNode;
 import utils.BitSet;
 import utils.BipartitionExpansionConfig;
+import utils.Threading;
 
 /**
  * Distance matrix computation and tree inference for bipartition expansion.
@@ -37,8 +39,16 @@ public class DistanceMatrix {
      * across all gene trees.
      */
     private void calculateDistanceMatrix() {
+        calculateDistanceMatrixParallel();
+    }
+    
+    /**
+     * Parallel version of distance matrix calculation for improved performance.
+     * Divides the gene trees among multiple threads for concurrent processing.
+     */
+    private void calculateDistanceMatrixParallel() {
         if (BipartitionExpansionConfig.VERBOSE_EXPANSION) {
-            System.out.println("Calculating distance matrix from " + geneTrees.geneTrees.size() + " gene trees...");
+            System.out.println("Calculating distance matrix from " + geneTrees.geneTrees.size() + " gene trees in parallel...");
         }
         
         // Initialize distance matrix
@@ -48,50 +58,103 @@ public class DistanceMatrix {
             }
         }
         
-        // Count co-occurrence in same clades across gene trees
+        // Thread-safe co-occurrence counting
         int[][] coOccurrenceCount = new int[taxaCount][taxaCount];
-        int totalComparisons = 0;
+        List<Tree> geneTrees = this.geneTrees.geneTrees;
         
-        for (Tree geneTree : geneTrees.geneTrees) {
-            Map<Integer, BitSet> taxonToClade = new HashMap<>();
-            
-            // For each gene tree, find which clade each taxon belongs to
-            collectClades(geneTree.root, taxonToClade);
-            
-            // Count co-occurrences
-            for (int i = 0; i < taxaCount; i++) {
-                for (int j = i + 1; j < taxaCount; j++) {
-                    BitSet cladeI = taxonToClade.get(i);
-                    BitSet cladeJ = taxonToClade.get(j);
-                    
-                    if (cladeI != null && cladeJ != null) {
-                        // Check if taxa i and j are in the same clade
-                        if (cladeI.equals(cladeJ) || isInSameClade(i, j, geneTree.root)) {
-                            coOccurrenceCount[i][j]++;
-                            coOccurrenceCount[j][i]++;
-                        }
-                        totalComparisons++;
-                    }
-                }
+        if (geneTrees.isEmpty()) {
+            if (BipartitionExpansionConfig.VERBOSE_EXPANSION) {
+                System.out.println("No gene trees found, distance matrix remains at default values.");
             }
+            return;
+        }
+        
+        int numThreads = Runtime.getRuntime().availableProcessors();
+        Threading.startThreading(numThreads);
+        
+        int chunkSize = (geneTrees.size() + numThreads - 1) / numThreads;
+        CountDownLatch latch = new CountDownLatch(numThreads);
+        
+        // Process gene trees in parallel chunks
+        for (int i = 0; i < numThreads; i++) {
+            final int startIdx = i * chunkSize;
+            final int endIdx = Math.min(startIdx + chunkSize, geneTrees.size());
+            final int threadId = i;
+            
+            Threading.execute(() -> {
+                try {
+                    int[][] localCoOccurrenceCount = new int[taxaCount][taxaCount];
+                    
+                    if (BipartitionExpansionConfig.VERBOSE_EXPANSION) {
+                        System.out.println("Thread " + threadId + " processing gene trees " + startIdx + " to " + (endIdx-1));
+                    }
+                    
+                    for (int j = startIdx; j < endIdx; j++) {
+                        Tree geneTree = geneTrees.get(j);
+                        Map<Integer, BitSet> taxonToClade = new HashMap<>();
+                        
+                        // For each gene tree, find which clade each taxon belongs to
+                        collectClades(geneTree.root, taxonToClade);
+                        
+                        // Count co-occurrences in this tree
+                        for (int x = 0; x < taxaCount; x++) {
+                            for (int y = x + 1; y < taxaCount; y++) {
+                                BitSet cladeX = taxonToClade.get(x);
+                                BitSet cladeY = taxonToClade.get(y);
+                                
+                                if (cladeX != null && cladeY != null) {
+                                    // Check if taxa x and y are in the same clade
+                                    if (cladeX.equals(cladeY) || isInSameClade(x, y, geneTree.root)) {
+                                        localCoOccurrenceCount[x][y]++;
+                                        localCoOccurrenceCount[y][x]++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Merge local counts into global counts (synchronized)
+                    synchronized (coOccurrenceCount) {
+                        for (int x = 0; x < taxaCount; x++) {
+                            for (int y = 0; y < taxaCount; y++) {
+                                coOccurrenceCount[x][y] += localCoOccurrenceCount[x][y];
+                            }
+                        }
+                    }
+                    
+                    if (BipartitionExpansionConfig.VERBOSE_EXPANSION) {
+                        System.out.println("Thread " + threadId + " completed processing " + (endIdx - startIdx) + " gene trees");
+                    }
+                    
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+        
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Distance matrix calculation was interrupted", e);
+        } finally {
+            Threading.shutdown();
         }
         
         // Convert co-occurrence counts to distances
         // Higher co-occurrence = lower distance
         for (int i = 0; i < taxaCount; i++) {
             for (int j = i + 1; j < taxaCount; j++) {
-                if (totalComparisons > 0) {
-                    double coOccurrenceRate = (double) coOccurrenceCount[i][j] / geneTrees.geneTrees.size();
-                    // Distance = 1 - co-occurrence rate (so high co-occurrence = low distance)
-                    double distance = Math.max(0.01, 1.0 - coOccurrenceRate); // Minimum distance to avoid zero
-                    distanceMatrix[i][j] = distance;
-                    distanceMatrix[j][i] = distance;
-                }
+                double coOccurrenceRate = (double) coOccurrenceCount[i][j] / geneTrees.size();
+                // Distance = 1 - co-occurrence rate (so high co-occurrence = low distance)
+                double distance = Math.max(0.01, 1.0 - coOccurrenceRate); // Minimum distance to avoid zero
+                distanceMatrix[i][j] = distance;
+                distanceMatrix[j][i] = distance;
             }
         }
         
         if (BipartitionExpansionConfig.VERBOSE_EXPANSION) {
-            System.out.println("Distance matrix calculation completed.");
+            System.out.println("Parallel distance matrix calculation completed.");
         }
     }
     

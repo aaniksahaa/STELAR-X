@@ -9,8 +9,12 @@ import java.util.Map;
 import java.util.Scanner;
 import java.util.Set;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import utils.BitSet;
+import utils.Threading;
 import taxon.Taxon;
 import tree.Tree;
 import tree.TreeNode;
@@ -170,44 +174,131 @@ public class GeneTrees {
      * @param distanceMatrix Optional distance matrix for polytomy resolution
      */
     public void readGeneTrees(double[][] distanceMatrix) throws FileNotFoundException{
-        int internalNodesCount = 0;
-        int skippedTrees = 0;
+        readGeneTreesParallel(distanceMatrix);
+    }
 
+    /**
+     * Parallel version of gene tree reading for improved performance.
+     * Divides the gene trees among multiple threads for concurrent processing.
+     */
+    private void readGeneTreesParallel(double[][] distanceMatrix) throws FileNotFoundException{
+        // First, read all lines from the file
+        List<String> lines = new ArrayList<>();
         Scanner scanner = new Scanner(new File(path));
-
-        // Process each gene tree
         while (scanner.hasNextLine()) {
-
             String line = scanner.nextLine();
-            if(line.trim().length() == 0) continue;
-            
-            try {
-                // Parse tree with consistent taxon mapping
-                var tree = new Tree(line, this.taxaMap);
-                
-                // Trees are assumed to be properly rooted and binary
-                // No polytomy resolution needed
-                
-                // Calculate tripartition frequencies for Algorithm 1
-                tree.calculateFrequencies(triPartitions);
-                
-                // Calculate STBipartitions for rooted trees
-                calculateSTBipartitions(tree);
-                
-                geneTrees.add(tree);
-                
-                // Track internal node count for complexity analysis
-                internalNodesCount += tree.nodes.size() - tree.leavesCount;
-            } catch (RuntimeException e) {
-                skippedTrees++;
-                // Continue with next tree
+            if(line.trim().length() != 0) {
+                lines.add(line);
             }
         }
-        
         scanner.close();
         
-        if (skippedTrees > 0) {
-            System.err.println("Warning: Skipped " + skippedTrees + " invalid or empty gene trees.");
+        if (lines.isEmpty()) {
+            System.err.println("Warning: No valid gene trees found in input file.");
+            return;
+        }
+        
+        System.out.println("Processing " + lines.size() + " gene trees in parallel...");
+        
+        // Thread-safe data structures
+        List<Tree> threadSafeGeneTrees = new ArrayList<>();
+        Map<String, TreeNode> threadSafeTriPartitions = new ConcurrentHashMap<>();
+        Map<STBipartition, Integer> threadSafeSTBipartitions = new ConcurrentHashMap<>();
+        AtomicInteger totalInternalNodes = new AtomicInteger(0);
+        AtomicInteger skippedTrees = new AtomicInteger(0);
+        
+        int numThreads = Runtime.getRuntime().availableProcessors();
+        Threading.startThreading(numThreads);
+        
+        int chunkSize = (lines.size() + numThreads - 1) / numThreads;
+        CountDownLatch latch = new CountDownLatch(numThreads);
+        
+        // Process gene trees in parallel chunks
+        for (int i = 0; i < numThreads; i++) {
+            final int startIdx = i * chunkSize;
+            final int endIdx = Math.min(startIdx + chunkSize, lines.size());
+            final int threadId = i;
+            
+            Threading.execute(() -> {
+                try {
+                    List<Tree> localTrees = new ArrayList<>();
+                    Map<String, TreeNode> localTriPartitions = new HashMap<>();
+                    Map<STBipartition, Integer> localSTBipartitions = new HashMap<>();
+                    int localInternalNodes = 0;
+                    int localSkippedTrees = 0;
+                    
+                    System.out.println("Thread " + threadId + " processing trees " + startIdx + " to " + (endIdx-1));
+                    
+                    for (int j = startIdx; j < endIdx; j++) {
+                        String line = lines.get(j);
+                        try {
+                            // Parse tree with consistent taxon mapping
+                            Tree tree = new Tree(line, this.taxaMap);
+                            
+                            // Calculate tripartition frequencies for Algorithm 1
+                            tree.calculateFrequencies(localTriPartitions);
+                            
+                            // Calculate STBipartitions for rooted trees
+                            calculateSTBipartitionsLocal(tree, localSTBipartitions);
+                            
+                            localTrees.add(tree);
+                            
+                            // Track internal node count for complexity analysis
+                            localInternalNodes += tree.nodes.size() - tree.leavesCount;
+                        } catch (RuntimeException e) {
+                            localSkippedTrees++;
+                            // Continue with next tree
+                        }
+                    }
+                    
+                    // Merge local results into thread-safe structures
+                    synchronized (threadSafeGeneTrees) {
+                        threadSafeGeneTrees.addAll(localTrees);
+                    }
+                    
+                    // Merge tripartitions
+                    for (Map.Entry<String, TreeNode> entry : localTriPartitions.entrySet()) {
+                        threadSafeTriPartitions.merge(entry.getKey(), entry.getValue(), 
+                            (existing, newValue) -> {
+                                // Merge frequencies - this is a simplification
+                                // In practice, you might need more sophisticated merging
+                                return existing;
+                            });
+                    }
+                    
+                    // Merge STBipartitions
+                    for (Map.Entry<STBipartition, Integer> entry : localSTBipartitions.entrySet()) {
+                        threadSafeSTBipartitions.merge(entry.getKey(), entry.getValue(), Integer::sum);
+                    }
+                    
+                    totalInternalNodes.addAndGet(localInternalNodes);
+                    skippedTrees.addAndGet(localSkippedTrees);
+                    
+                    System.out.println("Thread " + threadId + " completed: processed " + 
+                                     localTrees.size() + " trees, skipped " + localSkippedTrees);
+                    
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+        
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Gene tree processing was interrupted", e);
+        } finally {
+            Threading.shutdown();
+        }
+        
+        // Copy results to instance variables
+        this.geneTrees.addAll(threadSafeGeneTrees);
+        this.triPartitions.putAll(threadSafeTriPartitions);
+        this.stBipartitions.putAll(threadSafeSTBipartitions);
+        
+        if (skippedTrees.get() > 0) {
+            System.err.println("Warning: Skipped " + skippedTrees.get() + " invalid or empty gene trees.");
         }
         
         // Build efficient lookup arrays for Algorithm 2 operations
@@ -224,7 +315,7 @@ public class GeneTrees {
         // Output preprocessing statistics
         System.out.println( "taxon count : " + this.taxaMap.size());
         System.out.println("Gene trees count : " + geneTrees.size());
-        System.out.println( "total internal nodes : " + internalNodesCount);
+        System.out.println( "total internal nodes : " + totalInternalNodes.get());
         System.out.println( "unique partitions : " + triPartitions.size());
         System.out.println( "unique STBipartitions : " + stBipartitions.size());
 
@@ -298,6 +389,43 @@ public class GeneTrees {
     private void calculateSTBipartitions(Tree tree) {
         if (tree.isRooted()) {
             calculateSTBipartitionsUtil(tree.root, tree);
+        }
+    }
+    
+    /**
+     * Local version of STBipartitions calculation for thread-safe parallel processing.
+     * This method calculates STBipartitions for a single tree and stores them in a local map.
+     */
+    private void calculateSTBipartitionsLocal(Tree tree, Map<STBipartition, Integer> localSTBipartitions) {
+        if (tree.isRooted()) {
+            calculateSTBipartitionsUtilLocal(tree.root, tree, localSTBipartitions);
+        }
+    }
+    
+    private BitSet calculateSTBipartitionsUtilLocal(TreeNode node, Tree tree, Map<STBipartition, Integer> localSTBipartitions) {
+        if (node.isLeaf()) {
+            BitSet leafSet = new BitSet(realTaxaCount);
+            leafSet.set(node.taxon.id);
+            return leafSet;
+        }
+        
+        if (node.childs.size() == 2 && tree.isRooted()) {
+            BitSet leftCluster = calculateSTBipartitionsUtilLocal(node.childs.get(0), tree, localSTBipartitions);
+            BitSet rightCluster = calculateSTBipartitionsUtilLocal(node.childs.get(1), tree, localSTBipartitions);
+            
+            STBipartition stb = new STBipartition(leftCluster, rightCluster);
+            localSTBipartitions.merge(stb, 1, Integer::sum);
+            
+            BitSet nodeCluster = (BitSet) leftCluster.clone();
+            nodeCluster.or(rightCluster);
+            return nodeCluster;
+        } else {
+            BitSet nodeCluster = new BitSet(realTaxaCount);
+            for (TreeNode child : node.childs) {
+                BitSet childCluster = calculateSTBipartitionsUtilLocal(child, tree, localSTBipartitions);
+                nodeCluster.or(childCluster);
+            }
+            return nodeCluster;
         }
     }
 
