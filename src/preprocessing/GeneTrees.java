@@ -486,32 +486,32 @@ public class GeneTrees {
             }
         }
         
-        // Add all possible valid bipartitions for small clusters (size <= 3)
-        for (int size = 1; size <= 3; size++) {
-            for (int i = 0; i < realTaxaCount; i++) {
-                BitSet cluster1 = new BitSet(realTaxaCount);
-                cluster1.set(i);
+        // // Add all possible valid bipartitions for small clusters (size <= 3)
+        // for (int size = 1; size <= 3; size++) {
+        //     for (int i = 0; i < realTaxaCount; i++) {
+        //         BitSet cluster1 = new BitSet(realTaxaCount);
+        //         cluster1.set(i);
                 
-                // Add all possible combinations of size 'size'
-                for (int j = i + 1; j < realTaxaCount; j++) {
-                    if (size > 1) {
-                        cluster1.set(j);
-                        if (size > 2) {
-                            for (int k = j + 1; k < realTaxaCount; k++) {
-                                cluster1.set(k);
-                                addValidBipartition(cluster1, candidates, processedClusters);
-                                cluster1.clear(k);
-                            }
-                        } else {
-                            addValidBipartition(cluster1, candidates, processedClusters);
-                        }
-                        cluster1.clear(j);
-                    } else {
-                        addValidBipartition(cluster1, candidates, processedClusters);
-                    }
-                }
-            }
-        }
+        //         // Add all possible combinations of size 'size'
+        //         for (int j = i + 1; j < realTaxaCount; j++) {
+        //             if (size > 1) {
+        //                 cluster1.set(j);
+        //                 if (size > 2) {
+        //                     for (int k = j + 1; k < realTaxaCount; k++) {
+        //                         cluster1.set(k);
+        //                         addValidBipartition(cluster1, candidates, processedClusters);
+        //                         cluster1.clear(k);
+        //                     }
+        //                 } else {
+        //                     addValidBipartition(cluster1, candidates, processedClusters);
+        //                 }
+        //                 cluster1.clear(j);
+        //             } else {
+        //                 addValidBipartition(cluster1, candidates, processedClusters);
+        //             }
+        //         }
+        //     }
+        // }
         
         // Apply bipartition expansion if enabled
         if (useExpansion && utils.BipartitionExpansionConfig.isExpansionEnabled()) {
