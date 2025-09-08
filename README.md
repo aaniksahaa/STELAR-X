@@ -136,6 +136,10 @@ Example:
 ./run.sh input.tre output.tre GPU_PARALLEL
 ```
 
+## Running in bulk for benchmarking
+
+Please use `bulk_runner.sh` to run in bulk and to benchmark.
+
 ## Computation Modes
 
 1. **CPU_SINGLE**: Uses a single CPU thread for weight calculation. This is the slowest but most memory-efficient mode.
