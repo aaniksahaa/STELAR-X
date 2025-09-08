@@ -157,6 +157,17 @@ To test STELAR-MP with large simulated datasets, we use Simphy (https://github.c
 
 Please use `RF/getFpFn.py`
 
+## Running for a large dataset
+
+First follow the steps to generate simulated datasets.
+
+Then run, 
+
+```bash
+./run.sh /home/admin/phylogeny/simphy/10k/R1/all_gt.tre out.tre GPU_PARALLEL NONE
+python rf.py out.tre /home/admin/phylogeny/simphy/10k/R1/s_tree.trees
+```
+
 ## Performance Considerations
 
 - The GPU mode requires a CUDA-capable NVIDIA GPU with sufficient memory to hold the bipartition data.
