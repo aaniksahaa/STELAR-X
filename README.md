@@ -134,6 +134,8 @@ Where:
 Example:
 ```bash
 ./run.sh input.tre output.tre GPU_PARALLEL
+# or 
+./run.sh input.tre output.tre GPU_PARALLEL NONE 
 ```
 
 ## Running in bulk for benchmarking
