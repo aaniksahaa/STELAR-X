@@ -155,6 +155,13 @@ Please use `bulk_runner.sh` to run in bulk and to benchmark.
 
 To test STELAR-MP with large simulated datasets, we use Simphy (https://github.com/adamallo/SimPhy). Please look at the `simphy` directory to generate simulated datasets. Please read `cmd.txt` there.
 
+```bash
+cd simphy
+# n = 10000, k = 1000
+./run_simulator.sh 10000 1000 10k
+# then this data will be saved at data/15k there...
+```
+
 ## Calculation of RF rate
 
 Please use `RF/getFpFn.py`
