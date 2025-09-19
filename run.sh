@@ -1,5 +1,6 @@
 #!/bin/bash
 
+
 # STELAR-MP Run Script with Bipartition Expansion Support
 # Usage: ./run.sh [input_file] [output_file] [computation_mode] [expansion_method] [distance_method] [verbose]
 #
