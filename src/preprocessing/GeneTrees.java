@@ -241,7 +241,7 @@ public class GeneTrees {
                             // tree.calculateFrequencies(localTriPartitions);
                             
                             // Calculate STBipartitions for rooted trees
-                            System.out.println("Calculating STBipartitions for tree " + j);
+                            // System.out.println("Calculating STBipartitions for tree " + j);
                             calculateSTBipartitionsLocal(tree, localSTBipartitions);
                             
                             localTrees.add(tree);

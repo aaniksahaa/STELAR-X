@@ -5,6 +5,8 @@
 # ./run_simulator.sh 200 10 a
 # ./run_simulator.sh 20000 1000 20k
 
+mkdir -p data 
+
 if [ "$#" -ne 3 ]; then
     echo "Usage: $0 <n_taxa> <k_genes> <dataset_name>"
     exit 1
