@@ -30,6 +30,8 @@ public class Main {
         String distanceMethod = null;
         boolean verboseExpansion = false;
         boolean disableExpansion = false;
+        String branchSupport = null;
+        double lambda = 0.5;
 
         // Parse command line arguments
         for (int i = 0; i < args.length; i++) {
@@ -52,6 +54,17 @@ public class Main {
                 verboseExpansion = true;
             } else if (args[i].equals("--no-expansion")) {
                 disableExpansion = true;
+            } else if (args[i].equals("-s") && i + 1 < args.length) {
+                branchSupport = args[i + 1];
+                i++; // Skip next argument as it's the support type
+            } else if (args[i].equals("--lambda") && i + 1 < args.length) {
+                try {
+                    lambda = Double.parseDouble(args[i + 1]);
+                    i++; // Skip next argument as it's the lambda value
+                } catch (NumberFormatException e) {
+                    System.err.println("Error: Invalid lambda value '" + args[i + 1] + "'");
+                    System.exit(-1);
+                }
             }
         }
 
@@ -62,6 +75,8 @@ public class Main {
             System.out.println("  -m <mode>     Computation mode: CPU_SINGLE, CPU_PARALLEL, GPU_PARALLEL");
             System.out.println("  -e <method>   Expansion method: NONE, DISTANCE_ONLY, CONSENSUS_ONLY, DISTANCE_CONSENSUS, FULL");
             System.out.println("  -d <method>   Distance method: UPGMA, NEIGHBOR_JOINING, BOTH");
+            System.out.println("  -s <support>  Branch support: NONE, POSTERIOR, DETAILED, LENGTH, BOTH, PVALUE, ALL");
+            System.out.println("  --lambda <val> Lambda parameter for branch support (default: 0.5)");
             System.out.println("  -v            Verbose expansion output");
             System.out.println("  --no-expansion Disable bipartition expansion");
             System.exit(-1);
@@ -124,6 +139,10 @@ public class Main {
         if (utils.BipartitionExpansionConfig.isDistanceExpansionEnabled()) {
             System.out.println("Distance method: " + utils.BipartitionExpansionConfig.DISTANCE_METHOD);
         }
+        if (branchSupport != null) {
+            System.out.println("Branch support: " + branchSupport);
+            System.out.println("Lambda parameter: " + lambda);
+        }
 
         long startTime = System.nanoTime();
 
@@ -141,6 +160,60 @@ public class Main {
         InferenceDP inference = new InferenceDP(geneTrees, candidates);
         double score = inference.solve();
         Tree resultTree = inference.reconstructTree();
+
+        // Calculate branch support if requested
+        if (branchSupport != null && !branchSupport.equals("NONE")) {
+            System.out.println("\nCalculating branch support...");
+            
+            core.BranchSupportCalculator.BranchAnnotationType annotationType;
+            try {
+                switch (branchSupport.toUpperCase()) {
+                    case "POSTERIOR":
+                        annotationType = core.BranchSupportCalculator.BranchAnnotationType.POSTERIOR_ONLY;
+                        break;
+                    case "DETAILED":
+                        annotationType = core.BranchSupportCalculator.BranchAnnotationType.DETAILED;
+                        break;
+                    case "LENGTH":
+                        annotationType = core.BranchSupportCalculator.BranchAnnotationType.BRANCH_LENGTH_ONLY;
+                        break;
+                    case "BOTH":
+                        annotationType = core.BranchSupportCalculator.BranchAnnotationType.POSTERIOR_AND_LENGTH;
+                        break;
+                    case "PVALUE":
+                        annotationType = core.BranchSupportCalculator.BranchAnnotationType.PVALUE_ONLY;
+                        break;
+                    case "ALL":
+                        annotationType = core.BranchSupportCalculator.BranchAnnotationType.ALL;
+                        break;
+                    default:
+                        System.err.println("Error: Invalid branch support type '" + branchSupport + "'");
+                        System.err.println("Valid types: NONE, POSTERIOR, DETAILED, LENGTH, BOTH, PVALUE, ALL");
+                        System.exit(-1);
+                        return;
+                }
+            } catch (Exception e) {
+                System.err.println("Error parsing branch support type: " + e.getMessage());
+                System.exit(-1);
+                return;
+            }
+            
+            core.BranchSupportCalculator supportCalculator = 
+                new core.BranchSupportCalculator(geneTrees, resultTree, lambda, annotationType);
+            
+            // Validate quartet frequencies for debugging (optional)
+            if (verboseExpansion) {
+                supportCalculator.validateQuartetFrequencies();
+            }
+            
+            // Annotate branches
+            supportCalculator.annotateBranches();
+            
+            // Print statistics
+            core.BranchSupportCalculator.BranchSupportStatistics stats = 
+                supportCalculator.calculateStatistics();
+            System.out.println("\n" + stats.toString());
+        }
 
         // Write output
         try (FileWriter writer = new FileWriter(outputFilePath)) {

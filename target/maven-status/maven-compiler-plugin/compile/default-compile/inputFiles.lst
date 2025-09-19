@@ -2,6 +2,8 @@
 /home/aaniksahaa/research/STELAR-MP/src/tree/TreeNode.java
 /home/aaniksahaa/research/STELAR-MP/src/Main.java
 /home/aaniksahaa/research/STELAR-MP/src/tree/Tree.java
+/home/aaniksahaa/research/STELAR-MP/src/core/QuartetFrequencyCounter.java
+/home/aaniksahaa/research/STELAR-MP/src/core/BranchSupportCalculator.java
 /home/aaniksahaa/research/STELAR-MP/src/expansion/ConsensusTreeBuilder.java
 /home/aaniksahaa/research/STELAR-MP/src/expansion/DistanceMatrix.java
 /home/aaniksahaa/research/STELAR-MP/src/tree/TreePrinter.java
@@ -16,4 +18,5 @@
 /home/aaniksahaa/research/STELAR-MP/src/utils/Threading.java
 /home/aaniksahaa/research/STELAR-MP/src/tree/ConsoleColors.java
 /home/aaniksahaa/research/STELAR-MP/src/core/InferenceDP.java
+/home/aaniksahaa/research/STELAR-MP/src/core/PosteriorCalculator.java
 /home/aaniksahaa/research/STELAR-MP/src/preprocessing/GeneTrees.java

@@ -111,6 +111,18 @@ public class InferenceDP {
         tree.root = buildTreeNode(allTaxa, tree);
         tree.isRooted = true;
         
+        // Initialize the leaves array and count
+        tree.leaves = new TreeNode[geneTrees.realTaxaCount];
+        tree.leavesCount = 0;
+        
+        // Populate leaves array and count leaves
+        for (TreeNode node : tree.nodes) {
+            if (node.isLeaf()) {
+                tree.leaves[node.taxon.id] = node;
+                tree.leavesCount++;
+            }
+        }
+        
         return tree;
     }
     

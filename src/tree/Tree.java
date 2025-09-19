@@ -182,8 +182,17 @@ public class Tree {
     
     private String newickFormatUtil(TreeNode node) {
         if (node.isLeaf()) {
-            return node.taxon.label;
+            StringBuilder sb = new StringBuilder();
+            sb.append(node.taxon.label);
+            
+            // Add branch length if available
+            if (node.branchLength > 0) {
+                sb.append(":").append(String.format("%.6f", node.branchLength));
+            }
+            
+            return sb.toString();
         }
+        
         StringBuilder sb = new StringBuilder();
         sb.append("(");
         for (int i = 0; i < node.childs.size(); ++i) {
@@ -192,6 +201,19 @@ public class Tree {
                 sb.append(",");
         }
         sb.append(")");
+        
+        // Add support value if available (for internal nodes)
+        if (node.supportValue != null) {
+            sb.append(node.supportValue);
+        }
+        
+        // Add branch length if available and not already included in supportValue
+        // Only add branch length separately if supportValue doesn't contain it
+        if (node.branchLength > 0 && 
+            (node.supportValue == null || !node.supportValue.contains(":"))) {
+            sb.append(":").append(String.format("%.6f", node.branchLength));
+        }
+        
         return sb.toString();
     }
     
