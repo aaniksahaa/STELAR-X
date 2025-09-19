@@ -208,13 +208,13 @@ public class Main {
         // Gather analysis information
         int geneTreeCount = geneTrees.geneTrees.size();
         int taxaCount = geneTrees.realTaxaCount;
-        int uniquePartitions = geneTrees.triPartitions.size();
+        // int uniquePartitions = geneTrees.triPartitions.size();
         int uniqueSTBipartitions = geneTrees.stBipartitions.size();
         
         System.out.println("Processing complete:");
         System.out.println("  - Gene trees processed: " + geneTreeCount);
         System.out.println("  - Taxa found: " + taxaCount);
-        System.out.println("  - Unique tripartitions: " + uniquePartitions);
+        // System.out.println("  - Unique tripartitions: " + uniquePartitions);
         System.out.println("  - Unique STBipartitions: " + uniqueSTBipartitions);
         
         // Print taxa names

@@ -44,7 +44,7 @@ public class GeneTrees {
     public ArrayList<Tree> geneTrees;               // Parsed and preprocessed gene trees
     public String[] taxonIdToLabel;                 // ID to label mapping for output
     public Taxon[] taxa;                        // Array of all real taxa (indexed by ID)
-    public Map<String, TreeNode> triPartitions;     // Tripartition frequency data for consensus
+    // public Map<String, TreeNode> triPartitions;     // Tripartition frequency data for consensus
     public Map<STBipartition, Integer> stBipartitions; // STBipartition frequency map
     public Map<String, Taxon> taxaMap;          // Label to RealTaxon mapping
     public int realTaxaCount;                       // Total number of real taxa
@@ -202,7 +202,7 @@ public class GeneTrees {
         
         // Thread-safe data structures
         List<Tree> threadSafeGeneTrees = new ArrayList<>();
-        Map<String, TreeNode> threadSafeTriPartitions = new ConcurrentHashMap<>();
+        //Map<String, TreeNode> threadSafeTriPartitions = new ConcurrentHashMap<>();
         Map<STBipartition, Integer> threadSafeSTBipartitions = new ConcurrentHashMap<>();
         AtomicInteger totalInternalNodes = new AtomicInteger(0);
         AtomicInteger skippedTrees = new AtomicInteger(0);
@@ -212,6 +212,8 @@ public class GeneTrees {
         
         int chunkSize = (lines.size() + numThreads - 1) / numThreads;
         CountDownLatch latch = new CountDownLatch(numThreads);
+
+        System.out.println("Using " + numThreads + " threads for parallel gene tree processing");
         
         // Process gene trees in parallel chunks
         for (int i = 0; i < numThreads; i++) {
@@ -222,7 +224,7 @@ public class GeneTrees {
             Threading.execute(() -> {
                 try {
                     List<Tree> localTrees = new ArrayList<>();
-                    Map<String, TreeNode> localTriPartitions = new HashMap<>();
+                    // Map<String, TreeNode> localTriPartitions = new HashMap<>();
                     Map<STBipartition, Integer> localSTBipartitions = new HashMap<>();
                     int localInternalNodes = 0;
                     int localSkippedTrees = 0;
@@ -235,10 +237,11 @@ public class GeneTrees {
                             // Parse tree with consistent taxon mapping
                             Tree tree = new Tree(line, this.taxaMap);
                             
-                            // Calculate tripartition frequencies for Algorithm 1
-                            tree.calculateFrequencies(localTriPartitions);
+                            // // Calculate tripartition frequencies for Algorithm 1
+                            // tree.calculateFrequencies(localTriPartitions);
                             
                             // Calculate STBipartitions for rooted trees
+                            System.out.println("Calculating STBipartitions for tree " + j);
                             calculateSTBipartitionsLocal(tree, localSTBipartitions);
                             
                             localTrees.add(tree);
@@ -256,15 +259,15 @@ public class GeneTrees {
                         threadSafeGeneTrees.addAll(localTrees);
                     }
                     
-                    // Merge tripartitions
-                    for (Map.Entry<String, TreeNode> entry : localTriPartitions.entrySet()) {
-                        threadSafeTriPartitions.merge(entry.getKey(), entry.getValue(), 
-                            (existing, newValue) -> {
-                                // Merge frequencies - this is a simplification
-                                // In practice, you might need more sophisticated merging
-                                return existing;
-                            });
-                    }
+                    // // Merge tripartitions
+                    // for (Map.Entry<String, TreeNode> entry : localTriPartitions.entrySet()) {
+                    //     threadSafeTriPartitions.merge(entry.getKey(), entry.getValue(), 
+                    //         (existing, newValue) -> {
+                    //             // Merge frequencies - this is a simplification
+                    //             // In practice, you might need more sophisticated merging
+                    //             return existing;
+                    //         });
+                    // }
                     
                     // Merge STBipartitions
                     for (Map.Entry<STBipartition, Integer> entry : localSTBipartitions.entrySet()) {
@@ -294,7 +297,7 @@ public class GeneTrees {
         
         // Copy results to instance variables
         this.geneTrees.addAll(threadSafeGeneTrees);
-        this.triPartitions.putAll(threadSafeTriPartitions);
+        //this.triPartitions.putAll(threadSafeTriPartitions);
         this.stBipartitions.putAll(threadSafeSTBipartitions);
         
         if (skippedTrees.get() > 0) {
@@ -316,7 +319,7 @@ public class GeneTrees {
         System.out.println( "taxon count : " + this.taxaMap.size());
         System.out.println("Gene trees count : " + geneTrees.size());
         System.out.println( "total internal nodes : " + totalInternalNodes.get());
-        System.out.println( "unique partitions : " + triPartitions.size());
+        // System.out.println( "unique partitions : " + triPartitions.size());
         System.out.println( "unique STBipartitions : " + stBipartitions.size());
 
         // if(internalNodesCount == 50000){
@@ -336,7 +339,7 @@ public class GeneTrees {
     public GeneTrees(String path) throws FileNotFoundException{
 
         this.geneTrees = new ArrayList<>();
-        this.triPartitions = new HashMap<>();
+        // this.triPartitions = new HashMap<>();
         this.stBipartitions = new HashMap<>();
         this.path = path;
     }
@@ -351,7 +354,7 @@ public class GeneTrees {
     public GeneTrees(String path, Map<String, Taxon> taxaMap) throws FileNotFoundException{
 
         this.geneTrees = new ArrayList<>();
-        this.triPartitions = new HashMap<>();
+        // this.triPartitions = new HashMap<>();
         this.stBipartitions = new HashMap<>();
         this.path = path;
         this.taxaMap = taxaMap;
@@ -451,6 +454,7 @@ public class GeneTrees {
         Set<BitSet> processedClusters = new HashSet<>();
         
         // First, add all bipartitions from gene trees
+        System.out.println("\n ***************** Adding all bipartitions from gene trees *****************\n");
         for (STBipartition stb : stBipartitions.keySet()) {
             candidates.add(stb);
             processedClusters.add(stb.cluster1);
@@ -458,6 +462,7 @@ public class GeneTrees {
         }
         
         // Generate complementary bipartitions for each cluster
+        System.out.println("\n ***************** Adding complementary bipartitions for each cluster *****************\n");
         for (STBipartition stb : stBipartitions.keySet()) {
             BitSet cluster1 = stb.cluster1;
             BitSet cluster2 = stb.cluster2;
@@ -515,6 +520,7 @@ public class GeneTrees {
         
         // Apply bipartition expansion if enabled
         if (useExpansion && utils.BipartitionExpansionConfig.isExpansionEnabled()) {
+            System.out.println("\n ***************** Applying bipartition expansion *****************\n");
             expansion.BipartitionExpansionManager expansionManager = 
                 new expansion.BipartitionExpansionManager(this);
             candidates = expansionManager.expandBipartitions(candidates);

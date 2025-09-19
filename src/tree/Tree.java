@@ -208,49 +208,49 @@ public class Tree {
         return true; // Always rooted
     }
     
-    // Simplified frequency calculation for rooted trees
-    public void calculateFrequencies(Map<String, TreeNode> triPartitions) {
-        // Simple implementation - can be enhanced if needed
-        calculateFrequenciesUtil(root, triPartitions);
-    }
+    // // Simplified frequency calculation for rooted trees
+    // public void calculateFrequencies(Map<String, TreeNode> triPartitions) {
+    //     // Simple implementation - can be enhanced if needed
+    //     calculateFrequenciesUtil(root, triPartitions);
+    // }
     
-    private ArrayList<Integer> calculateFrequenciesUtil(TreeNode node, Map<String, TreeNode> triPartitions) {
-        if (node.isLeaf()) {
-            ArrayList<Integer> result = new ArrayList<>();
-            result.add(node.taxon.id);
-            return result;
-        }
+    // private ArrayList<Integer> calculateFrequenciesUtil(TreeNode node, Map<String, TreeNode> triPartitions) {
+    //     if (node.isLeaf()) {
+    //         ArrayList<Integer> result = new ArrayList<>();
+    //         result.add(node.taxon.id);
+    //         return result;
+    //     }
         
-        ArrayList<ArrayList<Integer>> childTaxa = new ArrayList<>();
-        for (TreeNode child : node.childs) {
-            childTaxa.add(calculateFrequenciesUtil(child, triPartitions));
-        }
+    //     ArrayList<ArrayList<Integer>> childTaxa = new ArrayList<>();
+    //     for (TreeNode child : node.childs) {
+    //         childTaxa.add(calculateFrequenciesUtil(child, triPartitions));
+    //     }
         
-        // Create partition key
-        StringBuilder sb = new StringBuilder();
-        for (var taxa : childTaxa) {
-            taxa.sort(Integer::compareTo);
-            for (int taxon : taxa) {
-                sb.append(taxon).append("-");
-            }
-            sb.append("|");
-        }
+    //     // Create partition key
+    //     StringBuilder sb = new StringBuilder();
+    //     for (var taxa : childTaxa) {
+    //         taxa.sort(Integer::compareTo);
+    //         for (int taxon : taxa) {
+    //             sb.append(taxon).append("-");
+    //         }
+    //         sb.append("|");
+    //     }
         
-        String key = sb.toString();
-        if (triPartitions.containsKey(key)) {
-            triPartitions.get(key).frequency++;
-            node.frequency = 0;
-        } else {
-            node.frequency = 1;
-            triPartitions.put(key, node);
-        }
+    //     String key = sb.toString();
+    //     if (triPartitions.containsKey(key)) {
+    //         triPartitions.get(key).frequency++;
+    //         node.frequency = 0;
+    //     } else {
+    //         node.frequency = 1;
+    //         triPartitions.put(key, node);
+    //     }
         
-        ArrayList<Integer> result = new ArrayList<>();
-        for (var taxa : childTaxa) {
-            result.addAll(taxa);
-        }
-        return result;
-    }
+    //     ArrayList<Integer> result = new ArrayList<>();
+    //     for (var taxa : childTaxa) {
+    //         result.addAll(taxa);
+    //     }
+    //     return result;
+    // }
     
     // Structural equality check (ignores child order)
     public boolean equalsStructure(Tree other) {
