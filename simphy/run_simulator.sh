@@ -16,9 +16,36 @@ n=$1          # number of taxa
 k=$2          # number of genes
 dataset=data/${3}    # dataset name / output folder
 
+# # Run SimPhy
+# ./simphy_lnx64 \
+#   -sb f:0.000001 \
+#   -ld f:0 \
+#   -lb f:0 \
+#   -lt f:0 \
+#   -rs 1 \
+#   -rl f:${k} \
+#   -rg 1 \
+#   -o ${dataset} \
+#   -sp f:${n} \
+#   -su f:0.00001 \
+#   -sg f:1 \
+#   -sl f:${n} \
+#   -st f:1000000 \
+#   -om 1 \
+#   -v 2 \
+#   -od 1 \
+#   -op 1 \
+#   -oc 1 \
+#   -on 1 \
+#   -cs 22 \
+#   -ll ${n} \
+#   -ls ${n}
+
+
 # Run SimPhy
 ./simphy_lnx64 \
-  -sb f:0.000001 \
+  -sb lu:0.0000001,0.0000001 \
+  -sd lu:0.0000001,sb \
   -ld f:0 \
   -lb f:0 \
   -lt f:0 \
@@ -26,11 +53,11 @@ dataset=data/${3}    # dataset name / output folder
   -rl f:${k} \
   -rg 1 \
   -o ${dataset} \
-  -sp f:${n} \
-  -su f:0.00001 \
+  -sp u:10000,1000000 \
+  -su ln:-17.27461,0.6931472 \
   -sg f:1 \
   -sl f:${n} \
-  -st f:1000000 \
+  -st ln:16.2,1 \
   -om 1 \
   -v 2 \
   -od 1 \
@@ -40,6 +67,8 @@ dataset=data/${3}    # dataset name / output folder
   -cs 22 \
   -ll ${n} \
   -ls ${n}
+
+
 
 # Run concat_gene_trees.py on replicate 1
 python concat_gene_trees.py ${dataset}/1
