@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# run-bulk.sh
+# run-bulk-simulated.sh
 #
 # Runs sim.sh and test-stelar.sh over all combinations of parameter lists.
 #
 # Usage:
-#   ./run-bulk.sh
-#   ./run-bulk.sh --base-dir /path/to/research
+#   ./run-bulk-simulated.sh
+#   ./run-bulk-simulated.sh --base-dir /path/to/research
 #
 # Default base-dir = $HOME/phylogeny
 
