@@ -3,3 +3,5 @@
 ./run.sh bb.tre out.tre GPU_PARALLEL NONE
 
 ./run.sh out.trees a.tre GPU_PARALLEL NONE
+
+./run.sh 1kp.tre out.tre GPU_PARALLEL NONE
