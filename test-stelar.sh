@@ -2,7 +2,7 @@
 # test-stelar.sh
 # Usage:
 #   ./test-stelar.sh -t 1000 -g 500
-#   ./test-stelar.sh --taxa_num 1000 --gene_trees 500 --replicate R2 --stelar-root /path/to/STELAR-MP
+#   ./test-stelar.sh --taxa_num 1000 --gene_trees 500 --replicate R2 --stelar-root /path/to/STELAR-MP --fresh
 
 set -euo pipefail
 
@@ -23,6 +23,7 @@ SPMAX="1500000"
 
 USE_LEGACY_LAYOUT=false
 STELAR_OPTS="GPU_PARALLEL NONE"
+FRESH=false
 
 print_help() {
   cat <<EOF
@@ -42,6 +43,7 @@ Optional:
   --spmin            Population size minimum (default: ${SPMIN})
   --spmax            Population size maximum (default: ${SPMAX})
   --use-legacy-layout  Use legacy simphy layout
+  --fresh            Force rerun even if stat-stelar.csv exists
   --help, -h         Show this message
 EOF
 }
@@ -60,6 +62,7 @@ while [[ $# -gt 0 ]]; do
     --spmin) SPMIN="$2"; shift 2 ;;
     --spmax) SPMAX="$2"; shift 2 ;;
     --use-legacy-layout) USE_LEGACY_LAYOUT=true; shift ;;
+    --fresh) FRESH=true; shift ;;
     --help|-h) print_help; exit 0 ;;
     *) echo "Unknown option: $1"; print_help; exit 1 ;;
   esac
@@ -81,19 +84,23 @@ fi
 
 PAIR="${TAXA_NUM}_${GENE_TREES}"
 
-# Construct SIMPHY_RUN_DIR:
+# Construct SIMPHY_RUN_DIR early (so we can check the stat file before doing heavy work)
 if [[ "$USE_LEGACY_LAYOUT" = true ]]; then
   SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/${PAIR}/${REPLICATE}"
 else
   SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}/${REPLICATE}"
 fi
 
+STAT_FILE="${SIMPHY_RUN_DIR%/}/stat-stelar.csv"
 ALL_GT_FILE="${SIMPHY_RUN_DIR%/}/all_gt.tre"
 TRUE_SPECIES_TREE="${SIMPHY_RUN_DIR%/}/s_tree.trees"
-
-# OUTPUTS now live in the simphy run dir
 OUT_STELAR="${SIMPHY_RUN_DIR%/}/out-stelar.tre"
-STAT_FILE="${SIMPHY_RUN_DIR%/}/stat-stelar.csv"
+
+# Checkpoint: if stat file exists and --fresh not provided, skip everything
+if [[ "$FRESH" = false && -f "${STAT_FILE}" ]]; then
+  echo "SKIPPING: ${STAT_FILE} already exists. Use --fresh to force rerun."
+  exit 0
+fi
 
 echo "Parameters:"
 echo "  taxa_num:       $TAXA_NUM"

@@ -2,7 +2,7 @@
 # sim.sh (new runner for updated run_simulator.sh)
 # Usage examples:
 #   ./sim.sh -t 1000 -g 500
-#   ./sim.sh -t 1000 -g 500 -r R1 -b "$HOME/phylogeny" --simphy-dir /opt/simphy --sb 0.000002 --spmin 400000 --spmax 1200000
+#   ./sim.sh -t 1000 -g 500 -r R1 -b "$HOME/phylogeny" --fresh
 
 set -euo pipefail
 
@@ -11,10 +11,11 @@ TAXA_NUM=""
 GENE_TREES=""
 REPLICATE="R1"
 BASE_DIR="${HOME}/phylogeny"
-SIMPHY_DIR=""          # will be derived from BASE_DIR unless explicitly provided
+SIMPHY_DIR=""
 SIMPHY_DIR_SET=false
+FRESH=false
 
-# Defaults that match your run_simulator.sh defaults
+# Defaults that match run_simulator.sh
 SB="0.000001"
 SPMIN="500000"
 SPMAX="1500000"
@@ -34,20 +35,12 @@ Optional:
   --sb               Substitution/birthrate parameter (default: ${SB})
   --spmin            Population size minimum (default: ${SPMIN})
   --spmax            Population size maximum (default: ${SPMAX})
+  --fresh            Force rerun even if stat-sim.csv exists
   --help, -h         Show this message
-
-Behavior:
-  If --simphy-dir is not provided, the script uses:
-    \${BASE_DIR}/STELAR-MP/simphy
-
-Examples:
-  ./sim.sh -t 1000 -g 500
-  ./sim.sh -t 1000 -g 500 --replicate R2 -b /home/user/research --sb 0.000002
-  ./sim.sh -t 1000 -g 500 --simphy-dir /opt/simphy
 EOF
 }
 
-# parse args (supports short and long)
+# parse args
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --taxa_num|-t) TAXA_NUM="$2"; shift 2 ;;
@@ -58,6 +51,7 @@ while [[ $# -gt 0 ]]; do
     --sb) SB="$2"; shift 2 ;;
     --spmin) SPMIN="$2"; shift 2 ;;
     --spmax) SPMAX="$2"; shift 2 ;;
+    --fresh) FRESH=true; shift 1 ;;
     --help|-h) print_help; exit 0 ;;
     *) echo "Unknown option: $1"; print_help; exit 1 ;;
   esac
@@ -69,9 +63,20 @@ if [[ -z "$TAXA_NUM" || -z "$GENE_TREES" ]]; then
   exit 2
 fi
 
-# derive SIMPHY_DIR from BASE_DIR if not explicitly set
+# derive SIMPHY_DIR
 if [[ "$SIMPHY_DIR_SET" = false ]]; then
   SIMPHY_DIR="${BASE_DIR%/}/STELAR-MP/simphy"
+fi
+
+# Construct expected output paths early
+OUT_DIR="${SIMPHY_DIR%/}/data/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}"
+REPL_DIR="${OUT_DIR%/}/${REPLICATE}"
+CSV_FILE="${REPL_DIR%/}/stat-sim.csv"
+
+# Checkpoint mechanism
+if [[ "$FRESH" = false && -f "${CSV_FILE}" ]]; then
+  echo "SKIPPING: ${CSV_FILE} already exists. Use --fresh to rerun."
+  exit 0
 fi
 
 echo "Parameters:"
@@ -123,4 +128,85 @@ else
   echo "Warning: expected replicate directory ${REPL_DIR} not found."
 fi
 
+# -------------------------
+# New block: run analysis and write stat-sim.csv
+# -------------------------
+# Only proceed if replicate dir exists and all_gt.tre exists
+if [[ -d "${REPL_DIR}" && -f "${ALL_GT_FILE}" ]]; then
+  # Try to locate a species tree file within the replicate dir.
+  SPECIES_TREE=""
+  for f in "${REPL_DIR}"/s_tree* "${REPL_DIR}"/species_tree* "${REPL_DIR}"/species*; do
+    if [[ -f "$f" ]]; then
+      SPECIES_TREE="$f"
+      break
+    fi
+  done
+
+  if [[ -z "${SPECIES_TREE}" ]]; then
+    echo "Warning: no species-tree file discovered in ${REPL_DIR}. Skipping analysis."
+  else
+    echo "Found species tree: ${SPECIES_TREE}"
+    # Try to run analyze-dataset.py. We'll attempt from replicate dir first, then from SIMPHY_DIR, then rely on PATH.
+    ANALYZE_OUTPUT=""
+    set +e
+    (
+      cd "${REPL_DIR}"
+      ANALYZE_OUTPUT=$(python analyze-dataset.py "${ALL_GT_FILE##*/}" "${SPECIES_TREE##*/}" 2>&1) || true
+    )
+    if [[ -z "${ANALYZE_OUTPUT}" ]]; then
+      (
+        cd "${SIMPHY_DIR}"
+        ANALYZE_OUTPUT=$(python analyze-dataset.py "${ALL_GT_FILE}" "${SPECIES_TREE}" 2>&1) || true
+      )
+    fi
+    if [[ -z "${ANALYZE_OUTPUT}" ]]; then
+      ANALYZE_OUTPUT=$(python analyze-dataset.py "${ALL_GT_FILE}" "${SPECIES_TREE}" 2>&1) || true
+    fi
+    set -e
+
+    if [[ -z "${ANALYZE_OUTPUT}" ]]; then
+      echo "Warning: analyze-dataset.py produced no output or failed to run. Skipping CSV write."
+    else
+      echo "${ANALYZE_OUTPUT}"
+
+      # Extract gt-gt and gt-st using patterns from your example output lines
+      gt_gt=$(echo "${ANALYZE_OUTPUT}" | grep -F "Average pairwise discordance (gene trees):" | awk '{print $NF}' || true)
+      gt_st=$(echo "${ANALYZE_OUTPUT}" | grep -F "Average discordance (gene trees vs species tree):" | awk '{print $NF}' || true)
+
+      # If extraction failed, try slightly different phrases (be permissive)
+      if [[ -z "${gt_gt}" ]]; then
+        gt_gt=$(echo "${ANALYZE_OUTPUT}" | grep -E "Average pairwise.*discord|pairwise RF" | awk '{print $NF}' || true)
+      fi
+      if [[ -z "${gt_st}" ]]; then
+        gt_st=$(echo "${ANALYZE_OUTPUT}" | grep -E "discordance .*gene trees vs species tree|gene trees vs species" | awk '{print $NF}' || true)
+      fi
+
+      echo ""
+      echo "============================================================"
+      echo "EXTRACTED VALUES:"
+      echo "============================================================"
+      echo "gt_gt: ${gt_gt:-N/A}"
+      echo "gt_st: ${gt_st:-N/A}"
+
+      # Prepare CSV path
+      CSV_FILE="${REPL_DIR%/}/stat-sim.csv"
+
+      # Write header if not present
+      if [[ ! -f "${CSV_FILE}" ]]; then
+        echo "num-taxa,gene-trees,replicate,sb,spmin,spmax,gt-gt,gt-st" > "${CSV_FILE}"
+      fi
+
+      # Append the row (use empty fields if values missing)
+      printf "%s,%s,%s,%s,%s,%s,%s,%s\n" \
+        "${TAXA_NUM}" "${GENE_TREES}" "${REPLICATE}" "${SB}" "${SPMIN}" "${SPMAX}" \
+        "${gt_gt:-}" "${gt_st:-}" >> "${CSV_FILE}"
+
+      echo "Wrote/updated stats CSV: ${CSV_FILE}"
+    fi
+  fi
+else
+  echo "Skipping analysis: replicate directory or all_gt.tre missing."
+fi
+
 echo "Done. Output directory (if created): ${OUT_DIR}"
+
