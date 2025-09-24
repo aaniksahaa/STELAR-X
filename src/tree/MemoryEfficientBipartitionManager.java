@@ -23,16 +23,22 @@ import utils.Threading;
 public class MemoryEfficientBipartitionManager {
     
     // Configuration
-    public static RangeBipartition.HashFunction DEFAULT_HASH_FUNCTION = new RangeBipartition.SumHashFunction();
-    public static boolean ENABLE_DOUBLE_HASHING = false;
+    public static boolean ENABLE_DOUBLE_HASHING = true;
+    public static boolean ENABLE_EXPENSIVE_EQUALITY_CHECKS = false; // Default: trust the hash functions
+    public static RangeBipartition.HashFunction DEFAULT_HASH_FUNCTION = getDefaultHashFunction();
+    
+    private static RangeBipartition.HashFunction getDefaultHashFunction() {
+        return ENABLE_DOUBLE_HASHING ? new RangeBipartition.DoubleHashFunction() : new RangeBipartition.SumHashFunction();
+    }
     
     // Gene tree data structures
     private final List<Tree> geneTrees;
     private final int[][] geneTreeTaxaOrdering;  // [tree_index][taxa_position] = taxon_id
     private final long[][] prefixSums;           // [tree_index][position] = prefix sum of taxon IDs
+    private final long[][] prefixXORs;           // [tree_index][position] = prefix XOR of taxon IDs
     
     // Processing results
-    private final Map<Long, List<RangeBipartition>> hashToBipartitions;
+    private final Map<Object, List<RangeBipartition>> hashToBipartitions;
     private final Map<STBipartition, Integer> uniqueSTBipartitions;
     private final int realTaxaCount;
     
@@ -41,11 +47,12 @@ public class MemoryEfficientBipartitionManager {
         this.realTaxaCount = realTaxaCount;
         this.geneTreeTaxaOrdering = new int[geneTrees.size()][];
         this.prefixSums = new long[geneTrees.size()][];
+        this.prefixXORs = new long[geneTrees.size()][];
         this.hashToBipartitions = new ConcurrentHashMap<>();
         this.uniqueSTBipartitions = new ConcurrentHashMap<>();
         
         initializeGeneTreeOrderings();
-        calculatePrefixSums();
+        calculatePrefixArrays();
     }
     
     /**
@@ -87,24 +94,49 @@ public class MemoryEfficientBipartitionManager {
     }
     
     /**
-     * Calculate prefix sums for efficient range hash computation.
+     * Calculate prefix sums and XORs over hashed taxon IDs for efficient range hash computation.
+     * This provides much better hash distribution than using raw taxon IDs.
      */
-    private void calculatePrefixSums() {
-        System.out.println("Calculating prefix sums for hash functions...");
+    private void calculatePrefixArrays() {
+        System.out.println("Calculating prefix sums and XORs over hashed taxon IDs for hash functions...");
         
         for (int i = 0; i < geneTrees.size(); i++) {
             int[] ordering = geneTreeTaxaOrdering[i];
             prefixSums[i] = new long[ordering.length];
+            prefixXORs[i] = new long[ordering.length];
             
             if (ordering.length > 0) {
-                prefixSums[i][0] = ordering[0];
+                // Hash the first taxon ID and store as initial values
+                long hashedTaxon0 = hashSingleTaxon(ordering[0]);
+                prefixSums[i][0] = hashedTaxon0;
+                prefixXORs[i][0] = hashedTaxon0;
+                
                 for (int j = 1; j < ordering.length; j++) {
-                    prefixSums[i][j] = prefixSums[i][j - 1] + ordering[j];
+                    long hashedTaxon = hashSingleTaxon(ordering[j]);
+                    prefixSums[i][j] = prefixSums[i][j - 1] + hashedTaxon;
+                    prefixXORs[i][j] = prefixXORs[i][j - 1] ^ hashedTaxon;
                 }
             }
         }
         
-        System.out.println("Calculated prefix sums for efficient range hashing");
+        System.out.println("Calculated prefix sums and XORs over hashed taxon IDs for efficient range hashing");
+    }
+    
+    /**
+     * Simple but effective hash function for individual taxon IDs.
+     * Uses a combination of multiplications and XOR operations for good distribution.
+     */
+    private static long hashSingleTaxon(int taxonId) {
+        // Use a strong hash mixing function for individual taxon IDs
+        long x = taxonId;
+        x ^= x >>> 16;
+        x *= 0x85ebca6b;
+        x ^= x >>> 13;
+        x *= 0xc2b2ae35;
+        x ^= x >>> 16;
+        
+        // Ensure we never return 0 to avoid issues with prefix operations
+        return x == 0 ? 1 : x;
     }
     
     /**
@@ -131,7 +163,7 @@ public class MemoryEfficientBipartitionManager {
             
             Threading.execute(() -> {
                 try {
-                    Map<Long, List<RangeBipartition>> localHashMap = new HashMap<>();
+                    Map<Object, List<RangeBipartition>> localHashMap = new HashMap<>();
                     
                     System.out.println("Thread " + threadId + " processing trees " + startIdx + " to " + (endIdx - 1));
                     
@@ -145,7 +177,7 @@ public class MemoryEfficientBipartitionManager {
                     
                     // Merge local results into global map
                     synchronized (hashToBipartitions) {
-                        for (Map.Entry<Long, List<RangeBipartition>> entry : localHashMap.entrySet()) {
+                        for (Map.Entry<Object, List<RangeBipartition>> entry : localHashMap.entrySet()) {
                             hashToBipartitions.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
                                              .addAll(entry.getValue());
                         }
@@ -181,7 +213,7 @@ public class MemoryEfficientBipartitionManager {
      * Extract range bipartitions from a gene tree recursively.
      * This mirrors the original calculateSTBipartitionsUtilLocal logic.
      */
-    private void extractRangeBipartitions(TreeNode node, int treeIndex, Map<Long, List<RangeBipartition>> localHashMap) {
+    private void extractRangeBipartitions(TreeNode node, int treeIndex, Map<Object, List<RangeBipartition>> localHashMap) {
         if (node.isLeaf()) {
             return;
         }
@@ -199,7 +231,7 @@ public class MemoryEfficientBipartitionManager {
                     leftRange[0], leftRange[1] + 1,     // left range (exclusive end)
                     rightRange[0], rightRange[1] + 1);  // right range (exclusive end)
                 
-                long hash = DEFAULT_HASH_FUNCTION.calculateHash(rangeBip, prefixSums);
+                Object hash = DEFAULT_HASH_FUNCTION.calculateHash(rangeBip, prefixSums, prefixXORs);
                 
                 localHashMap.computeIfAbsent(hash, k -> new ArrayList<>()).add(rangeBip);
             }
@@ -251,43 +283,67 @@ public class MemoryEfficientBipartitionManager {
     
     /**
      * Convert range bipartitions to STBipartitions only for unique ones.
+     * Uses expensive equality checks if enabled, otherwise trusts hash function uniqueness.
      */
     private void convertToSTBipartitions() {
         System.out.println("Converting unique range bipartitions to STBipartitions...");
+        System.out.println("Expensive equality checks: " + (ENABLE_EXPENSIVE_EQUALITY_CHECKS ? "ENABLED" : "DISABLED (trusting hash)"));
         
         int totalRanges = 0;
         int uniqueRanges = 0;
         
-        for (Map.Entry<Long, List<RangeBipartition>> entry : hashToBipartitions.entrySet()) {
-            List<RangeBipartition> ranges = entry.getValue();
-            totalRanges += ranges.size();
-            
-            if (ranges.isEmpty()) continue;
-            
-            // Group ranges by actual equality (not just hash)
-            Map<RangeBipartition, Integer> actuallyUniqueRanges = new HashMap<>();
-            
-            for (RangeBipartition range : ranges) {
-                boolean found = false;
+        if (ENABLE_EXPENSIVE_EQUALITY_CHECKS) {
+            System.out.println("\n\nPerforming expensive equality checks...\n\n");
+            // Original expensive approach with full equality checking
+            for (Map.Entry<Object, List<RangeBipartition>> entry : hashToBipartitions.entrySet()) {
+                List<RangeBipartition> ranges = entry.getValue();
+                totalRanges += ranges.size();
                 
-                for (RangeBipartition existing : actuallyUniqueRanges.keySet()) {
-                    if (rangesAreEqual(range, existing)) {
-                        actuallyUniqueRanges.put(existing, actuallyUniqueRanges.get(existing) + 1);
-                        found = true;
-                        break;
+                if (ranges.isEmpty()) continue;
+                
+                // Group ranges by actual equality (not just hash)
+                Map<RangeBipartition, Integer> actuallyUniqueRanges = new HashMap<>();
+                
+                for (RangeBipartition range : ranges) {
+                    boolean found = false;
+                    
+                    for (RangeBipartition existing : actuallyUniqueRanges.keySet()) {
+                        if (rangesAreEqual(range, existing)) {
+                            actuallyUniqueRanges.put(existing, actuallyUniqueRanges.get(existing) + 1);
+                            found = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!found) {
+                        actuallyUniqueRanges.put(range, 1);
                     }
                 }
                 
-                if (!found) {
-                    actuallyUniqueRanges.put(range, 1);
+                // Convert unique ranges to STBipartitions
+                for (Map.Entry<RangeBipartition, Integer> rangeEntry : actuallyUniqueRanges.entrySet()) {
+                    STBipartition stb = convertRangeToSTBipartition(rangeEntry.getKey());
+                    if (stb != null) {
+                        uniqueSTBipartitions.merge(stb, rangeEntry.getValue(), Integer::sum);
+                        uniqueRanges++;
+                    }
                 }
             }
-            
-            // Convert unique ranges to STBipartitions
-            for (Map.Entry<RangeBipartition, Integer> rangeEntry : actuallyUniqueRanges.entrySet()) {
-                STBipartition stb = convertRangeToSTBipartition(rangeEntry.getKey());
+        } else {
+            // Fast approach: trust the hash function, just take the first from each hash group
+            for (Map.Entry<Object, List<RangeBipartition>> entry : hashToBipartitions.entrySet()) {
+                List<RangeBipartition> ranges = entry.getValue();
+                totalRanges += ranges.size();
+                
+                if (ranges.isEmpty()) continue;
+                
+                // Just take the first range from each hash group and sum up all occurrences
+                RangeBipartition representative = ranges.get(0);
+                int totalCount = ranges.size(); // All ranges in this hash group are considered identical
+                
+                STBipartition stb = convertRangeToSTBipartition(representative);
                 if (stb != null) {
-                    uniqueSTBipartitions.merge(stb, rangeEntry.getValue(), Integer::sum);
+                    uniqueSTBipartitions.merge(stb, totalCount, Integer::sum);
                     uniqueRanges++;
                 }
             }
@@ -304,23 +360,41 @@ public class MemoryEfficientBipartitionManager {
      * Check if two range bipartitions are equal by comparing their actual taxon sets.
      */
     private boolean rangesAreEqual(RangeBipartition range1, RangeBipartition range2) {
-        // Same tree - compare ranges directly
+        // Same tree - compare ranges directly (both orientations)
         if (range1.geneTreeIndex == range2.geneTreeIndex) {
-            return range1.leftStart == range2.leftStart && range1.leftEnd == range2.leftEnd &&
-                   range1.rightStart == range2.rightStart && range1.rightEnd == range2.rightEnd;
+            // Direct match: left1==left2 && right1==right2
+            boolean directMatch = range1.leftStart == range2.leftStart && range1.leftEnd == range2.leftEnd &&
+                                 range1.rightStart == range2.rightStart && range1.rightEnd == range2.rightEnd;
+            
+            // Symmetric match: left1==right2 && right1==left2
+            boolean symmetricMatch = range1.leftStart == range2.rightStart && range1.leftEnd == range2.rightEnd &&
+                                   range1.rightStart == range2.leftStart && range1.rightEnd == range2.leftEnd;
+            
+            return directMatch || symmetricMatch;
         }
         
         // Different trees - compare hash values for efficiency
-        long hash1 = DEFAULT_HASH_FUNCTION.calculateHash(range1, prefixSums);
-        long hash2 = DEFAULT_HASH_FUNCTION.calculateHash(range2, prefixSums);
+        Object hash1 = DEFAULT_HASH_FUNCTION.calculateHash(range1, prefixSums, prefixXORs);
+        Object hash2 = DEFAULT_HASH_FUNCTION.calculateHash(range2, prefixSums, prefixXORs);
         
-        if (hash1 != hash2) {
+        if (!hash1.equals(hash2)) {
             return false;
         }
         
         // Hash collision possible - compare actual taxon sets
-        return getLeftTaxonSetForRange(range1).equals(getLeftTaxonSetForRange(range2)) &&
-               getRightTaxonSetForRange(range1).equals(getRightTaxonSetForRange(range2));
+        // Check both orientations: {left1, right1} == {left2, right2} OR {left1, right1} == {right2, left2}
+        Set<Integer> left1 = getLeftTaxonSetForRange(range1);
+        Set<Integer> right1 = getRightTaxonSetForRange(range1);
+        Set<Integer> left2 = getLeftTaxonSetForRange(range2);
+        Set<Integer> right2 = getRightTaxonSetForRange(range2);
+        
+        // Direct match: left1==left2 && right1==right2
+        boolean directMatch = left1.equals(left2) && right1.equals(right2);
+        
+        // Symmetric match: left1==right2 && right1==left2  
+        boolean symmetricMatch = left1.equals(right2) && right1.equals(left2);
+        
+        return directMatch || symmetricMatch;
     }
     
     /**
@@ -400,7 +474,8 @@ public class MemoryEfficientBipartitionManager {
         StringBuilder sb = new StringBuilder();
         sb.append("Memory-Efficient Bipartition Processing Statistics:\n");
         sb.append("  Gene trees processed: ").append(geneTrees.size()).append("\n");
-        sb.append("  Hash function: ").append(DEFAULT_HASH_FUNCTION.getName()).append("\n");
+        sb.append("  Hash function: ").append(DEFAULT_HASH_FUNCTION.getName()).append(" (using hashed taxon IDs)\n");
+        sb.append("  Equality checking mode: ").append(ENABLE_EXPENSIVE_EQUALITY_CHECKS ? "EXPENSIVE" : "FAST (trust hash)").append("\n");
         sb.append("  Unique hash groups: ").append(hashToBipartitions.size()).append("\n");
         sb.append("  Final unique STBipartitions: ").append(uniqueSTBipartitions.size()).append("\n");
         
@@ -415,3 +490,4 @@ public class MemoryEfficientBipartitionManager {
         return sb.toString();
     }
 }
+
