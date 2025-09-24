@@ -14,6 +14,7 @@ BASE_DIR="${HOME}/phylogeny"
 ASTRAL_DIR=""                # derived from BASE_DIR unless provided
 ASTRAL_DIR_SET=false
 ASTRAL_ROOT=""               # alias for ASTRAL_DIR for compatibility
+
 ASTRAL_ROOT_SET=false
 
 # Defaults that match run_simulator.sh (kept for directory naming parity)
@@ -83,6 +84,8 @@ elif [[ "$ASTRAL_ROOT_SET" = true ]]; then
   # ASTRAL_ROOT already set by user
   :
 fi
+
+STELAR_ROOT="${BASE_DIR%/}/STELAR-MP"
 
 PAIR="${TAXA_NUM}_${GENE_TREES}"
 
@@ -216,7 +219,7 @@ RF_RATE="NA"
 if [[ -f "$OUT_ASTRAL" && -f "$TRUE_SPECIES_TREE" ]]; then
   echo
   echo "==> Calculating RF rate (using rf.py)"
-  rf_output=$(cd "$ASTRAL_ROOT" && python rf.py "$OUT_ASTRAL" "$TRUE_SPECIES_TREE" 2>&1) || rf_output="$rf_output"
+  rf_output=$(cd "$STELAR_ROOT" && python rf.py "$OUT_ASTRAL" "$TRUE_SPECIES_TREE" 2>&1) || rf_output="$rf_output"
   rf_candidate=$(echo "$rf_output" | grep -Eo '[0-9]+(\.[0-9]+)?' | head -n1 || true)
   if [[ -n "$rf_candidate" ]]; then
     RF_RATE="$rf_candidate"
