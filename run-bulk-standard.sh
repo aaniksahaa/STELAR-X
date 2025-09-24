@@ -6,7 +6,7 @@
 #   --dataset-dir, -d Optional dataset directory (defaults to BASE_DIR/datasets)
 #   --fresh           Force re-run even if stat-<alg>.csv exists
 
-set -euo pipefail
+set -uo pipefail
 
 # =============================================================================
 # DEFAULTS (edit these if you want different defaults)
@@ -46,7 +46,7 @@ NC='\033[0m'
 # Dataset configuration (kept exactly as you provided)
 # =============================================================================
 # folders=("200-taxon")
-folders=("200-taxon")
+folders=("37-taxon" "48-taxon" "100-taxon" "200-taxon")
 
 declare -A innerFolderNames
 innerFolderNames["11-taxon"]="estimated_Xgenes_strongILS/estimated_5genes_strongILS estimated_Xgenes_strongILS/estimated_15genes_strongILS estimated_Xgenes_strongILS/estimated_25genes_strongILS estimated_Xgenes_strongILS/estimated_50genes_strongILS estimated_Xgenes_strongILS/estimated_100genes_strongILS"
@@ -297,6 +297,14 @@ run_algorithm_and_write_stats() {
     # clean up tempfiles
     rm -f "$TIME_TMP" "$MON_TMP" 2>/dev/null || true
 
+    # Check if algorithm failed
+    if [[ $ALGORITHM_EXIT_CODE -ne 0 ]]; then
+      echo -e "      ${RED}ERROR: ${ALGORITHM^^} failed with exit code $ALGORITHM_EXIT_CODE${NC}"
+      echo -e "      ${RED}Skipping CSV writing and RF calculation for this run${NC}"
+      echo -e "      ${YELLOW}Continuing with next dataset...${NC}"
+      return 1
+    fi
+
     # RF calculation
     local RF_RATE="NA"
     if [[ -f "$OUT_FILE" ]]; then
@@ -478,7 +486,11 @@ for folder in "${folders[@]}"; do
                 OUT_DIR="${DATASET_DIR%/}/$folder/$GT_FOLDER/${algorithm}_outputs"
 
                 # run and write per-run stat file (skips if stat exists and not fresh)
-                run_algorithm_and_write_stats "$ALL_GT_FILE" "$TRUE_TREE" "$OUT_DIR" "$REPL" "$folder" "$inner_folder" "$algorithm"
+                if ! run_algorithm_and_write_stats "$ALL_GT_FILE" "$TRUE_TREE" "$OUT_DIR" "$REPL" "$folder" "$inner_folder" "$algorithm"; then
+                    echo -e "      ${RED}Failed to process $algorithm for ${folder}/${inner_folder}/${REPL}${NC}"
+                    echo -e "      ${YELLOW}Continuing with next algorithm...${NC}"
+                    continue
+                fi
             done
         done
     done
