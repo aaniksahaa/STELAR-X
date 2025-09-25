@@ -198,9 +198,36 @@ public class WeightCalculator {
             System.out.println("==== STARTING GPU WEIGHT CALCULATION ====");
             
             // Convert Java data structures to CUDA-compatible format
-            int numCandidates = candidates.size();
-            int numGeneTreeBips = geneTrees.stBipartitions.size();
-            int bitsetSize = (geneTrees.realTaxaCount + 63) / 64; // Size in 64-bit words
+            // Use long for all size calculations to prevent overflow
+            long numCandidatesLong = candidates.size();
+            long numGeneTreeBipsLong = geneTrees.stBipartitions.size();
+            // Calculate bitset size safely to prevent overflow
+            long realTaxaCountLong = geneTrees.realTaxaCount;
+            long bitsetSizeLong = (realTaxaCountLong + 63L) / 64L; // Size in 64-bit words
+            
+            // Extra safety: ensure realTaxaCount itself is reasonable
+            if (realTaxaCountLong < 0) {
+                throw new RuntimeException("Invalid realTaxaCount: " + realTaxaCountLong + " (cannot be negative)");
+            }
+            if (realTaxaCountLong > 1000000000L) { // 1 billion taxa limit
+                throw new RuntimeException("Too many taxa: " + realTaxaCountLong + " exceeds reasonable limit of 1 billion");
+            }
+            
+            // Validate that sizes fit in int for array indexing (Java arrays are int-indexed)
+            if (numCandidatesLong > Integer.MAX_VALUE) {
+                throw new RuntimeException("Too many candidates: " + numCandidatesLong + " exceeds Integer.MAX_VALUE");
+            }
+            if (numGeneTreeBipsLong > Integer.MAX_VALUE) {
+                throw new RuntimeException("Too many gene tree bipartitions: " + numGeneTreeBipsLong + " exceeds Integer.MAX_VALUE");
+            }
+            if (bitsetSizeLong > Integer.MAX_VALUE) {
+                throw new RuntimeException("Bitset size too large: " + bitsetSizeLong + " exceeds Integer.MAX_VALUE");
+            }
+            
+            // Safe to cast to int for array indexing after validation
+            int numCandidates = (int) numCandidatesLong;
+            int numGeneTreeBips = (int) numGeneTreeBipsLong;
+            int bitsetSize = (int) bitsetSizeLong;
             
             System.out.println("==== CUDA ALLOCATION PARAMETERS ====");
             System.out.println("numCandidates: " + numCandidates);
@@ -208,11 +235,12 @@ public class WeightCalculator {
             System.out.println("bitsetSize (in 64-bit words): " + bitsetSize);
             System.out.println("geneTrees.realTaxaCount: " + geneTrees.realTaxaCount);
             
-            // Log potential allocation sizes using long arithmetic to prevent overflow
-            long candidateMemorySize = (long) numCandidates * (long) bitsetSize * 8L;
-            long geneTreeMemorySize = (long) numGeneTreeBips * (long) bitsetSize * 8L;
-            long frequenciesSize = (long) numGeneTreeBips * 4L;
-            long weightsSize = (long) numCandidates * 8L;
+            // Calculate memory allocation sizes using long arithmetic to prevent overflow
+            // Use the original long values for all calculations
+            long candidateMemorySize = numCandidatesLong * bitsetSizeLong * 8L;
+            long geneTreeMemorySize = numGeneTreeBipsLong * bitsetSizeLong * 8L;
+            long frequenciesSize = numGeneTreeBipsLong * 4L;
+            long weightsSize = numCandidatesLong * 8L;
             long totalMemory = 2L * candidateMemorySize + 2L * geneTreeMemorySize + frequenciesSize + weightsSize;
             
             System.out.println("==== MEMORY ALLOCATION SIZES (using long arithmetic) ====");
@@ -224,20 +252,22 @@ public class WeightCalculator {
             System.out.println("weights array size: " + weightsSize + " bytes");
             System.out.println("Total Memory Required: " + totalMemory + " bytes (" + (totalMemory / (1024*1024)) + " MB)");
             
-            // Check for potential integer overflow in calculations
+            // Check for potential integer overflow in calculations (demonstrate what would happen with int arithmetic)
             System.out.println("==== OVERFLOW DETECTION ====");
-            long candidateCalcInt = numCandidates * bitsetSize * 8; // This uses int arithmetic - can overflow!
-            long geneTreeCalcInt = numGeneTreeBips * bitsetSize * 8;  // This uses int arithmetic - can overflow!
-            System.out.println("candidateMemorySize (int arithmetic): " + candidateCalcInt + " (overflow if negative!)");
-            System.out.println("geneTreeMemorySize (int arithmetic): " + geneTreeCalcInt + " (overflow if negative!)");
+            long candidateCalcInt = (long) numCandidates * bitsetSize * 8; // Still potential int overflow in multiplication
+            long geneTreeCalcInt = (long) numGeneTreeBips * bitsetSize * 8;  // Still potential int overflow in multiplication
+            System.out.println("candidateMemorySize (mixed int arithmetic): " + candidateCalcInt + " (overflow if negative!)");
+            System.out.println("geneTreeMemorySize (mixed int arithmetic): " + geneTreeCalcInt + " (overflow if negative!)");
+            System.out.println("candidateMemorySize (pure long arithmetic): " + candidateMemorySize + " (always correct)");
+            System.out.println("geneTreeMemorySize (pure long arithmetic): " + geneTreeMemorySize + " (always correct)");
             
             if (candidateCalcInt != candidateMemorySize) {
-                System.err.println("WARNING: Integer overflow detected in candidate memory calculation!");
-                System.err.println("  Int result: " + candidateCalcInt + ", Long result: " + candidateMemorySize);
+                System.err.println("WARNING: Integer overflow would occur in candidate memory calculation!");
+                System.err.println("  Mixed arithmetic result: " + candidateCalcInt + ", Pure long result: " + candidateMemorySize);
             }
             if (geneTreeCalcInt != geneTreeMemorySize) {
-                System.err.println("WARNING: Integer overflow detected in gene tree memory calculation!");
-                System.err.println("  Int result: " + geneTreeCalcInt + ", Long result: " + geneTreeMemorySize);
+                System.err.println("WARNING: Integer overflow would occur in gene tree memory calculation!");
+                System.err.println("  Mixed arithmetic result: " + geneTreeCalcInt + ", Pure long result: " + geneTreeMemorySize);
             }
             
             // Check for invalid parameters that could cause allocation errors
@@ -281,20 +311,20 @@ public class WeightCalculator {
                 throw new RuntimeException("Total memory requirement too large: " + totalMemory + " bytes");
             }
             
-            // Calculate when offset overflow will occur
+            // Calculate when offset overflow would occur with int arithmetic
             System.out.println("==== OVERFLOW THRESHOLD ANALYSIS ====");
-            long maxSafeIndex = Integer.MAX_VALUE / (bitsetSize * 8L);
+            long maxSafeIndex = Integer.MAX_VALUE / (bitsetSizeLong * 8L);
             System.out.println("Max safe candidate/gene tree index before offset overflow: " + maxSafeIndex);
-            System.out.println("Actual numCandidates: " + numCandidates + (numCandidates > maxSafeIndex ? " [WILL OVERFLOW!]" : " [safe]"));
-            System.out.println("Actual numGeneTreeBips: " + numGeneTreeBips + (numGeneTreeBips > maxSafeIndex ? " [WILL OVERFLOW!]" : " [safe]"));
+            System.out.println("Actual numCandidates: " + numCandidatesLong + (numCandidatesLong > maxSafeIndex ? " [WOULD OVERFLOW WITH INT ARITHMETIC!]" : " [safe]"));
+            System.out.println("Actual numGeneTreeBips: " + numGeneTreeBipsLong + (numGeneTreeBipsLong > maxSafeIndex ? " [WOULD OVERFLOW WITH INT ARITHMETIC!]" : " [safe]"));
             
-            if (numCandidates > maxSafeIndex) {
-                System.err.println("WARNING: numCandidates (" + numCandidates + ") exceeds safe limit (" + maxSafeIndex + ")");
-                System.err.println("         This would cause 'invalid offset size = negative number' errors in original code!");
+            if (numCandidatesLong > maxSafeIndex) {
+                System.err.println("INFO: numCandidates (" + numCandidatesLong + ") exceeds int-safe limit (" + maxSafeIndex + ")");
+                System.err.println("      But we're using long arithmetic, so no overflow will occur!");
             }
-            if (numGeneTreeBips > maxSafeIndex) {
-                System.err.println("WARNING: numGeneTreeBips (" + numGeneTreeBips + ") exceeds safe limit (" + maxSafeIndex + ")");
-                System.err.println("         This would cause 'invalid offset size = negative number' errors in original code!");
+            if (numGeneTreeBipsLong > maxSafeIndex) {
+                System.err.println("INFO: numGeneTreeBips (" + numGeneTreeBipsLong + ") exceeds int-safe limit (" + maxSafeIndex + ")");
+                System.err.println("      But we're using long arithmetic, so no overflow will occur!");
             }
             
             System.out.println("==== PARAMETER VALIDATION PASSED ====");
@@ -368,7 +398,7 @@ public class WeightCalculator {
                 }
                 
                 // Use long arithmetic to prevent overflow in memory offset calculations
-                long candidateOffset = (long) i * (long) bitsetSize * 8L;
+                long candidateOffset = (long) i * bitsetSizeLong * 8L;
                 
                 // Debug overflow detection for offset calculation
                 if (i < 3 || candidateOffset != (long)(i * bitsetSize * 8)) {
@@ -377,13 +407,10 @@ public class WeightCalculator {
                                      ", int=" + offsetInt + (offsetInt != candidateOffset ? " [OVERFLOW!]" : " [OK]"));
                     
                     if (offsetInt != candidateOffset) {
-                        System.err.println("ERROR: Offset overflow detected at candidate " + i + 
-                                         "! This would cause 'invalid offset size = negative number' error");
-                        System.err.println("  Calculation: " + i + " * " + bitsetSize + " * 8 = " + 
-                                         ((long)i * bitsetSize * 8) + " (correct) vs " + offsetInt + " (overflowed)");
-                        
-                        // This would have been the problematic line in original code:
-                        // candidateCluster1.write(i * bitsetSize * 8, ...)  // negative!
+                        System.err.println("INFO: Offset overflow would occur at candidate " + i + 
+                                         " with int arithmetic (but we're using long, so it's safe)");
+                        System.err.println("  Calculation: " + i + " * " + bitsetSizeLong + " * 8 = " + 
+                                         candidateOffset + " (long, correct) vs " + offsetInt + " (int, overflowed)");
                     }
                 }
                 
@@ -433,7 +460,7 @@ public class WeightCalculator {
                 }
                 
                 // Use long arithmetic to prevent overflow in memory offset calculations
-                long geneTreeOffset = (long) idx * (long) bitsetSize * 8L;
+                long geneTreeOffset = (long) idx * bitsetSizeLong * 8L;
                 
                 // Debug overflow detection for offset calculation
                 if (idx < 3 || geneTreeOffset != (long)(idx * bitsetSize * 8)) {
@@ -442,13 +469,10 @@ public class WeightCalculator {
                                      ", int=" + offsetInt + (offsetInt != geneTreeOffset ? " [OVERFLOW!]" : " [OK]"));
                     
                     if (offsetInt != geneTreeOffset) {
-                        System.err.println("ERROR: Offset overflow detected at gene tree " + idx + 
-                                         "! This would cause 'invalid offset size = negative number' error");
-                        System.err.println("  Calculation: " + idx + " * " + bitsetSize + " * 8 = " + 
-                                         ((long)idx * bitsetSize * 8) + " (correct) vs " + offsetInt + " (overflowed)");
-                        
-                        // This would have been the problematic line in original code:
-                        // geneTreeCluster1.write(idx * bitsetSize * 8, ...)  // negative!
+                        System.err.println("INFO: Offset overflow would occur at gene tree " + idx + 
+                                         " with int arithmetic (but we're using long, so it's safe)");
+                        System.err.println("  Calculation: " + idx + " * " + bitsetSizeLong + " * 8 = " + 
+                                         geneTreeOffset + " (long, correct) vs " + offsetInt + " (int, overflowed)");
                     }
                 }
                 
