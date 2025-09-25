@@ -95,17 +95,24 @@ public class ConsensusTreeBuilder {
         int numThreads = Runtime.getRuntime().availableProcessors();
         Threading.startThreading(numThreads);
         
-        int chunkSize = (geneTrees.size() + numThreads - 1) / numThreads;
-        CountDownLatch latch = new CountDownLatch(numThreads);
+        // Calculate optimal number of threads to avoid invalid ranges
+        int chunkSize = Math.max(1, (geneTrees.size() + numThreads - 1) / numThreads);
+        int actualThreads = Math.min(numThreads, (geneTrees.size() + chunkSize - 1) / chunkSize);
+        CountDownLatch latch = new CountDownLatch(actualThreads);
         
         // Process gene trees in parallel chunks
-        for (int i = 0; i < numThreads; i++) {
+        for (int i = 0; i < actualThreads; i++) {
             final int startIdx = i * chunkSize;
             final int endIdx = Math.min(startIdx + chunkSize, geneTrees.size());
             final int threadId = i;
             
             Threading.execute(() -> {
                 try {
+                    // Validate range before processing
+                    if (startIdx >= endIdx || startIdx >= geneTrees.size()) {
+                        return;
+                    }
+                    
                     Map<STBipartition, Integer> localCounts = new HashMap<>();
                     
                     if (BipartitionExpansionConfig.VERBOSE_EXPANSION) {

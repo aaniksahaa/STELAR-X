@@ -129,15 +129,22 @@ public class WeightCalculator {
         
         Threading.startThreading(numThreads);
         
-        int chunkSize = (candidates.size() + numThreads - 1) / numThreads;
-        CountDownLatch latch = new CountDownLatch(numThreads);
+        // Calculate optimal number of threads to avoid invalid ranges
+        int chunkSize = Math.max(1, (candidates.size() + numThreads - 1) / numThreads);
+        int actualThreads = Math.min(numThreads, (candidates.size() + chunkSize - 1) / chunkSize);
+        CountDownLatch latch = new CountDownLatch(actualThreads);
         
-        for (int i = 0; i < numThreads; i++) {
+        for (int i = 0; i < actualThreads; i++) {
             final int startIdx = i * chunkSize;
             final int endIdx = Math.min(startIdx + chunkSize, candidates.size());
             
             Threading.execute(() -> {
                 try {
+                    // Validate range before processing
+                    if (startIdx >= endIdx || startIdx >= candidates.size()) {
+                        return;
+                    }
+                    
                     for (int j = startIdx; j < endIdx; j++) {
                         STBipartition candidate = candidates.get(j);
                         double totalScore = 0.0;

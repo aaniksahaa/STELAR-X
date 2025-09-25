@@ -207,13 +207,15 @@ public class GeneTrees {
         int numThreads = Runtime.getRuntime().availableProcessors();
         Threading.startThreading(numThreads);
         
-        int chunkSize = (lines.size() + numThreads - 1) / numThreads;
-        CountDownLatch latch = new CountDownLatch(numThreads);
+        // Calculate optimal number of threads to avoid invalid ranges
+        int chunkSize = Math.max(1, (lines.size() + numThreads - 1) / numThreads);
+        int actualThreads = Math.min(numThreads, (lines.size() + chunkSize - 1) / chunkSize);
+        CountDownLatch latch = new CountDownLatch(actualThreads);
 
-        System.out.println("Using " + numThreads + " threads for parallel gene tree parsing");
+        System.out.println("Using " + actualThreads + " threads for parallel gene tree parsing");
         
         // Process gene trees in parallel chunks - PARSING ONLY
-        for (int i = 0; i < numThreads; i++) {
+        for (int i = 0; i < actualThreads; i++) {
             final int startIdx = i * chunkSize;
             final int endIdx = Math.min(startIdx + chunkSize, lines.size());
             final int threadId = i;
@@ -223,6 +225,12 @@ public class GeneTrees {
                     List<Tree> localTrees = new ArrayList<>();
                     int localInternalNodes = 0;
                     int localSkippedTrees = 0;
+                    
+                    // Validate range before processing
+                    if (startIdx >= endIdx || startIdx >= lines.size()) {
+                        System.out.println("Thread " + threadId + " skipped - invalid range [" + startIdx + ", " + endIdx + ")");
+                        return;
+                    }
                     
                     System.out.println("Thread " + threadId + " parsing trees " + startIdx + " to " + (endIdx-1));
                     

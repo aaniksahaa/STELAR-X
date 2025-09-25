@@ -148,22 +148,35 @@ public class MemoryEfficientBipartitionManager {
         int numThreads = Runtime.getRuntime().availableProcessors();
         Threading.startThreading(numThreads);
         
-        CountDownLatch latch = new CountDownLatch(numThreads);
+        // Calculate optimal number of threads to avoid invalid ranges
+        int chunkSize = Math.max(1, (geneTrees.size() + numThreads - 1) / numThreads);
+        int actualThreads = Math.min(numThreads, (geneTrees.size() + chunkSize - 1) / chunkSize);
+        
+        CountDownLatch latch = new CountDownLatch(actualThreads);
         AtomicInteger processedTrees = new AtomicInteger(0);
         
-        int chunkSize = (geneTrees.size() + numThreads - 1) / numThreads;
-        
-        System.out.println("Using " + numThreads + " threads for parallel processing");
+        System.out.println("Using " + actualThreads + " threads for parallel processing");
         
         // Process gene trees in parallel chunks
-        for (int i = 0; i < numThreads; i++) {
+        for (int i = 0; i < actualThreads; i++) {
             final int startIdx = i * chunkSize;
             final int endIdx = Math.min(startIdx + chunkSize, geneTrees.size());
             final int threadId = i;
             
+            // Skip threads that would have invalid ranges
+            if (startIdx >= geneTrees.size()) {
+                continue;
+            }
+            
             Threading.execute(() -> {
                 try {
                     Map<Object, List<RangeBipartition>> localHashMap = new HashMap<>();
+                    
+                    // Validate range before processing
+                    if (startIdx >= endIdx || startIdx >= geneTrees.size()) {
+                        System.out.println("Thread " + threadId + " skipped - invalid range [" + startIdx + ", " + endIdx + ")");
+                        return;
+                    }
                     
                     System.out.println("Thread " + threadId + " processing trees " + startIdx + " to " + (endIdx - 1));
                     
