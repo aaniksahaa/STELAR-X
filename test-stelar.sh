@@ -16,6 +16,8 @@ REPLICATE="R1"
 BASE_DIR="${HOME}/phylogeny"
 SIMPHY_DIR=""                # derived from BASE_DIR unless provided
 SIMPHY_DIR_SET=false
+SIMPHY_DATA_DIR=""           # custom simphy data directory
+SIMPHY_DATA_DIR_SET=false
 STELAR_ROOT=""               # derived from BASE_DIR unless provided
 STELAR_ROOT_SET=false
 
@@ -40,6 +42,7 @@ Optional:
   --replicate, -r    Replicate name (default: R1)
   --base-dir, -b     Base directory (default: ${BASE_DIR})
   --simphy-dir       Path to simphy dir (overrides --base-dir)
+  --simphy-data-dir  Custom directory for simphy data storage
   --stelar-root      Path to STELAR-MP root (overrides --base-dir)
   --stelar-opts      Extra args for STELAR run (default: "$STELAR_OPTS")
   --sb               Substitution/birthrate parameter (default: ${SB})
@@ -58,6 +61,7 @@ while [[ $# -gt 0 ]]; do
     --gene_trees|-g) GENE_TREES="$2"; shift 2 ;;
     --replicate|-r) REPLICATE="$2"; shift 2 ;;
     --simphy-dir) SIMPHY_DIR="$2"; SIMPHY_DIR_SET=true; shift 2 ;;
+    --simphy-data-dir) SIMPHY_DATA_DIR="$2"; SIMPHY_DATA_DIR_SET=true; shift 2 ;;
     --stelar-root) STELAR_ROOT="$2"; STELAR_ROOT_SET=true; shift 2 ;;
     --stelar-opts) STELAR_OPTS="$2"; shift 2 ;;
     --base-dir|-b) BASE_DIR="$2"; shift 2 ;;
@@ -88,10 +92,20 @@ fi
 PAIR="${TAXA_NUM}_${GENE_TREES}"
 
 # Construct SIMPHY_RUN_DIR early (so we can check the stat file before doing heavy work)
-if [[ "$USE_LEGACY_LAYOUT" = true ]]; then
-  SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/${PAIR}/${REPLICATE}"
+if [[ "$SIMPHY_DATA_DIR_SET" = true ]]; then
+  # Use custom data directory
+  if [[ "$USE_LEGACY_LAYOUT" = true ]]; then
+    SIMPHY_RUN_DIR="${SIMPHY_DATA_DIR%/}/${PAIR}/${REPLICATE}"
+  else
+    SIMPHY_RUN_DIR="${SIMPHY_DATA_DIR%/}/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}/${REPLICATE}"
+  fi
 else
-  SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}/${REPLICATE}"
+  # Default behavior: use data directory inside SIMPHY_DIR
+  if [[ "$USE_LEGACY_LAYOUT" = true ]]; then
+    SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/${PAIR}/${REPLICATE}"
+  else
+    SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}/${REPLICATE}"
+  fi
 fi
 
 STAT_FILE="${SIMPHY_RUN_DIR%/}/stat-stelar.csv"
@@ -109,6 +123,11 @@ echo "Parameters:"
 echo "  taxa_num:       $TAXA_NUM"
 echo "  gene_trees:     $GENE_TREES"
 echo "  replicate:      $REPLICATE"
+if [[ "$SIMPHY_DATA_DIR_SET" = true ]]; then
+  echo "  simphy data dir: $SIMPHY_DATA_DIR (custom)"
+else
+  echo "  simphy data dir: ${SIMPHY_DIR%/}/data (default)"
+fi
 echo "  simphy run dir: $SIMPHY_RUN_DIR"
 echo "  out stelar:     $OUT_STELAR"
 echo "  stat file:      $STAT_FILE"
@@ -180,14 +199,15 @@ $CSV_ROW
 
 📁 Stats saved to: $STAT_FILE" ntfy.sh/anik-test
 
-# Cleanup: remove the simphy run directory to save disk space
-echo "Cleaning up simphy run directory: $SIMPHY_RUN_DIR"
-if [[ -d "$SIMPHY_RUN_DIR" ]]; then
-  rm -rf "$SIMPHY_RUN_DIR"
-  echo "✅ Cleanup completed - removed $SIMPHY_RUN_DIR"
-else
-  echo "⚠️  Directory $SIMPHY_RUN_DIR not found, nothing to clean up"
-fi
+# # Cleanup should not be done, because then our csv would also be deleted
+# # Cleanup: remove the simphy run directory to save disk space
+# echo "Cleaning up simphy run directory: $SIMPHY_RUN_DIR"
+# if [[ -d "$SIMPHY_RUN_DIR" ]]; then
+#   rm -rf "$SIMPHY_RUN_DIR"
+#   echo "✅ Cleanup completed - removed $SIMPHY_RUN_DIR"
+# else
+#   echo "⚠️  Directory $SIMPHY_RUN_DIR not found, nothing to clean up"
+# fi
 
 echo "Done."
 
