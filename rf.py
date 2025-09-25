@@ -22,6 +22,9 @@ from typing import List, Dict, Tuple
 from itertools import combinations
 import os
 
+import sys
+sys.setrecursionlimit(10_000_000)
+
 try:
     import dendropy
     from dendropy.calculate import treecompare

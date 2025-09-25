@@ -180,6 +180,15 @@ $CSV_ROW
 
 📁 Stats saved to: $STAT_FILE" ntfy.sh/anik-test
 
+# Cleanup: remove the simphy run directory to save disk space
+echo "Cleaning up simphy run directory: $SIMPHY_RUN_DIR"
+if [[ -d "$SIMPHY_RUN_DIR" ]]; then
+  rm -rf "$SIMPHY_RUN_DIR"
+  echo "✅ Cleanup completed - removed $SIMPHY_RUN_DIR"
+else
+  echo "⚠️  Directory $SIMPHY_RUN_DIR not found, nothing to clean up"
+fi
+
 echo "Done."
 
 # Exit with the same exit code as STELAR (so CI/automation can detect failure)
