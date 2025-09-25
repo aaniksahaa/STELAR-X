@@ -205,13 +205,13 @@ public class WeightCalculator {
             long realTaxaCountLong = geneTrees.realTaxaCount;
             long bitsetSizeLong = (realTaxaCountLong + 63L) / 64L; // Size in 64-bit words
             
-            // Extra safety: ensure realTaxaCount itself is reasonable
-            if (realTaxaCountLong < 0) {
-                throw new RuntimeException("Invalid realTaxaCount: " + realTaxaCountLong + " (cannot be negative)");
-            }
-            if (realTaxaCountLong > 1000000000L) { // 1 billion taxa limit
-                throw new RuntimeException("Too many taxa: " + realTaxaCountLong + " exceeds reasonable limit of 1 billion");
-            }
+            // // Extra safety: ensure realTaxaCount itself is reasonable
+            // if (realTaxaCountLong < 0) {
+            //     throw new RuntimeException("Invalid realTaxaCount: " + realTaxaCountLong + " (cannot be negative)");
+            // }
+            // if (realTaxaCountLong > 1000000000L) { // 1 billion taxa limit
+            //     throw new RuntimeException("Too many taxa: " + realTaxaCountLong + " exceeds reasonable limit of 1 billion");
+            // }
             
             // Validate that sizes fit in int for array indexing (Java arrays are int-indexed)
             if (numCandidatesLong > Integer.MAX_VALUE) {
@@ -292,24 +292,24 @@ public class WeightCalculator {
                 throw new RuntimeException("Invalid gene tree memory size: " + geneTreeMemorySize);
             }
             
-            // Check for memory sizes that exceed JNA Memory constructor limits
-            // JNA Memory constructor takes long but may have implementation limits
-            long maxReasonableSize = 8L * 1024 * 1024 * 1024; // 8 GB limit
-            if (candidateMemorySize > maxReasonableSize) {
-                System.err.println("ERROR: candidateMemorySize (" + candidateMemorySize + 
-                                 " bytes = " + (candidateMemorySize / (1024*1024)) + " MB) exceeds reasonable limit");
-                throw new RuntimeException("Candidate memory size too large: " + candidateMemorySize + " bytes");
-            }
-            if (geneTreeMemorySize > maxReasonableSize) {
-                System.err.println("ERROR: geneTreeMemorySize (" + geneTreeMemorySize + 
-                                 " bytes = " + (geneTreeMemorySize / (1024*1024)) + " MB) exceeds reasonable limit");
-                throw new RuntimeException("Gene tree memory size too large: " + geneTreeMemorySize + " bytes");
-            }
-            if (totalMemory > 16L * 1024 * 1024 * 1024) { // 16 GB total limit
-                System.err.println("ERROR: Total memory requirement (" + totalMemory + 
-                                 " bytes = " + (totalMemory / (1024*1024)) + " MB) exceeds reasonable limit");
-                throw new RuntimeException("Total memory requirement too large: " + totalMemory + " bytes");
-            }
+            // // Check for memory sizes that exceed JNA Memory constructor limits
+            // // JNA Memory constructor takes long but may have implementation limits
+            // long maxReasonableSize = 8L * 1024 * 1024 * 1024; // 8 GB limit
+            // if (candidateMemorySize > maxReasonableSize) {
+            //     System.err.println("ERROR: candidateMemorySize (" + candidateMemorySize + 
+            //                      " bytes = " + (candidateMemorySize / (1024*1024)) + " MB) exceeds reasonable limit");
+            //     throw new RuntimeException("Candidate memory size too large: " + candidateMemorySize + " bytes");
+            // }
+            // if (geneTreeMemorySize > maxReasonableSize) {
+            //     System.err.println("ERROR: geneTreeMemorySize (" + geneTreeMemorySize + 
+            //                      " bytes = " + (geneTreeMemorySize / (1024*1024)) + " MB) exceeds reasonable limit");
+            //     throw new RuntimeException("Gene tree memory size too large: " + geneTreeMemorySize + " bytes");
+            // }
+            // if (totalMemory > 16L * 1024 * 1024 * 1024) { // 16 GB total limit
+            //     System.err.println("ERROR: Total memory requirement (" + totalMemory + 
+            //                      " bytes = " + (totalMemory / (1024*1024)) + " MB) exceeds reasonable limit");
+            //     throw new RuntimeException("Total memory requirement too large: " + totalMemory + " bytes");
+            // }
             
             // Calculate when offset overflow would occur with int arithmetic
             System.out.println("==== OVERFLOW THRESHOLD ANALYSIS ====");
@@ -400,19 +400,19 @@ public class WeightCalculator {
                 // Use long arithmetic to prevent overflow in memory offset calculations
                 long candidateOffset = (long) i * bitsetSizeLong * 8L;
                 
-                // Debug overflow detection for offset calculation
-                if (i < 3 || candidateOffset != (long)(i * bitsetSize * 8)) {
-                    int offsetInt = i * bitsetSize * 8; // int arithmetic - may overflow
-                    System.out.println("Candidate " + i + " offset: long=" + candidateOffset + 
-                                     ", int=" + offsetInt + (offsetInt != candidateOffset ? " [OVERFLOW!]" : " [OK]"));
+                // // Debug overflow detection for offset calculation
+                // if (i < 3 || candidateOffset != (long)(i * bitsetSize * 8)) {
+                //     int offsetInt = i * bitsetSize * 8; // int arithmetic - may overflow
+                //     System.out.println("Candidate " + i + " offset: long=" + candidateOffset + 
+                //                      ", int=" + offsetInt + (offsetInt != candidateOffset ? " [OVERFLOW!]" : " [OK]"));
                     
-                    if (offsetInt != candidateOffset) {
-                        System.err.println("INFO: Offset overflow would occur at candidate " + i + 
-                                         " with int arithmetic (but we're using long, so it's safe)");
-                        System.err.println("  Calculation: " + i + " * " + bitsetSizeLong + " * 8 = " + 
-                                         candidateOffset + " (long, correct) vs " + offsetInt + " (int, overflowed)");
-                    }
-                }
+                //     if (offsetInt != candidateOffset) {
+                //         System.err.println("INFO: Offset overflow would occur at candidate " + i + 
+                //                          " with int arithmetic (but we're using long, so it's safe)");
+                //         System.err.println("  Calculation: " + i + " * " + bitsetSizeLong + " * 8 = " + 
+                //                          candidateOffset + " (long, correct) vs " + offsetInt + " (int, overflowed)");
+                //     }
+                // }
                 
                 candidateCluster1.write(candidateOffset, cluster1Words, 0, cluster1Words.length);
                 candidateCluster2.write(candidateOffset, cluster2Words, 0, cluster2Words.length);
@@ -462,19 +462,19 @@ public class WeightCalculator {
                 // Use long arithmetic to prevent overflow in memory offset calculations
                 long geneTreeOffset = (long) idx * bitsetSizeLong * 8L;
                 
-                // Debug overflow detection for offset calculation
-                if (idx < 3 || geneTreeOffset != (long)(idx * bitsetSize * 8)) {
-                    int offsetInt = idx * bitsetSize * 8; // int arithmetic - may overflow
-                    System.out.println("GeneTree " + idx + " offset: long=" + geneTreeOffset + 
-                                     ", int=" + offsetInt + (offsetInt != geneTreeOffset ? " [OVERFLOW!]" : " [OK]"));
+                // // Debug overflow detection for offset calculation
+                // if (idx < 3 || geneTreeOffset != (long)(idx * bitsetSize * 8)) {
+                //     int offsetInt = idx * bitsetSize * 8; // int arithmetic - may overflow
+                //     System.out.println("GeneTree " + idx + " offset: long=" + geneTreeOffset + 
+                //                      ", int=" + offsetInt + (offsetInt != geneTreeOffset ? " [OVERFLOW!]" : " [OK]"));
                     
-                    if (offsetInt != geneTreeOffset) {
-                        System.err.println("INFO: Offset overflow would occur at gene tree " + idx + 
-                                         " with int arithmetic (but we're using long, so it's safe)");
-                        System.err.println("  Calculation: " + idx + " * " + bitsetSizeLong + " * 8 = " + 
-                                         geneTreeOffset + " (long, correct) vs " + offsetInt + " (int, overflowed)");
-                    }
-                }
+                //     if (offsetInt != geneTreeOffset) {
+                //         System.err.println("INFO: Offset overflow would occur at gene tree " + idx + 
+                //                          " with int arithmetic (but we're using long, so it's safe)");
+                //         System.err.println("  Calculation: " + idx + " * " + bitsetSizeLong + " * 8 = " + 
+                //                          geneTreeOffset + " (long, correct) vs " + offsetInt + " (int, overflowed)");
+                //     }
+                // }
                 
                 geneTreeCluster1.write(geneTreeOffset, cluster1Words, 0, cluster1Words.length);
                 geneTreeCluster2.write(geneTreeOffset, cluster2Words, 0, cluster2Words.length);
