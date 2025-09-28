@@ -1,0 +1,115 @@
+
+
+Device SSH Setup:
+=================
+
+ngrok add-authtoken ...
+tmux new -s ngrok-ssh
+ngrok tcp 22
+
+ssh -p 19466 bayzid@0.tcp.in.ngrok.io
+
+ssh-copy-id -p 19466 bayzid@0.tcp.in.ngrok.io
+
+nano ~/.ssh/config 
+
+Host bls1
+    HostName 0.tcp.in.ngrok.io
+    Port 19466
+    User bayzid
+    IdentityFile ~/.ssh/id_ed25519
+    IdentitiesOnly yes
+
+Github setup
+=============
+
+add SSH key to github
+
+ssh-keygen -t ed25519 -C "aaniksahaa.2001@gmail.com" -f ~/.ssh/id_ed25519_ak
+
+
+cat ~/.ssh/id_ed25519_ak.pub
+
+add this key to github SSH keys 
+
+nano ~/.ssh/config
+
+Host github.com-ak
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519_ak
+  IdentitiesOnly yes
+
+mkdir ~/phylogeny
+cd ~/phylogeny
+
+setup ASTRAL:
+==============
+
+cd ~/phylogeny
+
+git clone git@github.com-ak:aaniksahaa/ASTRAL.git
+
+cd ASTRAL
+git checkout anik-MP
+chmod +x compile_astral.sh run_astral.sh
+./compile_astral.sh
+
+setup STELAR:
+==============
+
+cd ~/phylogeny
+
+git clone git@github.com-ak:aaniksahaa/STELAR-MP.git
+
+cd STELAR-MP
+
+git checkout memsim 
+
+chmod +x build.sh collect-stats-standard.sh collect-stats-simulated.sh run-bulk-standard.sh run-bulk-simulated.sh run.sh sim.sh test-stelar.sh
+
+pip install dendropy
+
+# Install Maven
+sudo apt install maven
+
+# Verify Maven installation and Java version
+mvn -version
+
+./build.sh
+
+*** edit Xms as needed in run.sh 
+
+./sim.sh -t 100 -g 100 --sb 0.000001 --spmin 100000 --spmax 150000
+./test-stelar.sh -t 100 -g 100 --sb 0.000001 --spmin 100000 --spmax 150000 -r R1
+
+
+./sim.sh -t 1000 -g 100 --sb 0.000001 --spmin 50000 --spmax 150000
+./test-stelar.sh -t 1000 -g 100 --sb 0.000001 --spmin 50000 --spmax 150000 -r R1
+
+tmux new -s phylo
+./run-bulk-simulated.sh
+
+
+cd ~/phylogeny/STELAR-MP && ./collect-stats-simulated.sh && cat perf-stelar.csv
+
+cd ~/phylogeny/STELAR-MP && ./collect-stats-simulated.sh && cat perf-stelar.csv
+
+scp bls3:~/phylogeny/STELAR-MP/perf-stelar.csv .
+
+
+
+
+git clean -fd && git reset --hard && git pull
+./build.sh
+
+fix xmx etc 
+update data dir 
+
+# hard reset to origin/main
+git checkout main && git fetch origin && git reset --hard origin/main
+
+git fetch origin && git reset --hard origin/memsim
+
+
+
