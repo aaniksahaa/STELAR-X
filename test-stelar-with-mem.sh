@@ -241,3 +241,46 @@ $CSV_ROW
 📁 Stats saved to: $STAT_FILE" ntfy.sh/anik-test
 
 echo "Done."
+
+# -----------------------
+# Nicely display stat-stelar.csv summary
+# Place this before the final "echo \"Done.\"" / exit in the script
+# -----------------------
+if [[ -f "${STAT_FILE}" ]]; then
+  echo
+  echo "=== STELAR run summary (from ${STAT_FILE}) ==="
+
+  # read header and first data row
+  IFS= read -r header_line < <(head -n1 "$STAT_FILE")
+  IFS= read -r data_line   < <(sed -n '2p' "$STAT_FILE" || true)
+
+  # split into arrays on comma
+  IFS=, read -r -a headers <<< "$header_line"
+  IFS=, read -r -a values  <<< "$data_line"
+
+  # determine column width for labels
+  maxlabel=0
+  for h in "${headers[@]}"; do
+    # trim whitespace, compute length
+    len=${#h}
+    (( len > maxlabel )) && maxlabel=$len
+  done
+  # set a minimum width for nicer look
+  (( maxlabel < 16 )) && maxlabel=16
+
+  # print each header:value pair aligned
+  for i in "${!headers[@]}"; do
+    label="${headers[$i]}"
+    value="${values[$i]:-}"
+    printf "  %-*s : %s\n" "$maxlabel" "$label" "$value"
+  done
+
+  echo
+  echo "Raw CSV:"
+  sed -n '1,2p' "$STAT_FILE" | sed -e 's/,/, /g'
+  echo "============================================="
+else
+  echo
+  echo "Warning: stat file not found at ${STAT_FILE}"
+fi
+

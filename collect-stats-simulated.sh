@@ -2,6 +2,8 @@
 # collect-stelar-stats.sh (simplified)
 # Merges stat-stelar.csv files under simphy/data into one perf-stelar.csv
 # and appends gt-gt,gt-st from a stat-sim.csv in the same directory (if present).
+# Handles header mismatches by taking the union of columns, filling missing ones with empty values.
+# Outputs columns in the prescribed order: alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb,gt-gt,gt-st
 #
 # Usage:
 #   ./collect-stelar-stats.sh
@@ -19,8 +21,8 @@ print_help() {
 collect-stelar-stats.sh
 
 Finds all stat-stelar.csv under <SIMPHY_DIR>/data (default derived from --base-dir),
-verifies headers match, merges them into --out, and appends gt-gt,gt-st from a
-stat-sim.csv located in the same directory as each stat-stelar.csv (if present).
+takes the union of headers, merges them into --out with columns in prescribed order,
+and appends gt-gt,gt-st from a stat-sim.csv located in the same directory as each stat-stelar.csv (if present).
 
 Options:
   --base-dir, -b    Base directory (default: ${BASE_DIR})
@@ -64,23 +66,18 @@ echo "Found ${#stelar_files[@]} stat-stelar.csv files. Merging..."
 
 # helper: normalize a single line (remove CR and trim)
 norm_line() {
-  # read a line from stdin
   local L
   IFS= read -r L || return 1
-  # remove CR, trim leading/trailing whitespace
   L="${L//$'\r'/}"
-  # trim
   L="$(echo "$L" | awk '{$1=$1;print}')"
   printf "%s" "$L"
 }
 
-# canonical header from first file
-FIRST="${stelar_files[0]}"
-HEADER=$(head -n 1 "$FIRST" | tr -d '\r' | awk '{$1=$1;print}')
-EXT_HEADER="${HEADER},gt-gt,gt-st"
+# Define the prescribed header order
+PRESCRIBED_HEADER="alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb,gt-gt,gt-st"
 
-# write header
-printf "%s\n" "$EXT_HEADER" > "$OUT_FILE"
+# Write prescribed header to output
+printf "%s\n" "$PRESCRIBED_HEADER" > "$OUT_FILE"
 
 merged_rows=0
 skipped_files=0
@@ -93,58 +90,68 @@ for stelar in "${stelar_files[@]}"; do
   fi
 
   file_header=$(head -n 1 "$stelar" | tr -d '\r' | awk '{$1=$1;print}')
-  if [[ "$file_header" != "$HEADER" ]]; then
-    echo "Warning: header mismatch, skipping file: $stelar" >&2
-    echo "  expected: $HEADER" >&2
-    echo "  found:    $file_header" >&2
-    ((skipped_files++))
-    continue
-  fi
+  IFS=',' read -ra file_cols <<< "$file_header"
 
+  # Create mapping of file columns to indices
+  declare -A col_map
+  for i in "${!file_cols[@]}"; do
+    col_map["${file_cols[$i]}"]=$i
+  done
+
+  # Process stat-sim.csv for gt-gt, gt-st
   dir=$(dirname "$stelar")
   stat_sim="${dir%/}/stat-sim.csv"
-
   gt_gt=""
   gt_st=""
 
   if [[ -f "$stat_sim" ]]; then
-    # Extract the second non-empty line (data line) and get 7th and 8th comma fields.
-    # This assumes stat-sim has header then single data row.
-    # We remove possible CRs before processing.
     data_line=$(awk 'BEGIN{FS=OFS=","} NR>0 {gsub(/\r/,""); if ($0 ~ /^[[:space:]]*$/) next; lines[++c]=$0} END{ if (c>=2) print lines[2]; else if (c==1) print lines[1] }' "$stat_sim" || true)
     if [[ -n "$data_line" ]]; then
-      # get 7th and 8th fields (gt-gt, gt-st). Use awk field extraction to be robust for quotes etc.
       gt_gt=$(echo "$data_line" | awk -F, '{print $7}' | tr -d '\r' || true)
       gt_st=$(echo "$data_line" | awk -F, '{print $8}' | tr -d '\r' || true)
-      # trim whitespace
       gt_gt="$(echo "$gt_gt" | awk '{$1=$1;print}')"
       gt_st="$(echo "$gt_st" | awk '{$1=$1;print}')"
     fi
   fi
 
-  # Append all data rows from stat-stelar skipping header, and append gt fields
-  # We use awk to print original line and then appended gt fields (preserve commas)
-  # If gt_gt/gt_st are empty, we still append the commas (so columns align).
-  if [[ -z "$gt_gt" && -z "$gt_st" ]]; then
-    # append empty values
-    awk 'NR>1{print $0 ",,"}' "$stelar" >> "$OUT_FILE"
-    appended=$(awk 'END{print NR-1}' "$stelar")
-  else
-    # escape any embedded newlines are unlikely; just append values
-    # ensure fields do not contain newlines
-    gt_gt_safe=$(printf "%s" "$gt_gt" | tr -d '\n' | tr -d '\r')
-    gt_st_safe=$(printf "%s" "$gt_st" | tr -d '\n' | tr -d '\r')
-    awk -v a="$gt_gt_safe" -v b="$gt_st_safe" 'NR>1{print $0 "," a "," b}' "$stelar" >> "$OUT_FILE"
-    appended=$(awk 'END{print NR-1}' "$stelar")
-  fi
+  # Process data rows, mapping to prescribed header
+  awk -F, -v OFS=',' -v header="$file_header" -v prescribed="$PRESCRIBED_HEADER" -v gt_gt="$gt_gt" -v gt_st="$gt_st" '
+  BEGIN {
+    split(header, h, ",");
+    split(prescribed, u, ",");
+    for (i in h) col_map[h[i]]=i;
+  }
+  NR>1 {
+    # Initialize output array with empty strings
+    for (i=1; i<=length(u); i++) out[i]="";
+    # Copy fields that exist in the file
+    for (i in h) {
+      for (j=1; j<=length(u); j++) {
+        if (u[j] == h[i] && u[j] != "gt-gt" && u[j] != "gt-st") {
+          out[j]=$i;
+          break;
+        }
+      }
+    }
+    # Set gt-gt and gt-st
+    out[length(u)-1]=gt_gt;
+    out[length(u)]=gt_st;
+    # Build output line
+    line="";
+    for (i=1; i<=length(u); i++) {
+      line=(line ? line "," : "") out[i];
+    }
+    print line;
+  }' "$stelar" >> "$OUT_FILE"
 
+  appended=$(awk 'END{print NR-1}' "$stelar")
   appended=$(echo "$appended" | tr -d '[:space:]')
   merged_rows=$((merged_rows + appended))
 done
 
 echo "Merged $merged_rows data rows into $OUT_FILE"
 if [[ $skipped_files -gt 0 ]]; then
-  echo "Skipped $skipped_files files due to header mismatch or missing file."
+  echo "Skipped $skipped_files files due to missing file."
 fi
 
 echo "Done."
