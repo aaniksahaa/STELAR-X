@@ -22,27 +22,24 @@ def generate_latex_table(csv_file):
     # Extract relevant columns: num-taxa, gene-trees, running-time-s, max-cpu-mb, max-gpu-mb
     relevant_data = df[['num-taxa', 'gene-trees', 'running-time-s', 'max-cpu-mb', 'max-gpu-mb']].copy()
     
-    # Generate appropriate caption and table structure based on scaling type
+    # Generate appropriate caption based on scaling type
     if scaling_type == "taxa":
         caption = "Running time and memory usage of STELAR with varying number of taxa"
-        variable_col = "No. of Taxa"
-        constant_col = "No. of Gene Trees"
     else:
         caption = "Running time and memory usage of STELAR with varying number of gene trees"
-        variable_col = "No. of Gene Trees" 
-        constant_col = "No. of Taxa"
     
-    # Start building the LaTeX table
+    # Always use the same column order: No. of Taxa first, then No. of Gene Trees
+    # This ensures consistency regardless of which variable is being scaled
     latex_code = f"""\\begin{{table}}[h]
 \\caption{{{caption}}}
 \\centering
 \\begin{{tabular}}{{l l l l l}}
 \\toprule
-{variable_col} & {constant_col} & Running Time (s) & CPU RAM (MB) & GPU VRAM (MB) \\\\
+No. of Taxa & No. of Gene Trees & Running Time (s) & CPU RAM (MB) & GPU VRAM (MB) \\\\
 \\midrule
 """
     
-    # Add data rows with proper ordering
+    # Add data rows with consistent ordering: always taxa first, gene trees second
     for _, row in relevant_data.iterrows():
         num_taxa = int(row['num-taxa'])
         gene_trees = int(row['gene-trees'])
@@ -50,12 +47,8 @@ def generate_latex_table(csv_file):
         cpu_ram = row['max-cpu-mb']
         gpu_vram = row['max-gpu-mb']
         
-        if scaling_type == "taxa":
-            # Variable column is taxa, constant is gene trees
-            latex_code += f"{num_taxa}  & {gene_trees} & {running_time:.3f}   & {cpu_ram:.3f} & {gpu_vram:.3f} \\\\\n"
-        else:
-            # Variable column is gene trees, constant is taxa
-            latex_code += f"{gene_trees}  & {num_taxa} & {running_time:.3f}   & {cpu_ram:.3f} & {gpu_vram:.3f} \\\\\n"
+        # Always show taxa first, then gene trees, regardless of which is being varied
+        latex_code += f"{num_taxa}  & {gene_trees} & {running_time:.3f}   & {cpu_ram:.3f} & {gpu_vram:.3f} \\\\\n"
     
     # Close the table
     latex_code += """\\bottomrule
