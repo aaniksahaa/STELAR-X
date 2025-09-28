@@ -9,7 +9,6 @@ import java.util.Map;
 import java.util.Scanner;
 import java.util.Set;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -17,8 +16,8 @@ import utils.BitSet;
 import utils.Threading;
 import taxon.Taxon;
 import tree.Tree;
-import tree.TreeNode;
 import tree.STBipartition;
+import tree.MemoryEfficientBipartitionManager;
 
 /**
  * GeneTrees: Preprocessing and management of input gene trees for wQFM-TREE.
@@ -178,8 +177,8 @@ public class GeneTrees {
     }
 
     /**
-     * Parallel version of gene tree reading for improved performance.
-     * Divides the gene trees among multiple threads for concurrent processing.
+     * Memory-efficient parallel version of gene tree reading.
+     * Uses range-based bipartition representation to reduce memory usage from O(n²k) to O(nk).
      */
     private void readGeneTreesParallel(double[][] distanceMatrix) throws FileNotFoundException{
         // First, read all lines from the file
@@ -198,25 +197,25 @@ public class GeneTrees {
             return;
         }
         
-        System.out.println("Processing " + lines.size() + " gene trees in parallel...");
+        System.out.println("Processing " + lines.size() + " gene trees with memory-efficient approach...");
         
-        // Thread-safe data structures
+        // Thread-safe data structures for tree parsing
         List<Tree> threadSafeGeneTrees = new ArrayList<>();
-        //Map<String, TreeNode> threadSafeTriPartitions = new ConcurrentHashMap<>();
-        Map<STBipartition, Integer> threadSafeSTBipartitions = new ConcurrentHashMap<>();
         AtomicInteger totalInternalNodes = new AtomicInteger(0);
         AtomicInteger skippedTrees = new AtomicInteger(0);
         
         int numThreads = Runtime.getRuntime().availableProcessors();
         Threading.startThreading(numThreads);
         
-        int chunkSize = (lines.size() + numThreads - 1) / numThreads;
-        CountDownLatch latch = new CountDownLatch(numThreads);
+        // Calculate optimal number of threads to avoid invalid ranges
+        int chunkSize = Math.max(1, (lines.size() + numThreads - 1) / numThreads);
+        int actualThreads = Math.min(numThreads, (lines.size() + chunkSize - 1) / chunkSize);
+        CountDownLatch latch = new CountDownLatch(actualThreads);
 
-        System.out.println("Using " + numThreads + " threads for parallel gene tree processing");
+        System.out.println("Using " + actualThreads + " threads for parallel gene tree parsing");
         
-        // Process gene trees in parallel chunks
-        for (int i = 0; i < numThreads; i++) {
+        // Process gene trees in parallel chunks - PARSING ONLY
+        for (int i = 0; i < actualThreads; i++) {
             final int startIdx = i * chunkSize;
             final int endIdx = Math.min(startIdx + chunkSize, lines.size());
             final int threadId = i;
@@ -224,32 +223,29 @@ public class GeneTrees {
             Threading.execute(() -> {
                 try {
                     List<Tree> localTrees = new ArrayList<>();
-                    // Map<String, TreeNode> localTriPartitions = new HashMap<>();
-                    Map<STBipartition, Integer> localSTBipartitions = new HashMap<>();
                     int localInternalNodes = 0;
                     int localSkippedTrees = 0;
                     
-                    System.out.println("Thread " + threadId + " processing trees " + startIdx + " to " + (endIdx-1));
+                    // Validate range before processing
+                    if (startIdx >= endIdx || startIdx >= lines.size()) {
+                        System.out.println("Thread " + threadId + " skipped - invalid range [" + startIdx + ", " + endIdx + ")");
+                        return;
+                    }
+                    
+                    System.out.println("Thread " + threadId + " parsing trees " + startIdx + " to " + (endIdx-1));
                     
                     for (int j = startIdx; j < endIdx; j++) {
                         String line = lines.get(j);
                         try {
                             // Parse tree with consistent taxon mapping
                             Tree tree = new Tree(line, this.taxaMap);
-                            
-                            // // Calculate tripartition frequencies for Algorithm 1
-                            // tree.calculateFrequencies(localTriPartitions);
-                            
-                            // Calculate STBipartitions for rooted trees
-                            // System.out.println("Calculating STBipartitions for tree " + j);
-                            calculateSTBipartitionsLocal(tree, localSTBipartitions);
-                            
                             localTrees.add(tree);
                             
                             // Track internal node count for complexity analysis
                             localInternalNodes += tree.nodes.size() - tree.leavesCount;
                         } catch (RuntimeException e) {
                             localSkippedTrees++;
+                            System.err.println("Thread " + threadId + " skipped invalid tree at line " + (j + 1) + ": " + e.getMessage());
                             // Continue with next tree
                         }
                     }
@@ -259,25 +255,10 @@ public class GeneTrees {
                         threadSafeGeneTrees.addAll(localTrees);
                     }
                     
-                    // // Merge tripartitions
-                    // for (Map.Entry<String, TreeNode> entry : localTriPartitions.entrySet()) {
-                    //     threadSafeTriPartitions.merge(entry.getKey(), entry.getValue(), 
-                    //         (existing, newValue) -> {
-                    //             // Merge frequencies - this is a simplification
-                    //             // In practice, you might need more sophisticated merging
-                    //             return existing;
-                    //         });
-                    // }
-                    
-                    // Merge STBipartitions
-                    for (Map.Entry<STBipartition, Integer> entry : localSTBipartitions.entrySet()) {
-                        threadSafeSTBipartitions.merge(entry.getKey(), entry.getValue(), Integer::sum);
-                    }
-                    
                     totalInternalNodes.addAndGet(localInternalNodes);
                     skippedTrees.addAndGet(localSkippedTrees);
                     
-                    System.out.println("Thread " + threadId + " completed: processed " + 
+                    System.out.println("Thread " + threadId + " completed: parsed " + 
                                      localTrees.size() + " trees, skipped " + localSkippedTrees);
                     
                 } finally {
@@ -297,8 +278,6 @@ public class GeneTrees {
         
         // Copy results to instance variables
         this.geneTrees.addAll(threadSafeGeneTrees);
-        //this.triPartitions.putAll(threadSafeTriPartitions);
-        this.stBipartitions.putAll(threadSafeSTBipartitions);
         
         if (skippedTrees.get() > 0) {
             System.err.println("Warning: Skipped " + skippedTrees.get() + " invalid or empty gene trees.");
@@ -315,18 +294,21 @@ public class GeneTrees {
             taxa[x.getValue().id] = x.getValue();
         }
 
+        // Now use the memory-efficient bipartition manager to process STBipartitions
+        System.out.println("\n=== Memory-Efficient STBipartition Processing ===");
+        MemoryEfficientBipartitionManager bipartitionManager = 
+            new MemoryEfficientBipartitionManager(this.geneTrees, this.realTaxaCount);
+        
+        // Process gene trees using range-based representation
+        this.stBipartitions = bipartitionManager.processGeneTreesParallel();
+        
         // Output preprocessing statistics
-        System.out.println( "taxon count : " + this.taxaMap.size());
-        System.out.println("Gene trees count : " + geneTrees.size());
-        System.out.println( "total internal nodes : " + totalInternalNodes.get());
-        // System.out.println( "unique partitions : " + triPartitions.size());
-        System.out.println( "unique STBipartitions : " + stBipartitions.size());
-
-        // if(internalNodesCount == 50000){
-        //     System.out.println("No polytomy, skipping");
-        //     System.exit(-1);
-        // }
-
+        System.out.println("\n=== Gene Tree Processing Complete ===");
+        System.out.println("Taxon count: " + this.taxaMap.size());
+        System.out.println("Gene trees count: " + geneTrees.size());
+        System.out.println("Total internal nodes: " + totalInternalNodes.get());
+        System.out.println("Unique STBipartitions: " + stBipartitions.size());
+        System.out.println("\n" + bipartitionManager.getStatistics());
     }
 
     /**
@@ -362,75 +344,7 @@ public class GeneTrees {
         this.readGeneTrees(null);
     }
     
-    private BitSet calculateSTBipartitionsUtil(TreeNode node, Tree tree) {
-        if (node.isLeaf()) {
-            BitSet leafSet = new BitSet(realTaxaCount);
-            leafSet.set(node.taxon.id);
-            return leafSet;
-        }
-        
-        if (node.childs.size() == 2 && tree.isRooted()) {
-            BitSet leftCluster = calculateSTBipartitionsUtil(node.childs.get(0), tree);
-            BitSet rightCluster = calculateSTBipartitionsUtil(node.childs.get(1), tree);
-            
-            STBipartition stb = new STBipartition(leftCluster, rightCluster);
-            stBipartitions.merge(stb, 1, Integer::sum);
-            
-            BitSet nodeCluster = (BitSet) leftCluster.clone();
-            nodeCluster.or(rightCluster);
-            return nodeCluster;
-        } else {
-            BitSet nodeCluster = new BitSet(realTaxaCount);
-            for (TreeNode child : node.childs) {
-                BitSet childCluster = calculateSTBipartitionsUtil(child, tree);
-                nodeCluster.or(childCluster);
-            }
-            return nodeCluster;
-        }
-    }
-    
-    private void calculateSTBipartitions(Tree tree) {
-        if (tree.isRooted()) {
-            calculateSTBipartitionsUtil(tree.root, tree);
-        }
-    }
-    
-    /**
-     * Local version of STBipartitions calculation for thread-safe parallel processing.
-     * This method calculates STBipartitions for a single tree and stores them in a local map.
-     */
-    private void calculateSTBipartitionsLocal(Tree tree, Map<STBipartition, Integer> localSTBipartitions) {
-        if (tree.isRooted()) {
-            calculateSTBipartitionsUtilLocal(tree.root, tree, localSTBipartitions);
-        }
-    }
-    
-    private BitSet calculateSTBipartitionsUtilLocal(TreeNode node, Tree tree, Map<STBipartition, Integer> localSTBipartitions) {
-        if (node.isLeaf()) {
-            BitSet leafSet = new BitSet(realTaxaCount);
-            leafSet.set(node.taxon.id);
-            return leafSet;
-        }
-        
-        if (node.childs.size() == 2 && tree.isRooted()) {
-            BitSet leftCluster = calculateSTBipartitionsUtilLocal(node.childs.get(0), tree, localSTBipartitions);
-            BitSet rightCluster = calculateSTBipartitionsUtilLocal(node.childs.get(1), tree, localSTBipartitions);
-            
-            STBipartition stb = new STBipartition(leftCluster, rightCluster);
-            localSTBipartitions.merge(stb, 1, Integer::sum);
-            
-            BitSet nodeCluster = (BitSet) leftCluster.clone();
-            nodeCluster.or(rightCluster);
-            return nodeCluster;
-        } else {
-            BitSet nodeCluster = new BitSet(realTaxaCount);
-            for (TreeNode child : node.childs) {
-                BitSet childCluster = calculateSTBipartitionsUtilLocal(child, tree, localSTBipartitions);
-                nodeCluster.or(childCluster);
-            }
-            return nodeCluster;
-        }
-    }
+    // Legacy STBipartition calculation methods removed - now using MemoryEfficientBipartitionManager
 
     /**
      * Generates candidate bipartitions for the inference algorithm.
@@ -529,19 +443,7 @@ public class GeneTrees {
         return candidates;
     }
     
-    private void addValidBipartition(BitSet cluster1, List<STBipartition> candidates, Set<BitSet> processedClusters) {
-        if (!processedClusters.contains(cluster1)) {
-            BitSet cluster2 = new BitSet(realTaxaCount);
-            cluster2.set(0, realTaxaCount);
-            cluster2.andNot(cluster1);
-            
-            if (cluster2.cardinality() > 0) {
-                candidates.add(new STBipartition(cluster1, cluster2));
-                processedClusters.add(cluster1);
-                processedClusters.add(cluster2);
-            }
-        }
-    }
+    // Removed addValidBipartition method - no longer used with memory-efficient approach
 } 
 
 

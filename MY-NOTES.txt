@@ -1,0 +1,7 @@
+TODO:
+
+- run on astral's on 10k-1k dataset 
+- add supple or appendix like simulation commands etc
+- add biological analysis maybe on 1kp or something else...
+- z rule - sohaib sir...
+- 

@@ -1,5 +1,8 @@
+tree/RangeBipartition$HashPair.class
 core/WeightCalculator$WeightCalcLib$Bipartition.class
 utils/BitSet.class
+tree/RangeBipartition$SumHashFunction.class
+tree/MemoryEfficientBipartitionManager.class
 expansion/BipartitionExpansionManager.class
 tree/TreeNode.class
 utils/BipartitionExpansionConfig$ExpansionMethod.class
@@ -7,9 +10,11 @@ tree/TreePrinter$PrintableNode.class
 tree/Tree.class
 Main.class
 expansion/ConsensusTreeBuilder$BipartitionWithSupport.class
+tree/RangeBipartition.class
 CompareTrees.class
 tree/TreePrinter.class
 core/WeightCalculator.class
+tree/RangeBipartition$XORHashFunction.class
 core/QuartetFrequencyCounter$Quadripartition.class
 core/BranchSupportCalculator$BranchAnnotationType.class
 core/QuartetFrequencyCounter.class
@@ -17,6 +22,7 @@ utils/Threading.class
 utils/BipartitionExpansionConfig.class
 utils/Config$ComputationMode.class
 utils/Config.class
+tree/RangeBipartition$HashFunction.class
 core/BranchSupportCalculator.class
 expansion/DistanceMatrix$UPGMACluster.class
 core/WeightCalculator$1.class
@@ -33,5 +39,6 @@ core/QuartetFrequencyCounter$QuartetFrequencies.class
 utils/Config$NonQuartetType.class
 core/InferenceDP.class
 expansion/DistanceMatrix.class
+tree/RangeBipartition$DoubleHashFunction.class
 utils/BipartitionExpansionConfig$DistanceMethod.class
 taxon/Taxon.class

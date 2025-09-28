@@ -6,6 +6,7 @@ sb="0.000001"
 spmin="500000"
 spmax="1500000"
 out_dir=""
+data_base_dir="data"  # Default data directory (backward compatible)
 # Required (no defaults)
 taxa_num=""
 gene_trees=""
@@ -20,6 +21,7 @@ Required:
 
 Optional:
   -o, --out_dir     Output directory (if omitted, auto-built from params)
+  -d, --data_dir    Base data directory (default: ${data_base_dir})
       --sb          Substitution/birthrate parameter (default: ${sb})
       --spmin       Population size minimum (default: ${spmin})
       --spmax       Population size maximum (default: ${spmax})
@@ -31,7 +33,7 @@ EOF
 }
 
 # Use GNU getopt for long options
-OPTS=$(getopt -o t:g:o:h --long taxa_num:,gene_trees:,out_dir:,sb:,spmin:,spmax:,help -n 'run_simulator.sh' -- "$@")
+OPTS=$(getopt -o t:g:o:d:h --long taxa_num:,gene_trees:,out_dir:,data_dir:,sb:,spmin:,spmax:,help -n 'run_simulator.sh' -- "$@")
 if [ $? != 0 ] ; then
   echo "Failed parsing options." >&2
   exit 1
@@ -43,6 +45,7 @@ while true; do
     -t|--taxa_num) taxa_num="$2"; shift 2 ;;
     -g|--gene_trees) gene_trees="$2"; shift 2 ;;
     -o|--out_dir) out_dir="$2"; shift 2 ;;
+    -d|--data_dir) data_base_dir="$2"; shift 2 ;;
     --sb) sb="$2"; shift 2 ;;
     --spmin) spmin="$2"; shift 2 ;;
     --spmax) spmax="$2"; shift 2 ;;
@@ -59,22 +62,27 @@ if [ -z "${taxa_num}" ] || [ -z "${gene_trees}" ]; then
   exit 1
 fi
 
+# Ensure data base directory exists
+mkdir -p "${data_base_dir}"
+
 # Construct output folder if not provided
 if [ -z "${out_dir}" ]; then
-  out_dir="data/t_${taxa_num}_g_${gene_trees}_sb_${sb}_spmin_${spmin}_spmax_${spmax}"
+  out_dir="${data_base_dir}/t_${taxa_num}_g_${gene_trees}_sb_${sb}_spmin_${spmin}_spmax_${spmax}"
 else
+  # If out_dir is provided, use it as-is (could be absolute or relative)
   out_dir="${out_dir%/}"  # strip trailing slash
 fi
 
 mkdir -p "${out_dir}"
 
 echo "Running with parameters:"
-echo "  taxa_num  = ${taxa_num}"
-echo "  gene_trees= ${gene_trees}"
-echo "  sb        = ${sb}"
-echo "  spmin     = ${spmin}"
-echo "  spmax     = ${spmax}"
-echo "  out_dir   = ${out_dir}"
+echo "  taxa_num    = ${taxa_num}"
+echo "  gene_trees  = ${gene_trees}"
+echo "  sb          = ${sb}"
+echo "  spmin       = ${spmin}"
+echo "  spmax       = ${spmax}"
+echo "  data_base_dir = ${data_base_dir}"
+echo "  out_dir     = ${out_dir}"
 echo ""
 
 # Run SimPhy (adjust path to simphy_lnx64 if necessary)

@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# test-stelar.sh
+# test-stelar-simple.sh
+# Simple runner: runs STELAR directly (logs visible), measures elapsed time,
+# computes RF (if available), writes CSV. No CPU/GPU monitoring or PID wrapping.
+#
 # Usage:
-#   ./test-stelar.sh -t 1000 -g 500
-#   ./test-stelar.sh --taxa_num 1000 --gene_trees 500 --replicate R2 --stelar-root /path/to/STELAR-MP --fresh
+#   ./test-stelar-simple.sh -t 1000 -g 500
+#   ./test-stelar-simple.sh --taxa_num 1000 --gene_trees 500 --replicate R2 --stelar-root /path/to/STELAR-MP --fresh
 
 set -euo pipefail
 
@@ -13,6 +16,8 @@ REPLICATE="R1"
 BASE_DIR="${HOME}/phylogeny"
 SIMPHY_DIR=""                # derived from BASE_DIR unless provided
 SIMPHY_DIR_SET=false
+SIMPHY_DATA_DIR=""           # custom simphy data directory
+SIMPHY_DATA_DIR_SET=false
 STELAR_ROOT=""               # derived from BASE_DIR unless provided
 STELAR_ROOT_SET=false
 
@@ -27,7 +32,7 @@ FRESH=false
 
 print_help() {
   cat <<EOF
-test-stelar.sh
+test-stelar-simple.sh
 
 Required:
   --taxa_num, -t     Number of taxa (e.g. 1000)
@@ -37,6 +42,7 @@ Optional:
   --replicate, -r    Replicate name (default: R1)
   --base-dir, -b     Base directory (default: ${BASE_DIR})
   --simphy-dir       Path to simphy dir (overrides --base-dir)
+  --simphy-data-dir  Custom directory for simphy data storage
   --stelar-root      Path to STELAR-MP root (overrides --base-dir)
   --stelar-opts      Extra args for STELAR run (default: "$STELAR_OPTS")
   --sb               Substitution/birthrate parameter (default: ${SB})
@@ -55,6 +61,7 @@ while [[ $# -gt 0 ]]; do
     --gene_trees|-g) GENE_TREES="$2"; shift 2 ;;
     --replicate|-r) REPLICATE="$2"; shift 2 ;;
     --simphy-dir) SIMPHY_DIR="$2"; SIMPHY_DIR_SET=true; shift 2 ;;
+    --simphy-data-dir) SIMPHY_DATA_DIR="$2"; SIMPHY_DATA_DIR_SET=true; shift 2 ;;
     --stelar-root) STELAR_ROOT="$2"; STELAR_ROOT_SET=true; shift 2 ;;
     --stelar-opts) STELAR_OPTS="$2"; shift 2 ;;
     --base-dir|-b) BASE_DIR="$2"; shift 2 ;;
@@ -85,10 +92,20 @@ fi
 PAIR="${TAXA_NUM}_${GENE_TREES}"
 
 # Construct SIMPHY_RUN_DIR early (so we can check the stat file before doing heavy work)
-if [[ "$USE_LEGACY_LAYOUT" = true ]]; then
-  SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/${PAIR}/${REPLICATE}"
+if [[ "$SIMPHY_DATA_DIR_SET" = true ]]; then
+  # Use custom data directory
+  if [[ "$USE_LEGACY_LAYOUT" = true ]]; then
+    SIMPHY_RUN_DIR="${SIMPHY_DATA_DIR%/}/${PAIR}/${REPLICATE}"
+  else
+    SIMPHY_RUN_DIR="${SIMPHY_DATA_DIR%/}/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}/${REPLICATE}"
+  fi
 else
-  SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}/${REPLICATE}"
+  # Default behavior: use data directory inside SIMPHY_DIR
+  if [[ "$USE_LEGACY_LAYOUT" = true ]]; then
+    SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/${PAIR}/${REPLICATE}"
+  else
+    SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}/${REPLICATE}"
+  fi
 fi
 
 STAT_FILE="${SIMPHY_RUN_DIR%/}/stat-stelar.csv"
@@ -106,6 +123,11 @@ echo "Parameters:"
 echo "  taxa_num:       $TAXA_NUM"
 echo "  gene_trees:     $GENE_TREES"
 echo "  replicate:      $REPLICATE"
+if [[ "$SIMPHY_DATA_DIR_SET" = true ]]; then
+  echo "  simphy data dir: $SIMPHY_DATA_DIR (custom)"
+else
+  echo "  simphy data dir: ${SIMPHY_DIR%/}/data (default)"
+fi
 echo "  simphy run dir: $SIMPHY_RUN_DIR"
 echo "  out stelar:     $OUT_STELAR"
 echo "  stat file:      $STAT_FILE"
@@ -117,91 +139,28 @@ if [[ ! -f "$ALL_GT_FILE" ]]; then
 fi
 
 echo "==> Running STELAR (output will be written to $OUT_STELAR)"
-
 mkdir -p "${SIMPHY_RUN_DIR%/}"
 
-# prepare tempfiles
-TIME_TMP=$(mktemp)
-MON_TMP=$(mktemp)
-
-# time + gpu-monitor wrapper
+# measure elapsed time with nanosecond precision
 START_NS=$(date +%s%N)
 
-# run STELAR under /usr/bin/time -v and capture its stderr (resource usage info)
+# Run STELAR directly so its stdout/stderr are visible in this runner's terminal.
+# We cd into STELAR_ROOT and run run.sh with arguments.
 (
-  cd "$STELAR_ROOT" && /usr/bin/time -v ./run.sh "$ALL_GT_FILE" "$OUT_STELAR" $STELAR_OPTS
-) 2> "$TIME_TMP" &
-STELAR_WRAPPER_PID=$!
-
-# start GPU monitor only if nvidia-smi exists
-if command -v nvidia-smi >/dev/null 2>&1; then
-  (
-    curmax=0
-    # sample at 0.1s to catch short spikes
-    while kill -0 "$STELAR_WRAPPER_PID" 2>/dev/null; do
-      gpu_val=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | awk 'BEGIN{m=0} {v=int($1); if(v>m) m=v} END{print m}')
-      if [[ -n "$gpu_val" && "$gpu_val" =~ ^[0-9]+$ ]]; then
-        if (( gpu_val > curmax )); then
-          curmax=$gpu_val
-        fi
-      fi
-      sleep 0.1
-    done
-    echo "$curmax" > "$MON_TMP"
-  ) &
-  MON_PID=$!
-else
-  echo "NA" > "$MON_TMP"
-  MON_PID=""
-fi
-
-# wait for the STELAR wrapper to finish and capture exit code
-wait "$STELAR_WRAPPER_PID"
+  cd "$STELAR_ROOT"
+  ./run.sh "$ALL_GT_FILE" "$OUT_STELAR" $STELAR_OPTS
+)
 STELAR_EXIT_CODE=$?
 
 END_NS=$(date +%s%N)
 ELAPSED_MS=$(( (END_NS - START_NS) / 1000000 ))
 RUNNING_TIME=$(awk "BEGIN {printf \"%.3f\", ${ELAPSED_MS}/1000}")
 
-# ensure monitor stopped and read its result
-if [[ -n "${MON_PID:-}" ]]; then
-  wait "$MON_PID" 2>/dev/null || true
-fi
-
-MAX_GPU_VAL=$(cat "$MON_TMP" 2>/dev/null || echo "NA")
-
-# Normalize GPU: nvidia-smi reports MiB (integer). Convert to decimal MB with 3 decimal places (MiB * 1.024).
-if [[ "$MAX_GPU_VAL" =~ ^[0-9]+$ ]]; then
-  MAX_GPU_MB=$(awk "BEGIN{printf \"%.3f\", ${MAX_GPU_VAL} * 1.024}")
-else
-  MAX_GPU_MB="NA"
-fi
-
-# parse /usr/bin/time -v output to get Maximum resident set size (kbytes)
-MAX_CPU_MB="NA"
-if grep -qi "Maximum resident set size" "$TIME_TMP" 2>/dev/null; then
-  MAX_RSS_KB=$(grep -i "Maximum resident set size" "$TIME_TMP" | awk -F: '{gsub(/^[ \t]+/,"",$2); print $2}' | awk '{print int($1)}')
-elif grep -qi "Maximum resident set size (kbytes)" "$TIME_TMP" 2>/dev/null; then
-  MAX_RSS_KB=$(grep -i "Maximum resident set size (kbytes)" "$TIME_TMP" | awk -F: '{gsub(/^[ \t]+/,"",$2); print $2}' | awk '{print int($1)}')
-else
-  MAX_RSS_KB=""
-fi
-
-if [[ -n "$MAX_RSS_KB" && "$MAX_RSS_KB" =~ ^[0-9]+$ ]]; then
-  # convert kB -> MB (1024 kB = 1 MiB) and show 3 decimal places
-  MAX_CPU_MB=$(awk "BEGIN{printf \"%.3f\", ${MAX_RSS_KB}/1024}")
-fi
-
-# clean up tempfiles
-rm -f "$TIME_TMP" "$MON_TMP" 2>/dev/null || true
-
 echo "STELAR finished in ${RUNNING_TIME}s (exit code ${STELAR_EXIT_CODE})"
-echo "Max CPU RAM (MB): ${MAX_CPU_MB}"
-echo "Max GPU VRAM (MB): ${MAX_GPU_MB}"
 
 # RF calculation (if rf.py exists and true species tree present)
 RF_RATE="NA"
-if [[ -f "$OUT_STELAR" && -f "$TRUE_SPECIES_TREE" ]]; then
+if [[ -f "$OUT_STELAR" && -f "$TRUE_SPECIES_TREE" && -f "${STELAR_ROOT%/}/rf.py" ]]; then
   echo
   echo "==> Calculating RF rate (using rf.py)"
   rf_output=$(cd "$STELAR_ROOT" && python rf.py "$OUT_STELAR" "$TRUE_SPECIES_TREE" 2>&1) || rf_output="$rf_output"
@@ -220,12 +179,37 @@ if [[ -f "$OUT_STELAR" && -f "$TRUE_SPECIES_TREE" ]]; then
   fi
 else
   echo
-  echo "STELAR output or true species tree missing; skipping STELAR RF."
+  echo "STELAR output or true species tree or rf.py missing; skipping RF calculation."
 fi
 
-# Write CSV (overwrite every run) — includes replicate after gene-trees, and max-cpu-mb and max-gpu-mb
-echo "alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb" > "$STAT_FILE"
-echo "stelar,${TAXA_NUM},${GENE_TREES},${REPLICATE},${SB},${SPMIN},${SPMAX},${RF_RATE},${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB}" >> "$STAT_FILE"
+# Write CSV (overwrite every run) — simplified header (no cpu/gpu columns)
+echo "alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s" > "$STAT_FILE"
+CSV_ROW="stelar,${TAXA_NUM},${GENE_TREES},${REPLICATE},${SB},${SPMIN},${SPMAX},${RF_RATE},${RUNNING_TIME}"
+echo "$CSV_ROW" >> "$STAT_FILE"
 
 echo "Wrote stats to $STAT_FILE"
+
+# Send notification with results
+echo "Sending notification..."
+curl -s -d "🎉 STELAR completed for ${TAXA_NUM} taxa and ${GENE_TREES} gene trees!
+
+📊 Results:
+alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s
+$CSV_ROW
+
+📁 Stats saved to: $STAT_FILE" ntfy.sh/anik-test
+
+# # Cleanup should not be done, because then our csv would also be deleted
+# # Cleanup: remove the simphy run directory to save disk space
+# echo "Cleaning up simphy run directory: $SIMPHY_RUN_DIR"
+# if [[ -d "$SIMPHY_RUN_DIR" ]]; then
+#   rm -rf "$SIMPHY_RUN_DIR"
+#   echo "✅ Cleanup completed - removed $SIMPHY_RUN_DIR"
+# else
+#   echo "⚠️  Directory $SIMPHY_RUN_DIR not found, nothing to clean up"
+# fi
+
 echo "Done."
+
+# Exit with the same exit code as STELAR (so CI/automation can detect failure)
+exit "${STELAR_EXIT_CODE}"

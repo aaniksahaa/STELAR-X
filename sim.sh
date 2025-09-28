@@ -13,6 +13,8 @@ REPLICATE="R1"
 BASE_DIR="${HOME}/phylogeny"
 SIMPHY_DIR=""
 SIMPHY_DIR_SET=false
+SIMPHY_DATA_DIR=""
+SIMPHY_DATA_DIR_SET=false
 FRESH=false
 
 # Defaults that match run_simulator.sh
@@ -32,6 +34,7 @@ Optional:
   --replicate, -r    Replicate name (default: R1)
   --base-dir, -b     Base directory (default: ${BASE_DIR})
   --simphy-dir       Path to simphy dir (overrides --base-dir)
+  --simphy-data-dir  Custom directory for simphy data storage
   --sb               Substitution/birthrate parameter (default: ${SB})
   --spmin            Population size minimum (default: ${SPMIN})
   --spmax            Population size maximum (default: ${SPMAX})
@@ -48,6 +51,7 @@ while [[ $# -gt 0 ]]; do
     --replicate|-r) REPLICATE="$2"; shift 2 ;;
     --base-dir|-b) BASE_DIR="$2"; shift 2 ;;
     --simphy-dir) SIMPHY_DIR="$2"; SIMPHY_DIR_SET=true; shift 2 ;;
+    --simphy-data-dir) SIMPHY_DATA_DIR="$2"; SIMPHY_DATA_DIR_SET=true; shift 2 ;;
     --sb) SB="$2"; shift 2 ;;
     --spmin) SPMIN="$2"; shift 2 ;;
     --spmax) SPMAX="$2"; shift 2 ;;
@@ -105,14 +109,31 @@ fi
 
 # Call the main simulator script with named options (out_dir handled by run_simulator.sh)
 echo "==> Running run_simulator.sh in $SIMPHY_DIR"
+
+# Build command with optional data directory
+RUN_CMD="./run_simulator.sh -t \"${TAXA_NUM}\" -g \"${GENE_TREES}\" --sb \"${SB}\" --spmin \"${SPMIN}\" --spmax \"${SPMAX}\""
+
+# Add data directory option if specified
+if [[ "$SIMPHY_DATA_DIR_SET" = true ]]; then
+  # Ensure the data directory is created
+  mkdir -p "$SIMPHY_DATA_DIR"
+  RUN_CMD="$RUN_CMD --data_dir \"${SIMPHY_DATA_DIR}\""
+  echo "Using custom simphy data directory: $SIMPHY_DATA_DIR"
+fi
+
 (
   cd "$SIMPHY_DIR"
-  ./run_simulator.sh -t "${TAXA_NUM}" -g "${GENE_TREES}" \
-    --sb "${SB}" --spmin "${SPMIN}" --spmax "${SPMAX}"
+  eval "$RUN_CMD"
 )
 
-# Construct expected out_dir the same way run_simulator.sh does (relative to SIMPHY_DIR)
-OUT_DIR="${SIMPHY_DIR%/}/data/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}"
+# Construct expected out_dir the same way run_simulator.sh does
+if [[ "$SIMPHY_DATA_DIR_SET" = true ]]; then
+  # If custom data directory is used, construct path accordingly
+  OUT_DIR="${SIMPHY_DATA_DIR%/}/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}"
+else
+  # Default behavior: data directory inside SIMPHY_DIR
+  OUT_DIR="${SIMPHY_DIR%/}/data/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}"
+fi
 REPL_DIR="${OUT_DIR%/}/${REPLICATE}"
 ALL_GT_FILE="${REPL_DIR%/}/all_gt.tre"
 
