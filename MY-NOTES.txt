@@ -1,9 +1,16 @@
-TODO:
+res - 
+
+- see MY-UTILS folder, there example command etc txt files 
+
+todo - 
 
 - do everything from now on MAIN branch...
 - run on astral's on 10k-1k dataset 
-- add supple or appendix like simulation commands etc
+- add supple or appendix like simulation commands, simulation params etc
 - add biological analysis maybe on 1kp or something else...
 - z rule - sohaib sir...
 - write abstract, results, discussion, conclusion nicely, add supplementary
+- add dependence on ILS
+- since our memory req is now low, maybe we can strengthen by increasing the ILS - maybe giving more time / memory
+- collect and accumulate the receipts from vast.ai
 - 
