@@ -1,0 +1,2 @@
+alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s
+stelar,50000,1000,R1,0.000001,100000,150000,0.0068,151505.357

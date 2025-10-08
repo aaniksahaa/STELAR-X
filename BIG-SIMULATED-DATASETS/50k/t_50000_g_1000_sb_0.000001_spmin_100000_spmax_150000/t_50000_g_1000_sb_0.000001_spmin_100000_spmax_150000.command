@@ -1,0 +1,1 @@
+./simphy_lnx64 -sb f:0.000001 -ld f:0 -lb f:0 -lt f:0 -rs 1 -rl f:1000 -rg 1 -o /dev/shm/data/t_50000_g_1000_sb_0.000001_spmin_100000_spmax_150000 -sp u:100000,150000 -su ln:-17.27461,0.6931472 -sg f:1 -sl f:50000 -st ln:16.2,1 -om 1 -v 2 -od 1 -op 1 -oc 1 -on 1 -cs 42 
