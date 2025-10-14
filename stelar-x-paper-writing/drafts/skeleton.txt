@@ -76,9 +76,10 @@ assess limits on num taxa and num gene trees on 4090
 
 todo
 - see pairwise rf rates for generated gene trees
-- 
+- also mention in paper that this sbp compression technique also applies for other algos like the one is Sir's slides, MGD DP
 
-
+** ABLATION
+	- of the mem opt technique...
 
 Profiling
 Simulation commands
