@@ -84,12 +84,12 @@ public class InverseIndexManager {
             
             processedTrees++;
             
-            // Log progress for large datasets
-            if (processedTrees % 100 == 0 || processedTrees == numTrees) {
-                System.out.println("Processed " + processedTrees + "/" + numTrees + 
-                                 " trees, average leaves per tree: " + 
-                                 (totalLeaves / (double) processedTrees));
-            }
+            // // Log progress for large datasets
+            // if (processedTrees % 100 == 0 || processedTrees == numTrees) {
+            //     System.out.println("Processed " + processedTrees + "/" + numTrees + 
+            //                      " trees, average leaves per tree: " + 
+            //                      (totalLeaves / (double) processedTrees));
+            // }
         }
         
         System.out.println("Inverse index built successfully");

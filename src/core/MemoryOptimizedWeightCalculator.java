@@ -479,10 +479,10 @@ public class MemoryOptimizedWeightCalculator {
                 memory.setInt(offset, inverseIndex[tree][taxon]);
             }
             
-            // Log progress for large datasets
-            if (tree % 100 == 0 || tree == numTrees - 1) {
-                System.out.println("Flattened inverse index for " + (tree + 1) + "/" + numTrees + " trees");
-            }
+            // // Log progress for large datasets
+            // if (tree % 100 == 0 || tree == numTrees - 1) {
+            //     System.out.println("Flattened inverse index for " + (tree + 1) + "/" + numTrees + " trees");
+            // }
         }
         
         System.out.println("==== INVERSE INDEX FLATTENING COMPLETED ====");
@@ -551,11 +551,11 @@ public class MemoryOptimizedWeightCalculator {
                 paddedPositions++;
             }
             
-            // Log progress for large datasets
-            if (tree % 100 == 0 || tree == numTrees - 1) {
-                System.out.println("Processed " + (tree + 1) + "/" + numTrees + 
-                                 " trees (tree " + tree + " has " + actualTreeSize + " taxa)");
-            }
+            // // Log progress for large datasets
+            // if (tree % 100 == 0 || tree == numTrees - 1) {
+            //     System.out.println("Processed " + (tree + 1) + "/" + numTrees + 
+            //                      " trees (tree " + tree + " has " + actualTreeSize + " taxa)");
+            // }
         }
         
         System.out.println("Padding statistics:");
