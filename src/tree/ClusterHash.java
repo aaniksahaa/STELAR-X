@@ -2,6 +2,7 @@ package tree;
 
 import java.util.Set;
 import java.util.HashSet;
+import utils.HashingUtils;
 
 /**
  * Permutation-invariant hash representation for clusters in DP.
@@ -22,7 +23,7 @@ public class ClusterHash {
     
     /**
      * Create ClusterHash from a CompactBipartition's union (left + right clusters).
-     * This correctly calculates the hash for the actual union of taxa, not just the range.
+     * This correctly calculates the hash for the actual union of taxa.
      */
     public static ClusterHash fromCompactBipartition(CompactBipartition compactBip,
                                                    RangeBipartition.HashFunction hashFunction,
@@ -42,68 +43,76 @@ public class ClusterHash {
             unionTaxa.add(ordering[i]);
         }
         
-        // Calculate hash using the same method as fromTaxonSet
+        // Calculate hash using unified hashing utility
         return fromTaxonSet(unionTaxa, hashFunction);
     }
     
-    /**
-     * Create ClusterHash from a range representing a cluster.
-     */
-    public static ClusterHash fromRange(int geneTreeIndex, int start, int end,
-                                      RangeBipartition.HashFunction hashFunction,
-                                      long[][] prefixSums, long[][] prefixXORs) {
-        // Create range bipartition with the cluster as left and empty right
-        RangeBipartition range = new RangeBipartition(geneTreeIndex, start, end, end, end);
-        Object hash = hashFunction.calculateHash(range, prefixSums, prefixXORs);
-        int size = end - start;
-        
-        return new ClusterHash(hash, size);
-    }
     
     /**
      * Create ClusterHash from a set of taxon IDs.
-     * This is used when we need to create cluster hashes from BitSets during transition.
+     * Uses the unified hashing utility to ensure consistency with RangeBipartition hashing.
      */
     public static ClusterHash fromTaxonSet(Set<Integer> taxonIds,
                                          RangeBipartition.HashFunction hashFunction) {
-        // For taxon sets, we need to create a permutation-invariant hash
-        // We'll use a simple approach: sort the taxon IDs and hash them
-        int[] sortedTaxa = taxonIds.stream().mapToInt(Integer::intValue).sorted().toArray();
+        // Calculate sum and XOR for the taxon set
+        long[] sumAndXOR = HashingUtils.calculateTaxonSetSumAndXOR(taxonIds);
+        long sum = sumAndXOR[0];
+        long xor = sumAndXOR[1];
+        int size = taxonIds.size();
         
-        // Calculate hash using the same approach as RangeBipartition hash functions
-        long sum = 0;
-        long xor = 0;
-        for (int taxonId : sortedTaxa) {
-            long hashedTaxon = hashSingleTaxon(taxonId);
-            sum += hashedTaxon;
-            xor ^= hashedTaxon;
+        // Calculate hash based on the hash function type
+        long hashValue;
+        if (hashFunction instanceof RangeBipartition.SumHashFunction) {
+            // For single cluster, treat as left cluster with empty right
+            hashValue = HashingUtils.calculateSingleClusterSumHash(sum, size);
+        } else if (hashFunction instanceof RangeBipartition.XORHashFunction) {
+            // For single cluster, treat as left cluster with empty right
+            hashValue = HashingUtils.calculateSingleClusterXORHash(xor, size);
+        } else {
+            // Default to sum-based hashing
+            hashValue = HashingUtils.calculateSingleClusterSumHash(sum, size);
         }
         
-        // Use the same mixing approach as in RangeBipartition.SumHashFunction
-        long combined = sum * 0x9e3779b97f4a7c15L ^ xor * 0xc2b2ae3d27d4eb4fL ^ sortedTaxa.length;
-        Object hash = Long.rotateLeft(combined, 27) ^ (combined >>> 33);
-        
-        return new ClusterHash(hash, taxonIds.size());
-    }
-    
-    private static long hashSingleTaxon(int taxonId) {
-        long x = taxonId;
-        x ^= x >>> 16;
-        x *= 0x85ebca6b;
-        x ^= x >>> 13;
-        x *= 0xc2b2ae35;
-        x ^= x >>> 16;
-        return x == 0 ? 1 : x;
+        return new ClusterHash(hashValue, size);
     }
     
     /**
      * Create ClusterHash for the left cluster of a CompactBipartition.
+     * Uses unified hashing for consistency with RangeBipartition calculations.
      */
     public static ClusterHash fromLeftCluster(CompactBipartition compactBip,
                                             RangeBipartition.HashFunction hashFunction,
                                             long[][] prefixSums, long[][] prefixXORs,
                                             int[][] geneTreeOrderings) {
-        // Get the actual taxa from the left cluster
+        // Option 1: Use range-based calculation (more efficient)
+        if (prefixSums != null && prefixXORs != null && 
+            compactBip.geneTreeIndex < prefixSums.length && 
+            compactBip.geneTreeIndex < prefixXORs.length) {
+            
+            long[] sumAndXOR = HashingUtils.calculateRangeSumAndXOR(
+                prefixSums[compactBip.geneTreeIndex], 
+                prefixXORs[compactBip.geneTreeIndex],
+                compactBip.leftStart, 
+                compactBip.leftEnd
+            );
+            
+            long sum = sumAndXOR[0];
+            long xor = sumAndXOR[1];
+            int size = compactBip.leftEnd - compactBip.leftStart;
+            
+            long hashValue;
+            if (hashFunction instanceof RangeBipartition.SumHashFunction) {
+                hashValue = HashingUtils.calculateSingleClusterSumHash(sum, size);
+            } else if (hashFunction instanceof RangeBipartition.XORHashFunction) {
+                hashValue = HashingUtils.calculateSingleClusterXORHash(xor, size);
+            } else {
+                hashValue = HashingUtils.calculateSingleClusterSumHash(sum, size);
+            }
+            
+            return new ClusterHash(hashValue, size);
+        }
+        
+        // Option 2: Fall back to taxon set approach
         int[] ordering = geneTreeOrderings[compactBip.geneTreeIndex];
         Set<Integer> leftTaxa = new HashSet<>();
         
@@ -116,12 +125,41 @@ public class ClusterHash {
     
     /**
      * Create ClusterHash for the right cluster of a CompactBipartition.
+     * Uses unified hashing for consistency with RangeBipartition calculations.
      */
     public static ClusterHash fromRightCluster(CompactBipartition compactBip,
                                              RangeBipartition.HashFunction hashFunction,
                                              long[][] prefixSums, long[][] prefixXORs,
                                              int[][] geneTreeOrderings) {
-        // Get the actual taxa from the right cluster
+        // Option 1: Use range-based calculation (more efficient)
+        if (prefixSums != null && prefixXORs != null && 
+            compactBip.geneTreeIndex < prefixSums.length && 
+            compactBip.geneTreeIndex < prefixXORs.length) {
+            
+            long[] sumAndXOR = HashingUtils.calculateRangeSumAndXOR(
+                prefixSums[compactBip.geneTreeIndex], 
+                prefixXORs[compactBip.geneTreeIndex],
+                compactBip.rightStart, 
+                compactBip.rightEnd
+            );
+            
+            long sum = sumAndXOR[0];
+            long xor = sumAndXOR[1];
+            int size = compactBip.rightEnd - compactBip.rightStart;
+            
+            long hashValue;
+            if (hashFunction instanceof RangeBipartition.SumHashFunction) {
+                hashValue = HashingUtils.calculateSingleClusterSumHash(sum, size);
+            } else if (hashFunction instanceof RangeBipartition.XORHashFunction) {
+                hashValue = HashingUtils.calculateSingleClusterXORHash(xor, size);
+            } else {
+                hashValue = HashingUtils.calculateSingleClusterSumHash(sum, size);
+            }
+            
+            return new ClusterHash(hashValue, size);
+        }
+        
+        // Option 2: Fall back to taxon set approach
         int[] ordering = geneTreeOrderings[compactBip.geneTreeIndex];
         Set<Integer> rightTaxa = new HashSet<>();
         

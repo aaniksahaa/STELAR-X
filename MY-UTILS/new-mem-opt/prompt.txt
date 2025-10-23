@@ -8,8 +8,6 @@ So, in a nutshell, we will now have both the two steps GPU weight calculation an
 
 All the code changes will be in src folder. I am also sharing another txt file describing in proper detail, exactly how to do the weight counting step with this idea. And the DP step is exaplained above. 
 
-
-
 The code structure and conventions should be all the same as the current code. First please read the current codebase very carefully, understand what exactly happens, then carefully read our specification of the change...
 
 

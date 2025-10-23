@@ -1,5 +1,7 @@
 package tree;
 
+import utils.HashingUtils;
+
 /**
  * Range-based bipartition representation for memory optimization.
  * Instead of storing BitSets (O(n) memory each), we represent bipartitions
@@ -133,29 +135,14 @@ public class RangeBipartition {
             if (prefixSum == null) {
                 return 0L;
             }
-            long leftSum = rangeSum(prefixSum, range.leftStart, range.leftEnd);
-            long rightSum = rangeSum(prefixSum, range.rightStart, range.rightEnd);
+            
+            // Use unified hashing utility for consistency
+            long leftSum = HashingUtils.rangeSum(prefixSum, range.leftStart, range.leftEnd);
+            long rightSum = HashingUtils.rangeSum(prefixSum, range.rightStart, range.rightEnd);
             int leftSize = range.leftSize();
             int rightSize = range.rightSize();
             
-            // Normalize: smaller size on left; if equal, smaller sum on left
-            if (leftSize > rightSize || (leftSize == rightSize && leftSum > rightSum)) {
-                long tempSum = leftSum;
-                leftSum = rightSum;
-                rightSum = tempSum;
-                int tempSize = leftSize;
-                leftSize = rightSize;
-                rightSize = tempSize;
-            }
-            
-            long combined = leftSum * MIX_CONST1 ^ rightSum * MIX_CONST2 ^ leftSize ^ (rightSize << 16);
-            return Long.rotateLeft(combined, 27) ^ (combined >>> 33);
-        }
-        
-        private long rangeSum(long[] prefix, int start, int end) {
-            if (end == 0) return 0;
-            long startSum = (start > 0) ? prefix[start - 1] : 0;
-            return prefix[end - 1] - startSum;
+            return HashingUtils.calculateSumHash(leftSum, rightSum, leftSize, rightSize);
         }
         
         @Override
@@ -189,54 +176,16 @@ public class RangeBipartition {
                 return splitMix64Local(structural ^ XOR_MIX_B);
             }
             
-            long leftXOR = rangeXOR(prefixXOR, range.leftStart, range.leftEnd);
-            long rightXOR = rangeXOR(prefixXOR, range.rightStart, range.rightEnd);
+            // Use unified hashing utility for consistency
+            long leftXOR = HashingUtils.rangeXOR(prefixXOR, range.leftStart, range.leftEnd);
+            long rightXOR = HashingUtils.rangeXOR(prefixXOR, range.rightStart, range.rightEnd);
             int leftSize = range.leftSize();
             int rightSize = range.rightSize();
             
-            // Normalize: smaller size on "left"; if equal, smaller XOR on "left" (unsigned comparison)
-            if (leftSize > rightSize || (leftSize == rightSize && unsignedLessLocal(rightXOR, leftXOR))) {
-                long tempXOR = leftXOR;
-                leftXOR = rightXOR;
-                rightXOR = tempXOR;
-                int tempSize = leftSize;
-                leftSize = rightSize;
-                rightSize = tempSize;
-            }
-            
-            long leftClusterHash = xorClusterMix(leftXOR, leftSize, XOR_MIX_A);
-            long rightClusterHash = xorClusterMix(rightXOR, rightSize, XOR_MIX_B);
-            
-            return combineClusterHashesLocal(leftClusterHash, rightClusterHash, leftSize + rightSize);
+            return HashingUtils.calculateXORHash(leftXOR, rightXOR, leftSize, rightSize);
         }
         
-        private static long rangeXOR(long[] prefixXOR, int start, int end) {
-            // Efficient O(1) range XOR using prefix XOR arrays
-            if (prefixXOR == null || end <= 0) return 0L;
-            
-            int e = Math.min(end - 1, prefixXOR.length - 1);
-            long endXOR = prefixXOR[e];
-            long startXOR = (start > 0) ? prefixXOR[Math.min(start - 1, prefixXOR.length - 1)] : 0L;
-            
-            // For XOR: rangeXOR(start, end) = prefixXOR[end-1] ^ prefixXOR[start-1]
-            return endXOR ^ startXOR;
-        }
-        
-        private static long xorClusterMix(long xorVal, int size, long salt) {
-            long v = xorVal ^ (((long) size) << 32) ^ salt;
-            return splitMix64Local(v);
-        }
-        
-        private static long combineClusterHashesLocal(long a, long b, int totalSize) {
-            long mix = a ^ (b + 0x9e3779b97f4a7c15L + (a << 6) + (a >>> 2));
-            mix ^= ((long) totalSize << 17) | ((long) totalSize << 3);
-            return splitMix64Local(mix);
-        }
-        
-        private static boolean unsignedLessLocal(long x, long y) {
-            return (x + Long.MIN_VALUE) < (y + Long.MIN_VALUE);
-        }
-        
+        // Helper method for fallback hash calculation
         private static long splitMix64Local(long z) {
             z += 0x9e3779b97f4a7c15L;
             z = (z ^ (z >>> 30)) * 0xbf58476d1ce4e5b9L;
