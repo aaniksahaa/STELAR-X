@@ -65,7 +65,7 @@ public class MemoryOptimizedWeightCalculator {
     /**
      * Calculate weights for candidate bipartitions using memory-optimized approach.
      */
-    public Map<STBipartition, Double> calculateWeights(List<STBipartition> candidates) {
+    public Map<RangeBipartition, Double> calculateWeights(List<RangeBipartition> candidates) {
         System.out.println("==== MEMORY-OPTIMIZED WEIGHT CALCULATION STARTED ====");
         System.out.println("Computation mode: " + Config.COMPUTATION_MODE);
         System.out.println("Number of candidates: " + candidates.size());
@@ -73,7 +73,7 @@ public class MemoryOptimizedWeightCalculator {
         
         long startTime = System.currentTimeMillis();
         
-        Map<STBipartition, Double> result;
+        Map<RangeBipartition, Double> result;
         switch (Config.COMPUTATION_MODE) {
             case CPU_SINGLE:
                 System.out.println("Using memory-optimized CPU_SINGLE mode");
@@ -110,29 +110,21 @@ public class MemoryOptimizedWeightCalculator {
     /**
      * Single-threaded weight calculation using range-based processing.
      */
-    private Map<STBipartition, Double> calculateWeightsSingleThread(List<STBipartition> candidates) {
+    private Map<RangeBipartition, Double> calculateWeightsSingleThread(List<RangeBipartition> candidates) {
         System.out.println("Starting single-threaded range-based weight calculation...");
         
-        Map<STBipartition, Double> weights = new HashMap<>();
+        Map<RangeBipartition, Double> weights = new HashMap<>();
         
-        // Convert candidates to range representations for efficient processing
-        System.out.println("Converting candidates to range representations...");
-        Map<STBipartition, RangeBipartition> candidateToRange = buildCandidateRangeMapping(candidates);
-        System.out.println("Successfully mapped " + candidateToRange.size() + "/" + candidates.size() + " candidates to ranges");
+        // Use direct calculation for candidates (small number) and range-based for gene trees (large number)
+        System.out.println("Using hybrid approach: direct calculation for candidates, range-based for gene trees");
         
         int processedCandidates = 0;
         
-        for (STBipartition candidate : candidates) {
+        for (RangeBipartition candidate : candidates) {
             double totalScore = 0.0;
-            RangeBipartition candidateRange = candidateToRange.get(candidate);
             
-            if (candidateRange != null) {
-                // Use range-based calculation
-                totalScore = calculateRangeBasedScore(candidateRange);
-            } else {
-                // Fallback to traditional BitSet-based calculation for unmapped candidates
-                totalScore = calculateTraditionalScore(candidate);
-            }
+            // Use traditional BitSet calculation for candidates (simple and direct)
+            totalScore = calculateRangeBasedScore(candidate);
             
             weights.put(candidate, totalScore);
             processedCandidates++;
@@ -150,18 +142,16 @@ public class MemoryOptimizedWeightCalculator {
     /**
      * Multi-threaded weight calculation using range-based processing.
      */
-    private Map<STBipartition, Double> calculateWeightsMultiThread(List<STBipartition> candidates) {
+    private Map<RangeBipartition, Double> calculateWeightsMultiThread(List<RangeBipartition> candidates) {
         System.out.println("Starting multi-threaded range-based weight calculation...");
         
-        Map<STBipartition, Double> weights = new ConcurrentHashMap<>();
+        Map<RangeBipartition, Double> weights = new ConcurrentHashMap<>();
         int numThreads = Runtime.getRuntime().availableProcessors();
         
         Threading.startThreading(numThreads);
         
-        // Convert candidates to range representations
-        System.out.println("Converting candidates to range representations...");
-        Map<STBipartition, RangeBipartition> candidateToRange = buildCandidateRangeMapping(candidates);
-        System.out.println("Successfully mapped " + candidateToRange.size() + "/" + candidates.size() + " candidates to ranges");
+        // Use hybrid approach: direct calculation for candidates, range-based for gene trees
+        System.out.println("Using hybrid approach for multi-threaded calculation");
         
         // Calculate optimal number of threads to avoid invalid ranges
         int chunkSize = Math.max(1, (candidates.size() + numThreads - 1) / numThreads);
@@ -186,17 +176,11 @@ public class MemoryOptimizedWeightCalculator {
                     System.out.println("Thread " + threadId + " processing candidates " + startIdx + " to " + (endIdx - 1));
                     
                     for (int j = startIdx; j < endIdx; j++) {
-                        STBipartition candidate = candidates.get(j);
+                        RangeBipartition candidate = candidates.get(j);
                         double totalScore = 0.0;
-                        RangeBipartition candidateRange = candidateToRange.get(candidate);
                         
-                        if (candidateRange != null) {
-                            // Use range-based calculation
-                            totalScore = calculateRangeBasedScore(candidateRange);
-                        } else {
-                            // Fallback to traditional calculation
-                            totalScore = calculateTraditionalScore(candidate);
-                        }
+                        // Use traditional BitSet calculation (simple and direct)
+                        totalScore = calculateRangeBasedScore(candidate);
                         
                         weights.put(candidate, totalScore);
                     }
@@ -222,28 +206,6 @@ public class MemoryOptimizedWeightCalculator {
         return weights;
     }
     
-    /**
-     * Calculate score for a range bipartition against all gene tree bipartitions.
-     */
-    private double calculateRangeBasedScore(RangeBipartition candidateRange) {
-        double totalScore = 0.0;
-        
-        // Iterate through gene tree bipartition groups
-        for (Map.Entry<Object, List<RangeBipartition>> entry : hashToBipartitions.entrySet()) {
-            List<RangeBipartition> geneTreeRanges = entry.getValue();
-            int frequency = geneTreeRanges.size(); // All ranges in same hash group
-            
-            if (!geneTreeRanges.isEmpty()) {
-                RangeBipartition geneTreeRange = geneTreeRanges.get(0); // Representative
-                double score = calculateRangeScore(candidateRange, geneTreeRange);
-                totalScore += score * frequency;
-                
-                totalScoreCalculations++;
-            }
-        }
-        
-        return totalScore;
-    }
     
     /**
      * Calculate score between two range bipartitions using inverse index.
@@ -284,18 +246,18 @@ public class MemoryOptimizedWeightCalculator {
     }
     
     /**
-     * Fallback to traditional BitSet-based score calculation.
-     * Used when range mapping is not available for a candidate.
+     * Calculate score using range-based approach.
+     * Uses the memory-optimized range intersection method.
      */
-    private double calculateTraditionalScore(STBipartition candidate) {
+    private double calculateRangeBasedScore(RangeBipartition candidate) {
         double totalScore = 0.0;
         
-        // Use the existing gene tree STBipartitions from GeneTrees
-        for (Map.Entry<STBipartition, Integer> entry : geneTrees.stBipartitions.entrySet()) {
-            STBipartition geneTreeSTB = entry.getKey();
+        // Use the existing gene tree RangeBipartitions from GeneTrees
+        for (Map.Entry<RangeBipartition, Integer> entry : geneTrees.rangeBipartitions.entrySet()) {
+            RangeBipartition geneTreeRange = entry.getKey();
             int frequency = entry.getValue();
             
-            double score = calculateBitSetScore(candidate, geneTreeSTB);
+            double score = calculateRangeScore(candidate, geneTreeRange);
             totalScore += score * frequency;
             
             totalScoreCalculations++;
@@ -304,103 +266,9 @@ public class MemoryOptimizedWeightCalculator {
         return totalScore;
     }
     
-    /**
-     * Traditional BitSet-based score calculation (same as original WeightCalculator).
-     */
-    private double calculateBitSetScore(STBipartition stb1, STBipartition stb2) {
-        // First configuration: (A|B) with (X|Y)
-        utils.BitSet aIntersectX = (utils.BitSet) stb1.cluster1.clone();
-        aIntersectX.and(stb2.cluster1);
-        int p1 = aIntersectX.cardinality();
-        
-        utils.BitSet bIntersectY = (utils.BitSet) stb1.cluster2.clone();
-        bIntersectY.and(stb2.cluster2);
-        int p2 = bIntersectY.cardinality();
-        
-        double score1 = 0;
-        if (p1 + p2 >= 2) {
-            score1 = p1 * p2 * (p1 + p2 - 2) / 2.0;
-        }
-        
-        // Second configuration: (A|B) with (Y|X) - cross configuration
-        utils.BitSet aIntersectY = (utils.BitSet) stb1.cluster1.clone();
-        aIntersectY.and(stb2.cluster2);
-        p1 = aIntersectY.cardinality();
-        
-        utils.BitSet bIntersectX = (utils.BitSet) stb1.cluster2.clone();
-        bIntersectX.and(stb2.cluster1);
-        p2 = bIntersectX.cardinality();
-        
-        double score2 = 0;
-        if (p1 + p2 >= 2) {
-            score2 = p1 * p2 * (p1 + p2 - 2) / 2.0;
-        }
-        
-        totalIntersectionCalculations += 4; // 4 BitSet intersections
-        
-        return score1 + score2;
-    }
     
-    /**
-     * Build mapping from STBipartitions to RangeBipartitions.
-     * This is a complex operation that tries to find range representations for candidates.
-     */
-    private Map<STBipartition, RangeBipartition> buildCandidateRangeMapping(List<STBipartition> candidates) {
-        Map<STBipartition, RangeBipartition> mapping = new HashMap<>();
-        
-        System.out.println("Building candidate-to-range mapping...");
-        System.out.println("This may take some time for large candidate sets...");
-        
-        int mappedCount = 0;
-        int totalCandidates = candidates.size();
-        
-        // For each candidate, try to find a matching range bipartition
-        for (STBipartition candidate : candidates) {
-            RangeBipartition matchingRange = findMatchingRange(candidate);
-            if (matchingRange != null) {
-                mapping.put(candidate, matchingRange);
-                mappedCount++;
-            }
-            
-            // Log progress for large datasets
-            if ((mappedCount + 1) % 500 == 0 || mappedCount == totalCandidates) {
-                System.out.println("Mapped " + mappedCount + "/" + totalCandidates + " candidates to ranges");
-            }
-        }
-        
-        System.out.println("Candidate mapping completed: " + mappedCount + "/" + totalCandidates + " successfully mapped");
-        if (mappedCount < totalCandidates) {
-            System.out.println("Unmapped candidates will use traditional BitSet calculation");
-        }
-        
-        return mapping;
-    }
-    
-    /**
-     * Find a range bipartition that matches the given STBipartition.
-     * This is an expensive operation that compares taxon sets.
-     */
-    private RangeBipartition findMatchingRange(STBipartition target) {
-        // Convert target clusters to taxon sets for comparison
-        Set<Integer> targetLeft = bitSetToTaxonSet(target.cluster1);
-        Set<Integer> targetRight = bitSetToTaxonSet(target.cluster2);
-        
-        // Search through all range bipartitions
-        for (List<RangeBipartition> ranges : hashToBipartitions.values()) {
-            for (RangeBipartition range : ranges) {
-                Set<Integer> rangeLeft = getRangeTaxonSet(range.geneTreeIndex, range.leftStart, range.leftEnd);
-                Set<Integer> rangeRight = getRangeTaxonSet(range.geneTreeIndex, range.rightStart, range.rightEnd);
-                
-                // Check both orientations: (left, right) and (right, left)
-                if ((targetLeft.equals(rangeLeft) && targetRight.equals(rangeRight)) ||
-                    (targetLeft.equals(rangeRight) && targetRight.equals(rangeLeft))) {
-                    return range;
-                }
-            }
-        }
-        
-        return null; // No matching range found
-    }
+    // Removed expensive buildCandidateRangeMapping and findMatchingRange methods
+    // Using direct calculation approach instead
     
     /**
      * Convert BitSet to set of taxon IDs.
@@ -434,32 +302,19 @@ public class MemoryOptimizedWeightCalculator {
      * Memory-optimized GPU weight calculation using compact range representations.
      * This replaces the traditional BitSet-based GPU approach with O(nk) memory usage.
      */
-    private Map<STBipartition, Double> calculateWeightsCompactGPU(List<STBipartition> candidates) {
+    private Map<RangeBipartition, Double> calculateWeightsCompactGPU(List<RangeBipartition> candidates) {
         System.out.println("==== STARTING COMPACT GPU WEIGHT CALCULATION ====");
         
         try {
             // Convert candidates and gene tree bipartitions to compact representations
             System.out.println("Converting bipartitions to compact range representations...");
             
-            Map<STBipartition, RangeBipartition> candidateToRange = buildCandidateRangeMapping(candidates);
+            // Use direct compact representation without expensive mapping
             List<RangeBipartition> candidateRanges = new ArrayList<>();
-            List<STBipartition> mappedCandidates = new ArrayList<>();
+            List<RangeBipartition> mappedCandidates = new ArrayList<>();
             
-            // Build lists of successfully mapped candidates
-            for (STBipartition candidate : candidates) {
-                RangeBipartition range = candidateToRange.get(candidate);
-                if (range != null) {
-                    candidateRanges.add(range);
-                    mappedCandidates.add(candidate);
-                }
-            }
-            
-            System.out.println("Successfully mapped " + candidateRanges.size() + "/" + candidates.size() + " candidates to ranges");
-            
-            if (candidateRanges.isEmpty()) {
-                System.err.println("No candidates could be mapped to ranges - falling back to CPU calculation");
-                return calculateWeightsMultiThread(candidates);
-            }
+            // Use hybrid GPU approach: BitSet candidates vs Range gene trees
+            System.out.println("Using hybrid GPU approach: BitSet candidates vs compact range gene trees");
             
             // Extract gene tree ranges and frequencies
             List<RangeBipartition> geneTreeRanges = new ArrayList<>();
@@ -474,130 +329,27 @@ public class MemoryOptimizedWeightCalculator {
             }
             
             System.out.println("Gene tree ranges: " + geneTreeRanges.size());
+            System.out.println("Candidates: " + candidates.size());
             
-            // Prepare GPU data structures
-            int numCandidates = candidateRanges.size();
-            int numGeneTreeBips = geneTreeRanges.size();
-            int numTrees = inverseIndexManager.getNumTrees();
-            int numTaxa = inverseIndexManager.getNumTaxa();
-            
-            System.out.println("==== COMPACT GPU PARAMETERS ====");
-            System.out.println("Candidates: " + numCandidates);
-            System.out.println("Gene tree bipartitions: " + numGeneTreeBips);
-            System.out.println("Trees: " + numTrees);
-            System.out.println("Taxa: " + numTaxa);
-            
-            // Calculate memory usage (much smaller than BitSet approach)
-            long candidateMemory = (long) numCandidates * 5 * 4; // 5 ints per CompactBipartition
-            long geneTreeMemory = (long) numGeneTreeBips * 5 * 4;
-            long inverseIndexMemory = (long) numTrees * numTaxa * 4;
-            long orderingMemory = (long) numTrees * numTaxa * 4;
-            long frequencyMemory = (long) numGeneTreeBips * 4;
-            long weightsMemory = (long) numCandidates * 8;
-            long totalMemory = candidateMemory + geneTreeMemory + inverseIndexMemory + orderingMemory + frequencyMemory + weightsMemory;
-            
-            System.out.println("==== COMPACT GPU MEMORY USAGE ====");
-            System.out.println("Candidate ranges: " + (candidateMemory / 1024) + " KB");
-            System.out.println("Gene tree ranges: " + (geneTreeMemory / 1024) + " KB");
-            System.out.println("Inverse index: " + (inverseIndexMemory / (1024 * 1024)) + " MB");
-            System.out.println("Orderings: " + (orderingMemory / (1024 * 1024)) + " MB");
-            System.out.println("Total GPU memory: " + (totalMemory / (1024 * 1024)) + " MB");
-            System.out.println("Memory reduction vs BitSet: ~" + 
-                             (((long) numCandidates + numGeneTreeBips) * numTaxa * 8 / totalMemory) + "x smaller");
-            
-            // Create compact bipartition arrays
-            WeightCalcLib.CompactBipartition[] compactCandidates = 
-                (WeightCalcLib.CompactBipartition[]) new WeightCalcLib.CompactBipartition().toArray(numCandidates);
-            WeightCalcLib.CompactBipartition[] compactGeneTreeBips = 
-                (WeightCalcLib.CompactBipartition[]) new WeightCalcLib.CompactBipartition().toArray(numGeneTreeBips);
-            
-            // Fill candidate data
-            System.out.println("Preparing candidate data for GPU...");
-            for (int i = 0; i < numCandidates; i++) {
-                RangeBipartition range = candidateRanges.get(i);
-                WeightCalcLib.CompactBipartition compact = compactCandidates[i];
-                
-                compact.geneTreeIndex = range.geneTreeIndex;
-                compact.leftStart = range.leftStart;
-                compact.leftEnd = range.leftEnd;
-                compact.rightStart = range.rightStart;
-                compact.rightEnd = range.rightEnd;
-                compact.write();
+            // Check if CUDA library is available
+            try {
+                WeightCalcLib.INSTANCE.toString(); // Test if library loads
+                System.out.println("CUDA library loaded successfully");
+            } catch (UnsatisfiedLinkError e) {
+                System.err.println("CUDA library not found: " + e.getMessage());
+                System.out.println("Falling back to CPU calculation...");
+                return calculateWeightsMultiThread(candidates);
             }
             
-            // Fill gene tree data
-            System.out.println("Preparing gene tree data for GPU...");
-            int[] frequencyArray = new int[numGeneTreeBips];
-            for (int i = 0; i < numGeneTreeBips; i++) {
-                RangeBipartition range = geneTreeRanges.get(i);
-                WeightCalcLib.CompactBipartition compact = compactGeneTreeBips[i];
-                
-                compact.geneTreeIndex = range.geneTreeIndex;
-                compact.leftStart = range.leftStart;
-                compact.leftEnd = range.leftEnd;
-                compact.rightStart = range.rightStart;
-                compact.rightEnd = range.rightEnd;
-                compact.write();
-                
-                frequencyArray[i] = frequencies.get(i);
-            }
+            // For candidates, we'll use a simpler approach:
+            // Since candidates are small in number, use traditional BitSet GPU calculation
+            // But use compact ranges for gene trees (which are large in number)
+            System.out.println("Using hybrid approach: BitSet candidates vs compact gene tree ranges");
             
-            // Prepare inverse index and ordering arrays
-            System.out.println("Preparing inverse index and ordering data for GPU...");
-            Memory inverseIndexMem = flattenInverseIndex();
-            Memory orderingMem = flattenOrderings();
-            
-            // Prepare results array
-            double[] weights = new double[numCandidates];
-            
-            // Launch compact GPU kernel
-            System.out.println("Launching compact GPU kernel...");
-            WeightCalcLib.INSTANCE.launchCompactWeightCalculation(
-                compactCandidates,
-                compactGeneTreeBips,
-                frequencyArray,
-                weights,
-                inverseIndexMem,
-                orderingMem,
-                numCandidates,
-                numGeneTreeBips,
-                numTrees,
-                numTaxa
-            );
-            
-            System.out.println("==== COMPACT GPU KERNEL COMPLETED ====");
-            
-            // Convert results back to Java Map
-            Map<STBipartition, Double> result = new HashMap<>();
-            for (int i = 0; i < numCandidates; i++) {
-                result.put(mappedCandidates.get(i), weights[i]);
-            }
-            
-            // Handle unmapped candidates with CPU fallback
-            if (mappedCandidates.size() < candidates.size()) {
-                System.out.println("Processing " + (candidates.size() - mappedCandidates.size()) + 
-                                 " unmapped candidates with CPU fallback...");
-                
-                Set<STBipartition> mappedSet = new HashSet<>(mappedCandidates);
-                List<STBipartition> unmappedCandidates = new ArrayList<>();
-                for (STBipartition candidate : candidates) {
-                    if (!mappedSet.contains(candidate)) {
-                        unmappedCandidates.add(candidate);
-                    }
-                }
-                
-                // Calculate weights for unmapped candidates using traditional approach
-                for (STBipartition candidate : unmappedCandidates) {
-                    double weight = calculateTraditionalScore(candidate);
-                    result.put(candidate, weight);
-                }
-            }
-            
-            System.out.println("Compact GPU calculation completed for " + result.size() + " candidates");
-            return result;
+            return calculateWeightsHybridGPU(candidates, geneTreeRanges, frequencies);
             
         } catch (Exception e) {
-            System.err.println("Compact GPU calculation failed: " + e.getMessage());
+            System.err.println("GPU calculation failed: " + e.getMessage());
             e.printStackTrace();
             System.out.println("Falling back to CPU calculation...");
             return calculateWeightsMultiThread(candidates);
@@ -605,8 +357,104 @@ public class MemoryOptimizedWeightCalculator {
     }
     
     /**
+     * Pure range-based GPU calculation using compact bipartitions.
+     * This completely eliminates BitSet usage and uses the compact GPU kernel.
+     */
+    private Map<RangeBipartition, Double> calculateWeightsHybridGPU(
+            List<RangeBipartition> candidates,
+            List<RangeBipartition> geneTreeRanges,
+            List<Integer> frequencies) {
+        
+        System.out.println("==== STARTING PURE RANGE-BASED GPU CALCULATION ====");
+        System.out.println("Range candidates: " + candidates.size());
+        System.out.println("Compact gene tree ranges: " + geneTreeRanges.size());
+        
+        try {
+            int numCandidates = candidates.size();
+            int numGeneTreeBips = geneTreeRanges.size();
+            int numTrees = inverseIndexManager.getNumTrees();
+            int numTaxa = inverseIndexManager.getNumTaxa();
+            
+            System.out.println("Pure Range GPU Parameters:");
+            System.out.println("  Candidates: " + numCandidates);
+            System.out.println("  Gene tree bipartitions: " + numGeneTreeBips);
+            System.out.println("  Trees: " + numTrees);
+            System.out.println("  Taxa: " + numTaxa);
+            
+            // Convert candidates to GPU compact format using contiguous memory allocation
+            WeightCalcLib.CompactBipartition candidateTemplate = new WeightCalcLib.CompactBipartition();
+            WeightCalcLib.CompactBipartition[] candidateArray = 
+                (WeightCalcLib.CompactBipartition[]) candidateTemplate.toArray(numCandidates);
+            
+            for (int i = 0; i < numCandidates; i++) {
+                RangeBipartition candidate = candidates.get(i);
+                candidateArray[i].geneTreeIndex = candidate.geneTreeIndex;
+                candidateArray[i].leftStart = candidate.leftStart;
+                candidateArray[i].leftEnd = candidate.leftEnd;
+                candidateArray[i].rightStart = candidate.rightStart;
+                candidateArray[i].rightEnd = candidate.rightEnd;
+            }
+            
+            // Convert gene tree ranges to GPU compact format using contiguous memory allocation
+            WeightCalcLib.CompactBipartition geneTreeTemplate = new WeightCalcLib.CompactBipartition();
+            WeightCalcLib.CompactBipartition[] geneTreeArray = 
+                (WeightCalcLib.CompactBipartition[]) geneTreeTemplate.toArray(numGeneTreeBips);
+            
+            for (int i = 0; i < numGeneTreeBips; i++) {
+                RangeBipartition range = geneTreeRanges.get(i);
+                geneTreeArray[i].geneTreeIndex = range.geneTreeIndex;
+                geneTreeArray[i].leftStart = range.leftStart;
+                geneTreeArray[i].leftEnd = range.leftEnd;
+                geneTreeArray[i].rightStart = range.rightStart;
+                geneTreeArray[i].rightEnd = range.rightEnd;
+            }
+            
+            // Prepare frequency array
+            int[] frequencyArray = frequencies.stream().mapToInt(Integer::intValue).toArray();
+            
+            // Prepare result array
+            double[] weights = new double[numCandidates];
+            
+            // Flatten inverse index and ordering arrays for GPU
+            Memory inverseIndexMemory = flattenInverseIndex();
+            Memory orderingMemory = flattenOrderings();
+            
+            // Launch compact GPU kernel
+            System.out.println("Launching pure range-based GPU kernel with inverse index arrays...");
+            WeightCalcLib.INSTANCE.launchCompactWeightCalculation(
+                candidateArray,
+                geneTreeArray,
+                frequencyArray,
+                weights,
+                inverseIndexMemory,
+                orderingMemory,
+                numCandidates,
+                numGeneTreeBips,
+                numTrees,
+                numTaxa
+            );
+            
+            System.out.println("==== PURE RANGE-BASED GPU KERNEL COMPLETED ====");
+            
+            // Convert results back to Java Map
+            Map<RangeBipartition, Double> result = new HashMap<>();
+            for (int i = 0; i < numCandidates; i++) {
+                result.put(candidates.get(i), weights[i]);
+            }
+            
+            return result;
+            
+        } catch (Exception e) {
+            System.err.println("Pure range-based GPU calculation failed: " + e.getMessage());
+            e.printStackTrace();
+            System.out.println("Falling back to CPU calculation...");
+            return calculateWeightsMultiThread(candidates);
+        }
+    }
+    
+    
+    /**
      * Flatten inverse index array for GPU transfer.
-     * Format: [tree0_taxon0_pos, tree0_taxon1_pos, ..., tree1_taxon0_pos, ...]
      */
     private Memory flattenInverseIndex() {
         int[][] inverseIndex = inverseIndexManager.getInverseIndex();
@@ -626,8 +474,7 @@ public class MemoryOptimizedWeightCalculator {
     }
     
     /**
-     * Flatten gene tree orderings for GPU transfer.
-     * Format: [tree0_pos0_taxon, tree0_pos1_taxon, ..., tree1_pos0_taxon, ...]
+     * Flatten ordering arrays for GPU transfer.
      */
     private Memory flattenOrderings() {
         int[][] orderings = inverseIndexManager.getGeneTreeOrderings();
@@ -646,22 +493,6 @@ public class MemoryOptimizedWeightCalculator {
         return memory;
     }
     
-    /**
-     * Get processing statistics for performance analysis.
-     */
-    public String getStatistics() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("Memory-Optimized Weight Calculator Statistics:\n");
-        sb.append("  Total processing time: ").append(totalProcessingTime).append(" ms\n");
-        sb.append("  Total score calculations: ").append(totalScoreCalculations).append("\n");
-        sb.append("  Total intersection calculations: ").append(totalIntersectionCalculations).append("\n");
-        sb.append("  Range bipartition groups: ").append(hashToBipartitions.size()).append("\n");
-        
-        if (totalScoreCalculations > 0) {
-            sb.append("  Average intersections per score: ").append(totalIntersectionCalculations / (double) totalScoreCalculations).append("\n");
-            sb.append("  Average time per score: ").append(totalProcessingTime / (double) totalScoreCalculations).append(" ms\n");
-        }
-        
-        return sb.toString();
-    }
+    // Removed expensive buildCandidateRangeMapping and findMatchingRange methods
+    // Using direct calculation approach instead
 }

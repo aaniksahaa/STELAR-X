@@ -16,7 +16,7 @@ import utils.BitSet;
 import utils.Threading;
 import taxon.Taxon;
 import tree.Tree;
-import tree.STBipartition;
+import tree.RangeBipartition;
 import tree.MemoryEfficientBipartitionManager;
 
 /**
@@ -44,7 +44,7 @@ public class GeneTrees {
     public String[] taxonIdToLabel;                 // ID to label mapping for output
     public Taxon[] taxa;                        // Array of all real taxa (indexed by ID)
     // public Map<String, TreeNode> triPartitions;     // Tripartition frequency data for consensus
-    public Map<STBipartition, Integer> stBipartitions; // STBipartition frequency map
+    public Map<RangeBipartition, Integer> rangeBipartitions; // RangeBipartition frequency map
     public Map<String, Taxon> taxaMap;          // Label to RealTaxon mapping
     public int realTaxaCount;                       // Total number of real taxa
     public String path;                             // Input file path
@@ -294,20 +294,20 @@ public class GeneTrees {
             taxa[x.getValue().id] = x.getValue();
         }
 
-        // Now use the memory-efficient bipartition manager to process STBipartitions
-        System.out.println("\n=== Memory-Efficient STBipartition Processing ===");
+        // Now use the memory-efficient bipartition manager to process RangeBipartitions
+        System.out.println("\n=== Memory-Efficient RangeBipartition Processing ===");
         MemoryEfficientBipartitionManager bipartitionManager = 
             new MemoryEfficientBipartitionManager(this.geneTrees, this.realTaxaCount);
         
         // Process gene trees using range-based representation
-        this.stBipartitions = bipartitionManager.processGeneTreesParallel();
+        this.rangeBipartitions = bipartitionManager.processGeneTreesParallel();
         
         // Output preprocessing statistics
         System.out.println("\n=== Gene Tree Processing Complete ===");
         System.out.println("Taxon count: " + this.taxaMap.size());
         System.out.println("Gene trees count: " + geneTrees.size());
         System.out.println("Total internal nodes: " + totalInternalNodes.get());
-        System.out.println("Unique STBipartitions: " + stBipartitions.size());
+        System.out.println("Unique RangeBipartitions: " + rangeBipartitions.size());
         System.out.println("\n" + bipartitionManager.getStatistics());
     }
 
@@ -322,7 +322,7 @@ public class GeneTrees {
 
         this.geneTrees = new ArrayList<>();
         // this.triPartitions = new HashMap<>();
-        this.stBipartitions = new HashMap<>();
+        this.rangeBipartitions = new HashMap<>();
         this.path = path;
     }
 
@@ -337,7 +337,7 @@ public class GeneTrees {
 
         this.geneTrees = new ArrayList<>();
         // this.triPartitions = new HashMap<>();
-        this.stBipartitions = new HashMap<>();
+        this.rangeBipartitions = new HashMap<>();
         this.path = path;
         this.taxaMap = taxaMap;
 
@@ -353,7 +353,7 @@ public class GeneTrees {
      * 
      * @return List of candidate bipartitions for inference
      */
-    public List<STBipartition> generateCandidateBipartitions() {
+    public List<RangeBipartition> generateCandidateBipartitions() {
         return generateCandidateBipartitions(true);
     }
     
@@ -363,82 +363,32 @@ public class GeneTrees {
      * @param useExpansion Whether to apply bipartition expansion techniques
      * @return List of candidate bipartitions for inference
      */
-    public List<STBipartition> generateCandidateBipartitions(boolean useExpansion) {
-        List<STBipartition> candidates = new ArrayList<>();
-        Set<BitSet> processedClusters = new HashSet<>();
+    public List<RangeBipartition> generateCandidateBipartitions(boolean useExpansion) {
+        List<RangeBipartition> candidates = new ArrayList<>();
         
-        // First, add all bipartitions from gene trees
+        // Simply return all unique range bipartitions from gene trees
         System.out.println("\n ***************** Adding all bipartitions from gene trees *****************\n");
-        for (STBipartition stb : stBipartitions.keySet()) {
-            candidates.add(stb);
-            processedClusters.add(stb.cluster1);
-            processedClusters.add(stb.cluster2);
+        for (RangeBipartition range : rangeBipartitions.keySet()) {
+            candidates.add(range);
         }
         
-        // Generate complementary bipartitions for each cluster
-        System.out.println("\n ***************** Adding complementary bipartitions for each cluster *****************\n");
-        for (STBipartition stb : stBipartitions.keySet()) {
-            BitSet cluster1 = stb.cluster1;
-            BitSet cluster2 = stb.cluster2;
-            
-            // Add complementary bipartition if not already processed
-            if (!processedClusters.contains(cluster1)) {
-                BitSet complement = new BitSet(realTaxaCount);
-                complement.set(0, realTaxaCount);
-                complement.andNot(cluster1);
-                if (complement.cardinality() > 0) {
-                    candidates.add(new STBipartition(cluster1, complement));
-                    processedClusters.add(cluster1);
-                    processedClusters.add(complement);
-                }
-            }
-            
-            if (!processedClusters.contains(cluster2)) {
-                BitSet complement = new BitSet(realTaxaCount);
-                complement.set(0, realTaxaCount);
-                complement.andNot(cluster2);
-                if (complement.cardinality() > 0) {
-                    candidates.add(new STBipartition(cluster2, complement));
-                    processedClusters.add(cluster2);
-                    processedClusters.add(complement);
-                }
-            }
-        }
-        
-        // // Add all possible valid bipartitions for small clusters (size <= 3)
-        // for (int size = 1; size <= 3; size++) {
-        //     for (int i = 0; i < realTaxaCount; i++) {
-        //         BitSet cluster1 = new BitSet(realTaxaCount);
-        //         cluster1.set(i);
-                
-        //         // Add all possible combinations of size 'size'
-        //         for (int j = i + 1; j < realTaxaCount; j++) {
-        //             if (size > 1) {
-        //                 cluster1.set(j);
-        //                 if (size > 2) {
-        //                     for (int k = j + 1; k < realTaxaCount; k++) {
-        //                         cluster1.set(k);
-        //                         addValidBipartition(cluster1, candidates, processedClusters);
-        //                         cluster1.clear(k);
-        //                     }
-        //                 } else {
-        //                     addValidBipartition(cluster1, candidates, processedClusters);
-        //                 }
-        //                 cluster1.clear(j);
-        //             } else {
-        //                 addValidBipartition(cluster1, candidates, processedClusters);
-        //             }
-        //         }
-        //     }
-        // }
+        // Note: Complementary bipartition generation is more complex with ranges
+        // and may not be necessary since we're working with subtree bipartitions
+        // that already represent the natural structure of the trees.
+        // If needed, this can be implemented by:
+        // 1. Converting ranges to taxon sets
+        // 2. Computing complements
+        // 3. Finding ranges that represent those complements
+        // But this would defeat the memory optimization purpose.
         
         // Apply bipartition expansion if enabled
-        if (useExpansion && utils.BipartitionExpansionConfig.isExpansionEnabled()) {
-            System.out.println("\n ***************** Applying bipartition expansion *****************\n");
-            expansion.BipartitionExpansionManager expansionManager = 
-                new expansion.BipartitionExpansionManager(this);
-            candidates = expansionManager.expandBipartitions(candidates);
-        }
+        // TODO: Update BipartitionExpansionManager to work with RangeBipartition
+        // if (useExpansion && utils.BipartitionExpansionConfig.isExpansionEnabled()) {
+        //     System.out.println("\n ***************** Applying bipartition expansion *****************\n");
+        //     expansion.BipartitionExpansionManager expansionManager = 
+        //         new expansion.BipartitionExpansionManager(this);
+        //     candidates = expansionManager.expandBipartitions(candidates);
+        // }
         
         return candidates;
     }

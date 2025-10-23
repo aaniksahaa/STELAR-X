@@ -3,7 +3,6 @@ package core;
 import java.util.*;
 import preprocessing.GeneTrees;
 import tree.*;
-import utils.BitSet;
 
 /**
  * Memory-optimized inference DP that uses cluster hashes instead of BitSet keys.
@@ -19,11 +18,11 @@ import utils.BitSet;
 public class MemoryOptimizedInferenceDP {
     
     private final GeneTrees geneTrees;
-    private final List<STBipartition> candidateSTBips;
-    private final Map<ClusterHashPair, List<STBipartition>> clusterHashToSTBips;
-    private Map<STBipartition, Double> stbipWeights;
+    private final List<RangeBipartition> candidateRangeBips;
+    private final Map<ClusterHashPair, List<RangeBipartition>> clusterHashToRangeBips;
+    private Map<RangeBipartition, Double> rangeBipWeights;
     private final Map<ClusterHashPair, Double> dpMemo;
-    private final Map<ClusterHashPair, STBipartition> dpChoice;
+    private final Map<ClusterHashPair, RangeBipartition> dpChoice;
     private final ClusterHashManager clusterHashManager;
     private final MemoryEfficientBipartitionManager bipartitionManager;
     
@@ -33,14 +32,14 @@ public class MemoryOptimizedInferenceDP {
     private long clusterValidations = 0;
     private long totalProcessingTime = 0;
     
-    public MemoryOptimizedInferenceDP(GeneTrees geneTrees, List<STBipartition> candidateSTBips) {
+    public MemoryOptimizedInferenceDP(GeneTrees geneTrees, List<RangeBipartition> candidateRangeBips) {
         System.out.println("==== INITIALIZING MEMORY-OPTIMIZED INFERENCE DP ====");
-        System.out.println("Number of candidate bipartitions: " + candidateSTBips.size());
+        System.out.println("Number of candidate bipartitions: " + candidateRangeBips.size());
         System.out.println("Real taxa count: " + geneTrees.realTaxaCount);
         
         this.geneTrees = geneTrees;
-        this.candidateSTBips = candidateSTBips;
-        this.clusterHashToSTBips = new HashMap<>();
+        this.candidateRangeBips = candidateRangeBips;
+        this.clusterHashToRangeBips = new HashMap<>();
         this.dpMemo = new HashMap<>();
         this.dpChoice = new HashMap<>();
         
@@ -68,7 +67,7 @@ public class MemoryOptimizedInferenceDP {
         calculateWeights();
         
         System.out.println("==== MEMORY-OPTIMIZED INFERENCE DP READY ====");
-        System.out.println("Cluster hash groups: " + clusterHashToSTBips.size());
+        System.out.println("Cluster hash groups: " + clusterHashToRangeBips.size());
         System.out.println("Cached cluster hashes: " + clusterHashManager.getStatistics().split("\\n")[4]);
     }
     
@@ -82,27 +81,25 @@ public class MemoryOptimizedInferenceDP {
         int processedCandidates = 0;
         int uniqueClusters = 0;
         
-        for (STBipartition stbip : candidateSTBips) {
-            // Compute union cluster hash (left ∪ right)
-            BitSet union = (BitSet) stbip.cluster1.clone();
-            union.or(stbip.cluster2);
-            
-            ClusterHashPair unionHash = clusterHashManager.getClusterHash(union);
+        for (RangeBipartition rangeBip : candidateRangeBips) {
+            // Compute union cluster hash (left ∪ right) for range bipartition
+            // For a RangeBipartition, the union is the entire range from leftStart to rightEnd
+            ClusterHashPair unionHash = clusterHashManager.getUnionClusterHash(rangeBip);
             
             // Add to hash-based mapping
-            List<STBipartition> candidates = clusterHashToSTBips.get(unionHash);
+            List<RangeBipartition> candidates = clusterHashToRangeBips.get(unionHash);
             if (candidates == null) {
                 candidates = new ArrayList<>();
-                clusterHashToSTBips.put(unionHash, candidates);
+                clusterHashToRangeBips.put(unionHash, candidates);
                 uniqueClusters++;
             }
-            candidates.add(stbip);
+            candidates.add(rangeBip);
             
             processedCandidates++;
             
             // Log progress for large datasets
-            if (processedCandidates % 1000 == 0 || processedCandidates == candidateSTBips.size()) {
-                System.out.println("Processed " + processedCandidates + "/" + candidateSTBips.size() + 
+            if (processedCandidates % 1000 == 0 || processedCandidates == candidateRangeBips.size()) {
+                System.out.println("Processed " + processedCandidates + "/" + candidateRangeBips.size() + 
                                  " candidates, unique clusters: " + uniqueClusters);
             }
         }
@@ -110,7 +107,7 @@ public class MemoryOptimizedInferenceDP {
         System.out.println("Hash-based preprocessing completed");
         System.out.println("Created mappings for " + uniqueClusters + " unique cluster hashes");
         System.out.println("Average candidates per cluster: " + 
-                         (uniqueClusters > 0 ? candidateSTBips.size() / (double) uniqueClusters : 0));
+                         (uniqueClusters > 0 ? candidateRangeBips.size() / (double) uniqueClusters : 0));
     }
     
     /**
@@ -118,14 +115,14 @@ public class MemoryOptimizedInferenceDP {
      */
     private void calculateWeights() {
         MemoryOptimizedWeightCalculator calculator = new MemoryOptimizedWeightCalculator(geneTrees);
-        stbipWeights = calculator.calculateWeights(candidateSTBips);
+        rangeBipWeights = calculator.calculateWeights(candidateRangeBips);
         
-        System.out.println("Weight calculation completed for " + stbipWeights.size() + " bipartitions");
+        System.out.println("Weight calculation completed for " + rangeBipWeights.size() + " bipartitions");
         
         // Print weight statistics
-        double minWeight = stbipWeights.values().stream().mapToDouble(Double::doubleValue).min().orElse(0.0);
-        double maxWeight = stbipWeights.values().stream().mapToDouble(Double::doubleValue).max().orElse(0.0);
-        double avgWeight = stbipWeights.values().stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        double minWeight = rangeBipWeights.values().stream().mapToDouble(Double::doubleValue).min().orElse(0.0);
+        double maxWeight = rangeBipWeights.values().stream().mapToDouble(Double::doubleValue).max().orElse(0.0);
+        double avgWeight = rangeBipWeights.values().stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
         
         System.out.println("Weight statistics: min=" + minWeight + ", max=" + maxWeight + ", avg=" + avgWeight);
     }
@@ -138,13 +135,8 @@ public class MemoryOptimizedInferenceDP {
         
         long startTime = System.currentTimeMillis();
         
-        // Create hash for all taxa cluster
-        BitSet allTaxa = new BitSet(geneTrees.realTaxaCount);
-        for (int i = 0; i < geneTrees.realTaxaCount; i++) {
-            allTaxa.set(i);
-        }
-        
-        ClusterHashPair allTaxaHash = clusterHashManager.getClusterHash(allTaxa);
+        // Create hash for all taxa cluster (entire range in first gene tree)
+        ClusterHashPair allTaxaHash = clusterHashManager.getAllTaxaClusterHash();
         System.out.println("All taxa cluster hash: " + allTaxaHash.toDebugString());
         System.out.println("All taxa cluster size: " + clusterHashManager.getClusterSize(allTaxaHash));
         
@@ -196,32 +188,32 @@ public class MemoryOptimizedInferenceDP {
         }
         
         double maxScore = Double.NEGATIVE_INFINITY;
-        STBipartition bestChoice = null;
+        RangeBipartition bestChoice = null;
         
         // Get candidate bipartitions for this cluster
-        List<STBipartition> candidates = clusterHashToSTBips.get(clusterHash);
+        List<RangeBipartition> candidates = clusterHashToRangeBips.get(clusterHash);
         if (candidates != null) {
-            System.out.println("Processing " + candidates.size() + " candidates for cluster " + 
-                             clusterHash.toDebugString() + " (size " + taxaCount + ")");
+            // System.out.println("Processing " + candidates.size() + " candidates for cluster " + 
+            //                 clusterHash.toDebugString() + " (size " + taxaCount + ")");
             
-            for (STBipartition stbip : candidates) {
-                if (isValidPartition(stbip, clusterHash)) {
+            for (RangeBipartition rangeBip : candidates) {
+                if (isValidPartition(rangeBip, clusterHash)) {
                     clusterValidations++;
                     
                     // Get left and right cluster hashes
-                    ClusterHashPair leftHash = clusterHashManager.getClusterHash(stbip.cluster1);
-                    ClusterHashPair rightHash = clusterHashManager.getClusterHash(stbip.cluster2);
+                    ClusterHashPair leftHash = clusterHashManager.getLeftClusterHash(rangeBip);
+                    ClusterHashPair rightHash = clusterHashManager.getRightClusterHash(rangeBip);
                     
                     // Recursive DP calls
                     double leftScore = dp(leftHash);
                     double rightScore = dp(rightHash);
-                    double stbipScore = stbipWeights.getOrDefault(stbip, 0.0);
+                    double rangeBipScore = rangeBipWeights.getOrDefault(rangeBip, 0.0);
                     
-                    double totalScore = leftScore + rightScore + stbipScore;
+                    double totalScore = leftScore + rightScore + rangeBipScore;
                     
                     if (totalScore > maxScore) {
                         maxScore = totalScore;
-                        bestChoice = stbip;
+                        bestChoice = rangeBip;
                     }
                 }
             }
@@ -233,8 +225,8 @@ public class MemoryOptimizedInferenceDP {
             maxScore = 0.0;
             System.out.println("No valid bipartition found for cluster " + clusterHash.toDebugString());
         } else {
-            System.out.println("Best choice for cluster " + clusterHash.toDebugString() + 
-                             ": score=" + maxScore + ", bipartition=" + bestChoice);
+            // System.out.println("Best choice for cluster " + clusterHash.toDebugString() + 
+            //                 ": score=" + maxScore + ", bipartition=" + bestChoice);
         }
         
         // Memoize result
@@ -245,15 +237,12 @@ public class MemoryOptimizedInferenceDP {
     }
     
     /**
-     * Validate that a bipartition is valid for the given cluster.
-     * Uses hash-based comparison with fallback to expensive verification.
+     * Validate that a range bipartition is valid for the given cluster.
+     * Uses hash-based comparison for efficiency.
      */
-    private boolean isValidPartition(STBipartition stbip, ClusterHashPair clusterHash) {
-        // Verify that stbip.cluster1 ∪ stbip.cluster2 == cluster represented by clusterHash
-        BitSet union = (BitSet) stbip.cluster1.clone();
-        union.or(stbip.cluster2);
-        
-        ClusterHashPair unionHash = clusterHashManager.getClusterHash(union);
+    private boolean isValidPartition(RangeBipartition rangeBip, ClusterHashPair clusterHash) {
+        // Verify that the union of left and right ranges equals the cluster represented by clusterHash
+        ClusterHashPair unionHash = clusterHashManager.getUnionClusterHash(rangeBip);
         
         // Use cluster hash manager's equality check (with collision handling)
         return clusterHashManager.clustersEqual(unionHash, clusterHash);
@@ -266,12 +255,8 @@ public class MemoryOptimizedInferenceDP {
     public Tree reconstructTree() {
         System.out.println("==== RECONSTRUCTING OPTIMAL TREE ====");
         
-        // Create hash for all taxa
-        BitSet allTaxa = new BitSet(geneTrees.realTaxaCount);
-        for (int i = 0; i < geneTrees.realTaxaCount; i++) {
-            allTaxa.set(i);
-        }
-        ClusterHashPair allTaxaHash = clusterHashManager.getClusterHash(allTaxa);
+        // Create hash for all taxa cluster
+        ClusterHashPair allTaxaHash = clusterHashManager.getAllTaxaClusterHash();
         
         Tree tree = new Tree();
         tree.taxaMap = geneTrees.taxaMap;
@@ -315,7 +300,7 @@ public class MemoryOptimizedInferenceDP {
             }
         }
         
-        STBipartition choice = dpChoice.get(clusterHash);
+        RangeBipartition choice = dpChoice.get(clusterHash);
         if (choice == null) {
             if (taxaCount == 2) {
                 // Two taxa - create binary internal node with two leaves
@@ -336,8 +321,8 @@ public class MemoryOptimizedInferenceDP {
         }
         
         // Recursive construction
-        ClusterHashPair leftHash = clusterHashManager.getClusterHash(choice.cluster1);
-        ClusterHashPair rightHash = clusterHashManager.getClusterHash(choice.cluster2);
+        ClusterHashPair leftHash = clusterHashManager.getLeftClusterHash(choice);
+        ClusterHashPair rightHash = clusterHashManager.getRightClusterHash(choice);
         
         TreeNode leftChild = buildTreeNode(leftHash, tree);
         TreeNode rightChild = buildTreeNode(rightHash, tree);
@@ -386,7 +371,7 @@ public class MemoryOptimizedInferenceDP {
             dpCalls > 0 ? String.format("%.2f%%", 100.0 * memoHits / dpCalls) : "0%").append(")\n");
         sb.append("  Cluster validations: ").append(clusterValidations).append("\n");
         sb.append("  Memoized clusters: ").append(dpMemo.size()).append("\n");
-        sb.append("  Cluster hash groups: ").append(clusterHashToSTBips.size()).append("\n");
+        sb.append("  Cluster hash groups: ").append(clusterHashToRangeBips.size()).append("\n");
         
         if (dpCalls > 0) {
             sb.append("  Average time per DP call: ").append(totalProcessingTime / (double) dpCalls).append(" ms\n");

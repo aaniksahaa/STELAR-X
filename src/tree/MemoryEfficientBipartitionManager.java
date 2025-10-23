@@ -5,7 +5,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import utils.BitSet;
 import utils.Threading;
 
 /**
@@ -39,7 +38,7 @@ public class MemoryEfficientBipartitionManager {
     
     // Processing results
     private final Map<Object, List<RangeBipartition>> hashToBipartitions;
-    private final Map<STBipartition, Integer> uniqueSTBipartitions;
+    private final Map<RangeBipartition, Integer> uniqueRangeBipartitions;
     private final int realTaxaCount;
     
     public MemoryEfficientBipartitionManager(List<Tree> geneTrees, int realTaxaCount) {
@@ -49,7 +48,7 @@ public class MemoryEfficientBipartitionManager {
         this.prefixSums = new long[geneTrees.size()][];
         this.prefixXORs = new long[geneTrees.size()][];
         this.hashToBipartitions = new ConcurrentHashMap<>();
-        this.uniqueSTBipartitions = new ConcurrentHashMap<>();
+        this.uniqueRangeBipartitions = new ConcurrentHashMap<>();
         
         initializeGeneTreeOrderings();
         calculatePrefixArrays();
@@ -142,7 +141,7 @@ public class MemoryEfficientBipartitionManager {
     /**
      * Process all gene trees to extract range bipartitions in parallel.
      */
-    public Map<STBipartition, Integer> processGeneTreesParallel() {
+    public Map<RangeBipartition, Integer> processGeneTreesParallel() {
         System.out.println("Processing gene trees with memory-efficient range bipartitions...");
         
         int numThreads = Runtime.getRuntime().availableProcessors();
@@ -216,10 +215,10 @@ public class MemoryEfficientBipartitionManager {
         System.out.println("Processed " + processedTrees.get() + " gene trees");
         System.out.println("Found " + hashToBipartitions.size() + " unique hash groups");
         
-        // Convert range bipartitions to STBipartitions
-        convertToSTBipartitions();
+        // Convert range bipartitions to frequency map
+        convertToFrequencyMap();
         
-        return uniqueSTBipartitions;
+        return uniqueRangeBipartitions;
     }
     
     /**
@@ -295,11 +294,11 @@ public class MemoryEfficientBipartitionManager {
     }
     
     /**
-     * Convert range bipartitions to STBipartitions only for unique ones.
+     * Convert range bipartitions to frequency map for unique ones.
      * Uses expensive equality checks if enabled, otherwise trusts hash function uniqueness.
      */
-    private void convertToSTBipartitions() {
-        System.out.println("Converting unique range bipartitions to STBipartitions...");
+    private void convertToFrequencyMap() {
+        System.out.println("Converting unique range bipartitions to frequency map...");
         System.out.println("Expensive equality checks: " + (ENABLE_EXPENSIVE_EQUALITY_CHECKS ? "ENABLED" : "DISABLED (trusting hash)"));
         
         int totalRanges = 0;
@@ -333,11 +332,11 @@ public class MemoryEfficientBipartitionManager {
                     }
                 }
                 
-                // Convert unique ranges to STBipartitions
+                // Add unique ranges to frequency map
                 for (Map.Entry<RangeBipartition, Integer> rangeEntry : actuallyUniqueRanges.entrySet()) {
-                    STBipartition stb = convertRangeToSTBipartition(rangeEntry.getKey());
-                    if (stb != null) {
-                        uniqueSTBipartitions.merge(stb, rangeEntry.getValue(), Integer::sum);
+                    RangeBipartition range = rangeEntry.getKey();
+                    if (range != null) {
+                        uniqueRangeBipartitions.merge(range, rangeEntry.getValue(), Integer::sum);
                         uniqueRanges++;
                     }
                 }
@@ -354,9 +353,8 @@ public class MemoryEfficientBipartitionManager {
                 RangeBipartition representative = ranges.get(0);
                 int totalCount = ranges.size(); // All ranges in this hash group are considered identical
                 
-                STBipartition stb = convertRangeToSTBipartition(representative);
-                if (stb != null) {
-                    uniqueSTBipartitions.merge(stb, totalCount, Integer::sum);
+                if (representative != null) {
+                    uniqueRangeBipartitions.merge(representative, totalCount, Integer::sum);
                     uniqueRanges++;
                 }
             }
@@ -364,9 +362,9 @@ public class MemoryEfficientBipartitionManager {
         
         System.out.println("Memory optimization results:");
         System.out.println("  Total range bipartitions processed: " + totalRanges);
-        System.out.println("  Unique STBipartitions created: " + uniqueRanges);
+        System.out.println("  Unique RangeBipartitions created: " + uniqueRanges);
         System.out.println("  Memory reduction factor: " + ((double) totalRanges / Math.max(1, uniqueRanges)));
-        System.out.println("  Final unique STBipartitions: " + uniqueSTBipartitions.size());
+        System.out.println("  Final unique RangeBipartitions: " + uniqueRangeBipartitions.size());
     }
     
     /**
@@ -438,47 +436,6 @@ public class MemoryEfficientBipartitionManager {
         return taxonSet;
     }
     
-    /**
-     * Convert a range bipartition to an STBipartition.
-     */
-    private STBipartition convertRangeToSTBipartition(RangeBipartition range) {
-        Set<Integer> leftSet = getLeftTaxonSetForRange(range);
-        Set<Integer> rightSet = getRightTaxonSetForRange(range);
-        
-        if (leftSet.isEmpty() || rightSet.isEmpty()) {
-            return null; // Invalid bipartition
-        }
-        
-        // Verify that left and right sets are disjoint and cover all taxa in this subtree
-        Set<Integer> union = new HashSet<>(leftSet);
-        union.addAll(rightSet);
-        Set<Integer> intersection = new HashSet<>(leftSet);
-        intersection.retainAll(rightSet);
-        
-        if (!intersection.isEmpty()) {
-            return null; // Overlapping clusters - invalid bipartition
-        }
-        
-        // Create BitSets
-        BitSet cluster1 = new BitSet(realTaxaCount);
-        BitSet cluster2 = new BitSet(realTaxaCount);
-        
-        // Set cluster1 (left cluster)
-        for (int taxonId : leftSet) {
-            cluster1.set(taxonId);
-        }
-        
-        // Set cluster2 (right cluster)  
-        for (int taxonId : rightSet) {
-            cluster2.set(taxonId);
-        }
-        
-        if (cluster1.cardinality() == 0 || cluster2.cardinality() == 0) {
-            return null; // Invalid bipartition
-        }
-        
-        return new STBipartition(cluster1, cluster2);
-    }
     
     /**
      * Get processing statistics.
@@ -490,7 +447,7 @@ public class MemoryEfficientBipartitionManager {
         sb.append("  Hash function: ").append(DEFAULT_HASH_FUNCTION.getName()).append(" (using hashed taxon IDs)\n");
         sb.append("  Equality checking mode: ").append(ENABLE_EXPENSIVE_EQUALITY_CHECKS ? "EXPENSIVE" : "FAST (trust hash)").append("\n");
         sb.append("  Unique hash groups: ").append(hashToBipartitions.size()).append("\n");
-        sb.append("  Final unique STBipartitions: ").append(uniqueSTBipartitions.size()).append("\n");
+        sb.append("  Final unique RangeBipartitions: ").append(uniqueRangeBipartitions.size()).append("\n");
         
         int totalRanges = hashToBipartitions.values().stream()
                          .mapToInt(List::size)
@@ -498,7 +455,7 @@ public class MemoryEfficientBipartitionManager {
         
         sb.append("  Total range bipartitions: ").append(totalRanges).append("\n");
         sb.append("  Memory reduction factor: ").append(String.format("%.2f", 
-            (double) totalRanges / Math.max(1, uniqueSTBipartitions.size()))).append("x\n");
+            (double) totalRanges / Math.max(1, uniqueRangeBipartitions.size()))).append("x\n");
         
         return sb.toString();
     }

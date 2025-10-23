@@ -13,7 +13,7 @@ import com.sun.jna.Structure;
 import com.sun.jna.Memory;
 
 import preprocessing.GeneTrees;
-import tree.STBipartition;
+import tree.RangeBipartition;
 import utils.BitSet;
 import utils.Config;
 import utils.Threading;
@@ -91,46 +91,15 @@ public class WeightCalculator {
         this.geneTrees = geneTrees;
     }
     
-    private double calculateScore(STBipartition stb1, STBipartition stb2) {
-        // First configuration: (A|B) with (X|Y)
-        BitSet aIntersectX = (BitSet) stb1.cluster1.clone();
-        aIntersectX.and(stb2.cluster1);
-        int p1 = aIntersectX.cardinality();
-        
-        BitSet bIntersectY = (BitSet) stb1.cluster2.clone();
-        bIntersectY.and(stb2.cluster2);
-        int p2 = bIntersectY.cardinality();
-        
-        double score1 = 0;
-        if (p1 + p2 >= 2) {
-            score1 = p1 * p2 * (p1 + p2 - 2) / 2.0;
-        }
-        
-        // Second configuration: (A|B) with (Y|X) - cross configuration
-        BitSet aIntersectY = (BitSet) stb1.cluster1.clone();
-        aIntersectY.and(stb2.cluster2);
-        p1 = aIntersectY.cardinality();
-        
-        BitSet bIntersectX = (BitSet) stb1.cluster2.clone();
-        bIntersectX.and(stb2.cluster1);
-        p2 = bIntersectX.cardinality();
-        
-        double score2 = 0;
-        if (p1 + p2 >= 2) {
-            score2 = p1 * p2 * (p1 + p2 - 2) / 2.0;
-        }
-        
-        return score1 + score2;
-    }
     
-    public Map<STBipartition, Double> calculateWeights(List<STBipartition> candidates) {
+    public Map<RangeBipartition, Double> calculateWeights(List<RangeBipartition> candidates) {
         System.out.println("==== WEIGHT CALCULATION STARTED (MEMORY-OPTIMIZED) ====");
         System.out.println("Computation mode: " + Config.COMPUTATION_MODE);
         System.out.println("Number of candidates: " + (candidates != null ? candidates.size() : "NULL"));
         System.out.println("Gene trees available: " + (geneTrees != null ? "YES" : "NO"));
         if (geneTrees != null) {
-            System.out.println("Gene trees stBipartitions count: " + 
-                             (geneTrees.stBipartitions != null ? geneTrees.stBipartitions.size() : "NULL"));
+            System.out.println("Gene trees rangeBipartitions count: " + 
+                             (geneTrees.rangeBipartitions != null ? geneTrees.rangeBipartitions.size() : "NULL"));
             System.out.println("Gene trees realTaxaCount: " + geneTrees.realTaxaCount);
         }
         

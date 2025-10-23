@@ -1,12 +1,8 @@
 /home/aaniksahaa/research/STELAR-MP/src/tree/Tree.java
 /home/aaniksahaa/research/STELAR-MP/src/utils/HashUtils.java
 /home/aaniksahaa/research/STELAR-MP/src/core/BranchSupportCalculator.java
-/home/aaniksahaa/research/STELAR-MP/src/expansion/ConsensusTreeBuilder.java
-/home/aaniksahaa/research/STELAR-MP/src/expansion/DistanceMatrix.java
 /home/aaniksahaa/research/STELAR-MP/src/tree/TreePrinter.java
-/home/aaniksahaa/research/STELAR-MP/src/expansion/BipartitionExpansionManager.java
 /home/aaniksahaa/research/STELAR-MP/src/taxon/Taxon.java
-/home/aaniksahaa/research/STELAR-MP/src/tree/STBipartition.java
 /home/aaniksahaa/research/STELAR-MP/src/tree/MemoryEfficientBipartitionManager.java
 /home/aaniksahaa/research/STELAR-MP/src/CompareTrees.java
 /home/aaniksahaa/research/STELAR-MP/src/utils/BipartitionExpansionConfig.java

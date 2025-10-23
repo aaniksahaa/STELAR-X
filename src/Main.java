@@ -7,7 +7,7 @@ import java.util.List;
 import preprocessing.GeneTrees;
 import utils.Config;
 import core.InferenceDP;
-import tree.STBipartition;
+import tree.RangeBipartition;
 import tree.Tree;
 
 /**
@@ -153,7 +153,7 @@ public class Main {
 
         // Generate candidate bipartitions
         System.out.println("Generating candidate bipartitions...");
-        List<STBipartition> candidates = geneTrees.generateCandidateBipartitions();
+        List<RangeBipartition> candidates = geneTrees.generateCandidateBipartitions();
         System.out.println("Total candidate bipartitions: " + candidates.size());
 
         // Run inference
@@ -256,7 +256,7 @@ public class Main {
         
         // Test InferenceDP algorithm
         System.out.println("Testing InferenceDP algorithm...");
-        List<STBipartition> candidates = new ArrayList<>(geneTrees.stBipartitions.keySet());
+        List<RangeBipartition> candidates = new ArrayList<>(geneTrees.rangeBipartitions.keySet());
         
         if (!candidates.isEmpty()) {
             InferenceDP dp = new InferenceDP(geneTrees, candidates);
@@ -282,13 +282,13 @@ public class Main {
         int geneTreeCount = geneTrees.geneTrees.size();
         int taxaCount = geneTrees.realTaxaCount;
         // int uniquePartitions = geneTrees.triPartitions.size();
-        int uniqueSTBipartitions = geneTrees.stBipartitions.size();
+        int uniqueRangeBipartitions = geneTrees.rangeBipartitions.size();
         
         System.out.println("Processing complete:");
         System.out.println("  - Gene trees processed: " + geneTreeCount);
         System.out.println("  - Taxa found: " + taxaCount);
         // System.out.println("  - Unique tripartitions: " + uniquePartitions);
-        System.out.println("  - Unique STBipartitions: " + uniqueSTBipartitions);
+        System.out.println("  - Unique RangeBipartitions: " + uniqueRangeBipartitions);
         
         // Print taxa names
         System.out.print("Taxa names: ");
@@ -298,10 +298,10 @@ public class Main {
         }
         System.out.println();
         
-        // Print STBipartitions with counts
-        System.out.println("STBipartitions:");
-        for (var entry : geneTrees.stBipartitions.entrySet()) {
-            System.out.println("  " + entry.getKey().print(geneTrees.taxonIdToLabel) + " : " + entry.getValue());
+        // Print RangeBipartitions with counts
+        System.out.println("RangeBipartitions:");
+        for (var entry : geneTrees.rangeBipartitions.entrySet()) {
+            System.out.println("  " + entry.getKey().toString() + " : " + entry.getValue());
         }
     }
 

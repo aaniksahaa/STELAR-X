@@ -14,7 +14,7 @@ All the code changes will be in src folder. I am also sharing another txt file d
 
 The code structure and conventions should be all the same as the current code. First please read the current codebase very carefully, understand what exactly happens, then carefully read our specification of the change...
 
-
+The only and only representation of ST biparitions will be like Rangebiparitions, so completely get rid of any kind of memory intensive bitset expansions. Wipe out all instances of STBipartitions, and we should always use RangeBiparititions instead. 
 
 
 

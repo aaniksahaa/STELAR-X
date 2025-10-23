@@ -103,7 +103,7 @@ public class ClusterHashManager {
     public ClusterHashPair getLeftClusterHash(RangeBipartition bip) {
         ClusterHashPair hash = getClusterHash(bip.geneTreeIndex, bip.leftStart, bip.leftEnd);
         
-        System.out.println("Left cluster hash for bipartition " + bip + ": " + hash.toDebugString());
+        // System.out.println("Left cluster hash for bipartition " + bip + ": " + hash.toDebugString());
         
         return hash;
     }
@@ -114,7 +114,7 @@ public class ClusterHashManager {
     public ClusterHashPair getRightClusterHash(RangeBipartition bip) {
         ClusterHashPair hash = getClusterHash(bip.geneTreeIndex, bip.rightStart, bip.rightEnd);
         
-        System.out.println("Right cluster hash for bipartition " + bip + ": " + hash.toDebugString());
+        // System.out.println("Right cluster hash for bipartition " + bip + ": " + hash.toDebugString());
         
         return hash;
     }
@@ -123,39 +123,28 @@ public class ClusterHashManager {
      * Get union cluster hash from a bipartition (left ∪ right).
      */
     public ClusterHashPair getUnionClusterHash(RangeBipartition bip) {
-        // For range bipartitions, the union is the entire range from leftStart to rightEnd
-        // But we need to be careful about the ordering - left and right might not be contiguous
+        // By definition, subtree bipartitions must have contiguous ranges
+        // The union is simply [leftStart, rightEnd]
         
-        // Get both cluster taxon sets and compute their union
-        Set<Integer> leftSet = getRangeTaxonSet(bip.geneTreeIndex, bip.leftStart, bip.leftEnd);
-        Set<Integer> rightSet = getRangeTaxonSet(bip.geneTreeIndex, bip.rightStart, bip.rightEnd);
-        
-        Set<Integer> unionSet = new HashSet<>(leftSet);
-        unionSet.addAll(rightSet);
-        
-        // Check if we already have a hash for this union
-        ClusterHashPair cachedHash = taxonSetToHash.get(unionSet);
-        if (cachedHash != null) {
-            cacheHits++;
-            return cachedHash;
+        if (bip.rightStart != bip.leftEnd) {
+            throw new IllegalArgumentException(
+                "Non-contiguous bipartition detected in tree " + bip.geneTreeIndex + 
+                ": left=[" + bip.leftStart + "," + bip.leftEnd + "], right=[" + bip.rightStart + "," + bip.rightEnd + "]. " +
+                "Subtree bipartitions must have contiguous ranges where rightStart == leftEnd."
+            );
         }
         
+        // Contiguous ranges - union is simply [leftStart, rightEnd]
         hashComputations++;
+        ClusterHashPair unionHash = HashUtils.computeClusterHash(bip.geneTreeIndex, 
+                                                                bip.leftStart, bip.rightEnd,
+                                                                geneTreeOrderings, prefixSums, prefixXORs);
         
-        // Try to find a range representation for the union
-        ClusterHashPair rangeHash = findRangeBasedHash(unionSet);
-        if (rangeHash != null) {
-            cacheClusterMapping(rangeHash, unionSet);
-            return rangeHash;
-        }
+        // Cache this result
+        Set<Integer> unionSet = getRangeTaxonSet(bip.geneTreeIndex, bip.leftStart, bip.rightEnd);
+        cacheClusterMapping(unionHash, unionSet);
         
-        // Fallback to deterministic hash
-        ClusterHashPair fallbackHash = HashUtils.computeFallbackClusterHash(unionSet);
-        cacheClusterMapping(fallbackHash, unionSet);
-        
-        System.out.println("Union cluster hash for bipartition " + bip + ": " + fallbackHash.toDebugString());
-        
-        return fallbackHash;
+        return unionHash;
     }
     
     /**
@@ -225,6 +214,8 @@ public class ClusterHashManager {
         taxonSetToHash.put(new HashSet<>(taxonSet), hash);   // Defensive copy
     }
     
+    // Removed findRangeBasedHashOptimized - not needed for contiguous subtree bipartitions
+    
     /**
      * Try to find a range-based hash for the given taxon set.
      * This attempts to find a gene tree range that matches the taxon set.
@@ -232,6 +223,7 @@ public class ClusterHashManager {
     private ClusterHashPair findRangeBasedHash(Set<Integer> taxonSet) {
         // This is an expensive operation - search through gene tree orderings
         // to find a range that matches the taxon set
+        System.out.println("WARNING: Using expensive O(n³) findRangeBasedHash for taxon set: " + taxonSet);
         
         if (geneTreeOrderings == null) {
             return null;
@@ -389,5 +381,13 @@ public class ClusterHashManager {
         taxonSetToHash.clear();
         
         System.out.println("Cleared " + cachedCount + " cached cluster mappings");
+    }
+    
+    /**
+     * Get hash for all taxa cluster (entire range in first gene tree).
+     */
+    public ClusterHashPair getAllTaxaClusterHash() {
+        // Use the entire range of the first gene tree (0 to numTaxa)
+        return getClusterHash(0, 0, realTaxaCount);
     }
 }
