@@ -1,3 +1,8 @@
+status - 
+
+- currently at memnew branch for that new opt, and base is main
+- 
+
 res - 
 
 - see MY-UTILS folder, there example command etc txt files 
