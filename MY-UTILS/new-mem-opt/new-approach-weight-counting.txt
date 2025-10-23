@@ -1,0 +1,296 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath, amssymb, amsthm, geometry}
+\geometry{margin=1in}
+\usepackage{bm}
+
+\title{Complexity of Mutual Range Intersections across Hierarchical Partitions}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We analyze the asymptotic complexity of computing all mutual intersections among ranges derived from $k$ hierarchically structured permutations. Each permutation of length $n$ induces $\mathcal{O}(n)$ nested subranges organized as a perfect binary tree. We show that, under a cost model proportional to the smaller of the two range lengths, the total computational cost scales as $\Theta(k^2 n^2)$.
+\end{abstract}
+
+\section{Problem Formulation}
+
+Let $P_1, \dots, P_k$ be $k$ permutations over the index set $[n] = \{1, 2, \dots, n\}$.  
+For each permutation $P_i$, consider a perfect binary decomposition of its range:
+\[
+T_i = \bigcup_{d=0}^{\log_2 n} \mathcal{R}_{i,d},
+\]
+where $\mathcal{R}_{i,d}$ denotes the set of ranges at depth $d$.  
+Each depth-$d$ range contains exactly $S_d = n / 2^d$ elements, and there are $N_d = 2^d$ such ranges.
+
+Thus, for each $i$,
+\[
+|\mathcal{R}_{i,d}| = 2^d, \qquad \text{and} \qquad \sum_{d=0}^{\log_2 n} |\mathcal{R}_{i,d}| = 2n - 1 = \Theta(n).
+\]
+
+Let $\mathcal{R} = \bigcup_{i=1}^k T_i$ denote the set of all ranges across all trees, with $|\mathcal{R}| = \Theta(kn)$.
+
+\paragraph{Intersection cost.}  
+For two ranges $R_a, R_b \in \mathcal{R}$, define
+\[
+I(R_a, R_b) = |R_a \cap R_b|.
+\]
+Assume that computing $I(R_a, R_b)$ incurs cost
+\[
+\operatorname{cost}(R_a, R_b) = \Theta(\min(|R_a|, |R_b|)).
+\]
+We seek the total complexity
+\[
+T = \sum_{R_a, R_b \in \mathcal{R}} \operatorname{cost}(R_a, R_b)
+  = \Theta\!\left( \sum_{R_a, R_b \in \mathcal{R}} \min(|R_a|, |R_b|) \right).
+\]
+
+
+
+
+
+
+
+
+
+\subsection{Weight Computation Strategy with Inverse Index Representation}
+
+\paragraph{Context and Motivation.}
+Given $k$ permutations of length $n$, we consider the collection of all
+bipartitions generated from these permutations across $k$ trees. Each
+bipartition is defined by two consecutive ranges $(i, l_1, r_1, l_2, r_2)$,
+where $(A|B)$ corresponds to clusters $A = [l_1, r_1]$ and
+$B = [l_2, r_2]$, with $l_2 = r_1 + 1$.  
+Let $\mathcal{CB}$ denote the set of candidate bipartitions, and
+$\mathcal{GB}$ the set of subtree bipartitions extracted from gene trees.
+Following \cite{Islam-STELAR-2020}, the weight of a candidate bipartition
+$x = (A_1|B_1) \in \mathcal{CB}$ with respect to the set of gene trees
+$\mathcal{G}$ is defined as
+\begin{equation}
+w_{\mathcal{G}}(x) = \sum_{y \in \mathcal{GB}} f_{\mathcal{G}}(y)\,\mathcal{M}(x,y),
+\label{eq:wg_def}
+\end{equation}
+where $f_{\mathcal{G}}(y)$ denotes the frequency of bipartition
+$y = (A_2|B_2)$ in $\mathcal{G}$, and $\mathcal{M}(x,y)$ is the number of
+triplets simultaneously mapped to both $x$ and $y$:
+\begin{equation}
+\mathcal{M}(x,y) = \mathcal{NT}(|A_1 \cap A_2|, |B_1 \cap B_2|)
++ \mathcal{NT}(|A_1 \cap B_2|, |A_2 \cap B_1|),
+\label{eq:Mxy_new}
+\end{equation}
+where
+\begin{equation}
+\mathcal{NT}(n_1, n_2) = \frac{n_1 n_2 (n_1 + n_2 - 2)}{2}.
+\label{eq:NT_new}
+\end{equation}
+
+\paragraph{Limitations of Bitset-Based Implementation.}
+Previous GPU implementations encoded each bipartition $(A|B)$ as two bitsets
+of length $n$, enabling efficient bitwise intersection via \texttt{\_\_popcll}
+operations. This allowed $\mathcal{O}(n)$ time per $\mathcal{M}(x,y)$
+evaluation but required $\mathcal{O}(n|\mathcal{GB}|)$ memory for storing
+bitsets of all gene tree bipartitions, which becomes prohibitive for large
+$n$ or $k$. Furthermore, the memory bandwidth and transfer overhead dominate
+for large-scale datasets.
+
+\paragraph{Inverse Index Representation.}
+To address these limitations, we represent each permutation not as a dense
+bitset but by its \emph{inverse index}:
+\[
+\pi_i^{-1}(v) = \text{position of element } v \text{ in permutation } i.
+\]
+Given $k$ permutations $\pi_1, \pi_2, \dots, \pi_k$, we store an
+$k \times n$ integer matrix $P$ where $P_{i,v} = \pi_i^{-1}(v)$.
+This compact representation enables $\mathcal{O}(1)$ membership testing:
+an element $v$ lies in range $[l,r]$ of permutation $i$ if and only if
+$l \le P_{i,v} \le r$.
+
+\paragraph{Intersection Counting via Inverse Index.}
+For two bipartitions
+\[
+x = (A_1|B_1) \quad \text{and} \quad y = (A_2|B_2),
+\]
+we require four intersection counts:
+\[
+|A_1 \cap A_2|,\quad |A_1 \cap B_2|,\quad |B_1 \cap A_2|,\quad |B_1 \cap B_2|.
+\]
+
+
+Without loss of generality, assume that among two ranges $A_p$ and $A_q$,
+the smaller one (in terms of cardinality) is $A_p$, i.e.,
+$|A_p| \le |A_q|$.
+Let $A_p = \{\,v_i \mid i \in [l_p, r_p]\,\}$ denote the set of elements
+spanning indices $[l_p, r_p]$ in permutation $\pi_p$.
+Then, using the precomputed inverse index matrix $P$ where
+$P_{i,v} = \pi_i^{-1}(v)$ gives the position of element $v$ in
+permutation $\pi_i$, the intersection size between $A_p$ and $A_q$ can be
+computed as
+\begin{equation}
+|A_p \cap A_q| = 
+\sum_{v \in A_p} 
+\mathbf{1}_{[\,l_q \le P_{q,v} \le r_q\,]},
+\label{eq:invindex_intersect}
+\end{equation}
+where $\mathbf{1}_{[\cdot]}$ is the indicator function returning $1$
+if the condition inside holds, and $0$ otherwise.
+
+That is, for each element $v$ in the smaller range $A_p$, we check whether
+its position in permutation $q$ (given by $P_{q,v}$) falls within the
+interval $[l_q, r_q]$.
+Since each membership test is $\mathcal{O}(1)$ via the inverse index,
+the total complexity of computing $|A_p \cap A_q|$ is
+\[
+\mathcal{O}(\min(|A_p|, |A_q|)).
+\]
+
+
+
+The total time for computing all four intersection counts between two
+bipartitions is
+\[
+\mathcal{O}\big(\min(|A_1|,|A_2|) + \min(|A_1|,|B_2|) +
+\min(|B_1|,|A_2|) + \min(|B_1|,|B_2|)\big),
+\]
+which is typically much smaller than $\mathcal{O}(n)$ since bipartition
+clusters are localized contiguous segments in the permutations.
+
+\paragraph{GPU-Parallel Weight Computation.}
+This inverse-index formulation is inherently parallelizable across bipartition
+pairs. Each GPU thread can process a candidate bipartition $x$ and iterate
+through all gene-tree bipartitions $y \in \mathcal{GB}$, computing
+$\mathcal{M}(x,y)$ using Equation~\eqref{eq:Mxy_new}.  
+The procedure is as follows:
+\begin{enumerate}
+    \item Precompute the inverse index matrix $P$ ($k \times n$ integers).
+    \item For each bipartition $(A|B)$, store the boundary pairs $(l_A, r_A)$
+          and $(l_B, r_B)$.
+    \item On the GPU, assign each thread to a candidate $x = (A_1|B_1)$.
+    \item For each gene-tree bipartition $y = (A_2|B_2)$:
+    \begin{enumerate}
+        \item Compute the four intersection counts using inverse indexing:
+        \[
+        \begin{aligned}
+        n_{AA} &= |A_1 \cap A_2|, \\
+        n_{AB} &= |A_1 \cap B_2|, \\
+        n_{BA} &= |B_1 \cap A_2|, \\
+        n_{BB} &= |B_1 \cap B_2|.
+        \end{aligned}
+        \]
+        \item Compute $\mathcal{M}(x,y)$ via Eq.~\eqref{eq:Mxy_new}.
+        \item Accumulate $f_{\mathcal{G}}(y)\mathcal{M}(x,y)$ into the total weight.
+    \end{enumerate}
+\end{enumerate}
+
+This scheme replaces the memory-heavy bitset representation with a
+lightweight positional representation, achieving comparable or better
+time complexity and superior memory efficiency.
+Each intersection computation leverages the contiguous range property
+of bipartitions, allowing early termination and minimal branching on GPU cores.
+
+\paragraph{Complexity Summary.}
+Let $m = |\mathcal{CB}|$ and $t = |\mathcal{GB}|$.  
+Then the total cost of precomputing all weights becomes
+\[
+\mathcal{O}\!\left(
+\sum_{x \in \mathcal{CB}} \sum_{y \in \mathcal{GB}}
+\big(
+\min(|A_1|,|A_2|) + \min(|A_1|,|B_2|)
++ \min(|B_1|,|A_2|) + \min(|B_1|,|B_2|)
+\big)
+\right),
+\]
+which is sublinear in $n$ per pair when clusters are small,
+and trivially parallelizable across GPU threads.
+This offers a practical and scalable replacement for
+bitset-based weight computation in large-scale gene tree analyses.
+
+
+
+
+
+
+
+
+
+\section{Complexity Analysis}
+
+\subsection{Preliminary Observation}
+
+Since all trees share identical hierarchical structure, it suffices to analyze the interaction between two trees $T_i$ and $T_j$ and then multiply appropriately.  
+We denote this pairwise cost by $T_{\mathrm{pair}}$ and later extend to $k$ trees.
+
+\begin{lemma}[Pairwise range cost by depth]
+For depths $d_1, d_2 \in \{0, \dots, \log_2 n\}$, the total cost of comparing all ranges from levels $d_1$ and $d_2$ satisfies
+\[
+C(d_1, d_2) = 2^{d_1 + d_2} \cdot \frac{n}{2^{\max(d_1, d_2)}}.
+\]
+\end{lemma}
+
+\begin{proof}
+At depth $d_i$, there are $2^{d_i}$ ranges, each of length $n/2^{d_i}$.  
+For every pair $(R_{a}, R_{b})$ with depths $d_1$ and $d_2$, the cost is proportional to $\min(S_{d_1}, S_{d_2}) = n / 2^{\max(d_1, d_2)}$.  
+Since there are $2^{d_1 + d_2}$ such pairs, the stated expression follows.
+\end{proof}
+
+\subsection{Summation over all depth pairs}
+
+Without loss of generality, assume $d_1 \le d_2$.  
+Then $\max(d_1, d_2) = d_2$, and
+\[
+C(d_1, d_2) = n \cdot 2^{d_1}.
+\]
+The total pairwise cost between two trees is
+\begin{align}
+T_{\mathrm{pair}}
+  &= 2 \sum_{d_2=0}^{\log_2 n} \sum_{d_1=0}^{d_2} C(d_1, d_2) \\
+  &= 2n \sum_{d_2=0}^{\log_2 n} \sum_{d_1=0}^{d_2} 2^{d_1}.
+\end{align}
+The inner geometric sum yields
+\[
+\sum_{d_1=0}^{d_2} 2^{d_1} = 2^{d_2 + 1} - 1,
+\]
+so
+\[
+T_{\mathrm{pair}}
+  = 2n \sum_{d_2=0}^{\log_2 n} (2^{d_2 + 1} - 1)
+  = 4n \sum_{d_2=0}^{\log_2 n} 2^{d_2} - 2n (\log_2 n + 1).
+\]
+Since $\sum_{d_2=0}^{\log_2 n} 2^{d_2} = 2n - 1$, it follows that
+\[
+T_{\mathrm{pair}} = 4n (2n - 1) - 2n \log_2 n = \Theta(n^2).
+\]
+\qed
+
+\subsection{Extension to $k$ trees}
+
+All trees share identical depth and structure, hence:
+\[
+T = k \, T_{\mathrm{intra}} + \binom{k}{2} T_{\mathrm{pair}}.
+\]
+Since $T_{\mathrm{intra}} = \Theta(n^2)$ and $T_{\mathrm{pair}} = \Theta(n^2)$,
+\[
+T = \Theta(k^2 n^2).
+\]
+
+
+
+
+\section{Conclusion}
+
+We have established the following result.
+
+\begin{theorem}
+Let $P_1, \dots, P_k$ be $k$ permutations of length $n$, each decomposed into $\Theta(n)$ hierarchical ranges forming a perfect binary tree.  
+Under the cost model $\operatorname{cost}(R_a, R_b) = \Theta(\min(|R_a|, |R_b|))$, the total computational cost of evaluating all pairwise range intersections satisfies
+\[
+T = \Theta(k^2 n^2).
+\]
+\end{theorem}
+
+This analysis provides a theoretical upper bound for full mutual range intersection evaluation.  
+In practice, the bound can be significantly reduced by exploiting disjointness and structural sparsity of ranges, or by distributing the pairwise computations in parallel across GPU threads.
+
+\end{document}
+

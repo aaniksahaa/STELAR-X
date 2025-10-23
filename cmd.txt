@@ -5,3 +5,7 @@
 ./run.sh out.trees a.tre GPU_PARALLEL NONE
 
 ./run.sh 1kp.tre out.tre GPU_PARALLEL NONE
+
+./run.sh all_gt_bs_rooted_37.tre out.tre GPU_PARALLEL NONE
+
+./run.sh all_gt_bs_rooted_200.tre out.tre GPU_PARALLEL NONE

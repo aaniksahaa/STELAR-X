@@ -1,0 +1,23 @@
+So, please see, what we have currently is finding the unique SBPs with the help of this compact integer tuple representation and then working on those, we have two steps afterward, teh GPU weight calculation and the DP. Now i want so that these two steps also avoid that memory-intensive bitset expansions. 
+
+The idea is that, for the weight calculation part, we can actually do with the compact integer tuple representation, we will have an inverse array index mapping, and for each range pairs A, B, we will just iterate over the smaller one, and see whether its index in the other array falls in the range or not, note that checking this in/out range is easy when we have array index inverse mapping, we can also mathematically prove that the complexity does not go too high under the balanced tree assumption. 
+
+Also we can do on the DP part, we are currently have bitset clusters as map keys and SBP array as values... We can rather do this, we will use our permutation invariant double hashing again, look, a cluster basically means a set of all the integer taxa over the bipartition's left and right two sides. Now, we can use our hash to represent a cluster actuallly, basically if the integer tuple is (i,l1,r1,l2,r2), then the range l1-->r2 represent the whole range, be careful about 0/1-indexing etc conventions used in code and proceed thereby correctly, i am just sharing the idea, so, we will just have the permutation invariant double hash of the whole range l1-->r2, and that will be our key, and then the mapping as key-->value, and then we can similarly proceed finding and propagating the DP state space, like finding the hash of the left side of SBP, right side of SBP etc, do any sort of preprocessing you think would be fine, but do very carefully. 
+
+Here be careful that, we already have a RangeBipartition, which uses double hashing and it works nice, we will borrow the same double hashing scheme, but not change that code, like create a class for our new Cluster maybe which will support hashing, i wanna mean that, hash of a biparittion and hash of a cluster are two diff things, they are not necessarily connected, we just use the same hashing scheme, so keep like an isolation... but yes, a biparittion has two clusters left and right, and we may need to liek get the hash of the left cluster of a bip, or right cluster of a bip, but that is trivial, i mean, a cluster can be defined as just (i,l,r) right? so make it like that...
+
+Like that means for calculating teh hashes of cluster, not necessarily use strictly the rangebips hash function, we may just have an isolated class for cCluster, but yes, we may have special new util class for hash utils, since hash will be used, but the Hash scheme should be the same, double hashing with sum and xor and mixing etc 
+
+So, in a nutshell, we will now have both the two steps GPU weight calculation and DP being optimized in memory. 
+
+All the code changes will be in src folder. I am also sharing another txt file describing in proper detail, exactly how to do the weight counting step with this idea. And the DP step is exaplained above. 
+
+The code structure and conventions should be all the same as the current code. First please read the current codebase very carefully, understand what exactly happens, then carefully read our specification of the change...
+
+
+
+
+
+
+
+

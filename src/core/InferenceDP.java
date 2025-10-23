@@ -20,15 +20,22 @@ public class InferenceDP {
     private Map<BitSet, Double> dpMemo;
     private Map<BitSet, STBipartition> dpChoice;
     
+    // Memory-optimized implementation
+    private MemoryOptimizedInferenceDP memoryOptimizedDP;
+    
     public InferenceDP(GeneTrees geneTrees, List<STBipartition> candidateSTBips) {
+        System.out.println("==== INITIALIZING INFERENCE DP (MEMORY-OPTIMIZED) ====");
+        System.out.println("Delegating to memory-optimized implementation...");
+        
+        // Delegate to memory-optimized implementation
+        this.memoryOptimizedDP = new MemoryOptimizedInferenceDP(geneTrees, candidateSTBips);
+        
+        // Keep these for compatibility but they won't be used
         this.geneTrees = geneTrees;
         this.candidateSTBips = candidateSTBips;
         this.clusterToSTBips = new HashMap<>();
         this.dpMemo = new HashMap<>();
         this.dpChoice = new HashMap<>();
-        
-        preprocessCandidates();
-        calculateWeights();
     }
     
     private void preprocessCandidates() {
@@ -46,11 +53,8 @@ public class InferenceDP {
     }
     
     public double solve() {
-        BitSet allTaxa = new BitSet(geneTrees.realTaxaCount);
-        for (int i = 0; i < geneTrees.realTaxaCount; i++) {
-            allTaxa.set(i);
-        }
-        return dp(allTaxa);
+        System.out.println("Solving using memory-optimized DP...");
+        return memoryOptimizedDP.solve();
     }
     
     private double dp(BitSet cluster) {
@@ -101,29 +105,8 @@ public class InferenceDP {
     }
     
     public Tree reconstructTree() {
-        BitSet allTaxa = new BitSet(geneTrees.realTaxaCount);
-        for (int i = 0; i < geneTrees.realTaxaCount; i++) {
-            allTaxa.set(i);
-        }
-        
-        Tree tree = new Tree();
-        tree.taxaMap = geneTrees.taxaMap;
-        tree.root = buildTreeNode(allTaxa, tree);
-        tree.isRooted = true;
-        
-        // Initialize the leaves array and count
-        tree.leaves = new TreeNode[geneTrees.realTaxaCount];
-        tree.leavesCount = 0;
-        
-        // Populate leaves array and count leaves
-        for (TreeNode node : tree.nodes) {
-            if (node.isLeaf()) {
-                tree.leaves[node.taxon.id] = node;
-                tree.leavesCount++;
-            }
-        }
-        
-        return tree;
+        System.out.println("Reconstructing tree using memory-optimized DP...");
+        return memoryOptimizedDP.reconstructTree();
     }
     
     private TreeNode buildTreeNode(BitSet cluster, Tree tree) {

@@ -502,5 +502,36 @@ public class MemoryEfficientBipartitionManager {
         
         return sb.toString();
     }
+    
+    // Getters for accessing internal data structures (needed for memory-optimized weight calculation)
+    
+    /**
+     * Get the hash-to-bipartitions mapping for memory-optimized processing.
+     * This exposes the range bipartition data for efficient weight calculation.
+     */
+    public Map<Object, List<RangeBipartition>> getHashToBipartitions() {
+        return hashToBipartitions;
+    }
+    
+    /**
+     * Get the gene tree taxa orderings for inverse index construction.
+     */
+    public int[][] getGeneTreeTaxaOrdering() {
+        return geneTreeTaxaOrdering;
+    }
+    
+    /**
+     * Get the prefix sums arrays for hash computation.
+     */
+    public long[][] getPrefixSums() {
+        return prefixSums;
+    }
+    
+    /**
+     * Get the prefix XORs arrays for hash computation.
+     */
+    public long[][] getPrefixXORs() {
+        return prefixXORs;
+    }
 }
 

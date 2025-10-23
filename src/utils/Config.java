@@ -32,9 +32,9 @@ public class Config {
      * Computation mode for weight calculation
      */
     public enum ComputationMode {
-        CPU_SINGLE,    // Single-threaded CPU computation
-        CPU_PARALLEL,  // Multi-threaded CPU computation
-        GPU_PARALLEL   // GPU-accelerated computation
+        CPU_SINGLE,    // Single-threaded CPU computation (memory-optimized)
+        CPU_PARALLEL,  // Multi-threaded CPU computation (memory-optimized)
+        GPU_PARALLEL   // GPU-accelerated computation (memory-optimized)
     }
 
     /**
