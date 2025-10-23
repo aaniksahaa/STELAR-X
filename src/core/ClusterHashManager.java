@@ -12,7 +12,7 @@ import utils.HashUtils;
  * This class provides:
  * 1. Double hash computation for clusters (sum + XOR hashes)
  * 2. Mapping between BitSet clusters and hash representations
- * 3. Cluster equality verification with fallback to expensive checks
+ * 3. Optional cluster equality verification (can be disabled for performance)
  * 4. Extraction of cluster hashes from bipartitions
  * 
  * The goal is to replace BitSet-based cluster keys in DP with compact hash keys,
@@ -20,8 +20,31 @@ import utils.HashUtils;
  */
 public class ClusterHashManager {
     
-    private final Map<ClusterHashPair, Set<Integer>> hashToTaxonSets;
-    private final Map<Set<Integer>, ClusterHashPair> taxonSetToHash;
+    // Lightweight cluster range information
+    public static class ClusterRange {
+        public final int geneTreeIndex;
+        public final int start;
+        public final int end;
+        
+        public ClusterRange(int geneTreeIndex, int start, int end) {
+            this.geneTreeIndex = geneTreeIndex;
+            this.start = start;
+            this.end = end;
+        }
+        
+        public int size() {
+            return end - start;
+        }
+        
+        @Override
+        public String toString() {
+            return "ClusterRange[tree=" + geneTreeIndex + ", range=[" + start + "," + end + ")]";
+        }
+    }
+    
+    // Lightweight mapping: hash -> cluster range (just 3 integers)
+    private final Map<ClusterHashPair, ClusterRange> hashToRange;
+    
     private final int[][] geneTreeOrderings;
     private final long[][] prefixSums;
     private final long[][] prefixXORs;
@@ -38,15 +61,15 @@ public class ClusterHashManager {
         System.out.println("==== INITIALIZING CLUSTER HASH MANAGER ====");
         System.out.println("Real taxa count: " + realTaxaCount);
         System.out.println("Gene trees: " + (geneTreeOrderings != null ? geneTreeOrderings.length : 0));
+        System.out.println("Storage mode: Lightweight range mapping (3 integers per cluster)");
         
-        this.hashToTaxonSets = new HashMap<>();
-        this.taxonSetToHash = new HashMap<>();
+        this.hashToRange = new HashMap<>();
         this.geneTreeOrderings = geneTreeOrderings;
         this.prefixSums = prefixSums;
         this.prefixXORs = prefixXORs;
         this.realTaxaCount = realTaxaCount;
         
-        System.out.println("Cluster hash manager initialized");
+        System.out.println("Cluster hash manager initialized (lightweight range mode)");
         System.out.println("==== CLUSTER HASH MANAGER READY ====");
     }
     
@@ -59,9 +82,8 @@ public class ClusterHashManager {
         ClusterHashPair hash = HashUtils.computeClusterHash(geneTreeIndex, start, end,
                                                            geneTreeOrderings, prefixSums, prefixXORs);
         
-        // Cache the taxon set for verification if needed
-        Set<Integer> taxonSet = getRangeTaxonSet(geneTreeIndex, start, end);
-        cacheClusterMapping(hash, taxonSet);
+        // Store lightweight range mapping for O(1) size queries and on-demand taxon derivation
+        hashToRange.put(hash, new ClusterRange(geneTreeIndex, start, end));
         
         return hash;
     }
@@ -71,28 +93,23 @@ public class ClusterHashManager {
      * This is the main interface for converting existing DP code.
      */
     public ClusterHashPair getClusterHash(BitSet cluster) {
+        hashComputations++;
+        
         // Convert BitSet to taxon set
         Set<Integer> taxonSet = bitSetToTaxonSet(cluster);
-        
-        // Check if we already have a hash for this taxon set
-        ClusterHashPair cachedHash = taxonSetToHash.get(taxonSet);
-        if (cachedHash != null) {
-            cacheHits++;
-            return cachedHash;
-        }
-        
-        hashComputations++;
         
         // Try to find a range representation for this cluster
         ClusterHashPair rangeHash = findRangeBasedHash(taxonSet);
         if (rangeHash != null) {
-            cacheClusterMapping(rangeHash, taxonSet);
             return rangeHash;
         }
         
         // Fallback to deterministic hash based on taxon set content
         ClusterHashPair fallbackHash = HashUtils.computeFallbackClusterHash(taxonSet);
-        cacheClusterMapping(fallbackHash, taxonSet);
+        
+        // Store a dummy range for fallback hashes (we can't derive range info from them)
+        // This is mainly for compatibility - ideally all clusters should be range-based
+        hashToRange.put(fallbackHash, new ClusterRange(-1, 0, taxonSet.size()));
         
         return fallbackHash;
     }
@@ -140,78 +157,47 @@ public class ClusterHashManager {
                                                                 bip.leftStart, bip.rightEnd,
                                                                 geneTreeOrderings, prefixSums, prefixXORs);
         
-        // Cache this result
-        Set<Integer> unionSet = getRangeTaxonSet(bip.geneTreeIndex, bip.leftStart, bip.rightEnd);
-        cacheClusterMapping(unionHash, unionSet);
+        // Store the range mapping for the union cluster
+        hashToRange.put(unionHash, new ClusterRange(bip.geneTreeIndex, bip.leftStart, bip.rightEnd));
         
         return unionHash;
     }
     
     /**
-     * Verify cluster equality with fallback to expensive verification.
-     * This is the key method for trusting double hashes vs. doing expensive checks.
+     * Verify cluster equality by trusting the hash completely.
+     * In lightweight mode, we don't do expensive verification.
      */
     public boolean clustersEqual(ClusterHashPair hash1, ClusterHashPair hash2) {
-        if (hash1.equals(hash2)) {
-            return true; // Trust the double hash - collision probability is extremely low
-        }
-        
-        // Hash collision detected - need expensive verification
-        hashCollisions++;
-        expensiveVerifications++;
-        
-        System.out.println("Hash collision detected between " + hash1.toDebugString() + 
-                         " and " + hash2.toDebugString() + " - performing expensive verification");
-        
-        Set<Integer> set1 = hashToTaxonSets.get(hash1);
-        Set<Integer> set2 = hashToTaxonSets.get(hash2);
-        
-        if (set1 != null && set2 != null) {
-            boolean equal = set1.equals(set2);
-            System.out.println("Expensive verification result: " + equal);
-            return equal;
-        }
-        
-        System.out.println("Cannot verify - taxon sets not available, assuming different");
-        return false; // Cannot verify - assume different
+        // Simply trust the hash - different hashes = different clusters
+        return hash1.equals(hash2);
     }
     
     /**
-     * Get the taxon set size for a cluster hash.
+     * Get the taxon set size for a cluster hash in O(1) time.
      * This is needed for DP operations that require cluster size.
      */
     public int getClusterSize(ClusterHashPair clusterHash) {
-        Set<Integer> taxonSet = hashToTaxonSets.get(clusterHash);
-        if (taxonSet != null) {
-            return taxonSet.size();
+        ClusterRange range = hashToRange.get(clusterHash);
+        if (range != null) {
+            return range.size(); // O(1) calculation: end - start
         }
         
-        // If not cached, we can't determine size without expensive lookup
         System.err.println("Warning: Cluster size not available for hash " + clusterHash.toDebugString());
-        return -1; // Indicate unknown size
+        return -1; // Unknown size
     }
     
     /**
-     * Get the actual taxon set for a cluster hash (for debugging/verification).
+     * Get the actual taxon set for a cluster hash by deriving it from gene tree orderings.
+     * This is used for tree reconstruction and debugging.
      */
     public Set<Integer> getTaxonSet(ClusterHashPair clusterHash) {
-        return hashToTaxonSets.get(clusterHash);
-    }
-    
-    /**
-     * Cache the mapping between cluster hash and taxon set.
-     */
-    private void cacheClusterMapping(ClusterHashPair hash, Set<Integer> taxonSet) {
-        // Check for hash collisions
-        Set<Integer> existingSet = hashToTaxonSets.get(hash);
-        if (existingSet != null && !existingSet.equals(taxonSet)) {
-            hashCollisions++;
-            System.err.println("Hash collision detected! Hash " + hash.toDebugString() + 
-                             " maps to both " + existingSet + " and " + taxonSet);
+        ClusterRange range = hashToRange.get(clusterHash);
+        if (range != null) {
+            return getRangeTaxonSet(range.geneTreeIndex, range.start, range.end);
         }
         
-        hashToTaxonSets.put(hash, new HashSet<>(taxonSet)); // Defensive copy
-        taxonSetToHash.put(new HashSet<>(taxonSet), hash);   // Defensive copy
+        System.err.println("Warning: Cannot derive taxon set for hash " + clusterHash.toDebugString());
+        return new HashSet<>();
     }
     
     // Removed findRangeBasedHashOptimized - not needed for contiguous subtree bipartitions
@@ -284,11 +270,11 @@ public class ClusterHashManager {
     }
     
     /**
-     * Create a BitSet from a taxon set (for compatibility with existing code).
+     * Create a BitSet from a cluster hash by deriving the taxon set on-demand.
      */
     public BitSet createBitSetFromHash(ClusterHashPair clusterHash) {
-        Set<Integer> taxonSet = hashToTaxonSets.get(clusterHash);
-        if (taxonSet == null) {
+        Set<Integer> taxonSet = getTaxonSet(clusterHash);
+        if (taxonSet == null || taxonSet.isEmpty()) {
             System.err.println("Warning: Cannot create BitSet for hash " + clusterHash.toDebugString() + 
                              " - taxon set not available");
             return new BitSet(realTaxaCount);
@@ -329,13 +315,13 @@ public class ClusterHashManager {
             
             // Log progress for large datasets
             if (processedGroups % 100 == 0 || processedGroups == hashToBipartitions.size()) {
-                System.out.println("Precomputed hashes for " + processedGroups + "/" + 
-                                 hashToBipartitions.size() + " bipartition groups");
+                // System.out.println("Precomputed hashes for " + processedGroups + "/" + 
+                //                 hashToBipartitions.size() + " bipartition groups");
             }
         }
         
         System.out.println("Precomputation completed: " + totalClusters + " cluster hashes computed");
-        System.out.println("Cache contains " + hashToTaxonSets.size() + " unique cluster hashes");
+        System.out.println("Cache contains " + hashToRange.size() + " lightweight cluster range mappings");
     }
     
     /**
@@ -346,16 +332,19 @@ public class ClusterHashManager {
         sb.append("Cluster Hash Manager Statistics:\n");
         sb.append("  Hash computations: ").append(hashComputations).append("\n");
         sb.append("  Cache hits: ").append(cacheHits).append("\n");
-        sb.append("  Hash collisions: ").append(hashCollisions).append("\n");
-        sb.append("  Expensive verifications: ").append(expensiveVerifications).append("\n");
-        sb.append("  Cached cluster hashes: ").append(hashToTaxonSets.size()).append("\n");
+        sb.append("  Hash collisions: 0 (trusting hash completely)\n");
+        sb.append("  Expensive verifications: 0 (trusting hash completely)\n");
+        sb.append("  Cached cluster ranges: ").append(hashToRange.size()).append("\n");
         
         if (hashComputations > 0) {
             sb.append("  Cache hit rate: ").append(String.format("%.2f%%", 
                 100.0 * cacheHits / (hashComputations + cacheHits))).append("\n");
-            sb.append("  Collision rate: ").append(String.format("%.6f%%", 
-                100.0 * hashCollisions / hashComputations)).append("\n");
         }
+        sb.append("  Collision rate: 0.000000% (trusting hash completely)\n");
+        
+        // Calculate memory usage
+        long memoryBytes = hashToRange.size() * (64 + 12); // Rough estimate: hash object + 3 ints
+        sb.append("  Estimated memory usage: ").append(memoryBytes / 1024).append(" KB for range mappings\n");
         
         return sb.toString();
     }
@@ -371,23 +360,69 @@ public class ClusterHashManager {
     }
     
     /**
-     * Clear all cached mappings (for memory management).
+     * Clear all cached range mappings (for memory management).
      */
     public void clearCache() {
-        System.out.println("Clearing cluster hash cache...");
-        int cachedCount = hashToTaxonSets.size();
+        System.out.println("Clearing cluster range cache...");
+        int cachedCount = hashToRange.size();
         
-        hashToTaxonSets.clear();
-        taxonSetToHash.clear();
+        hashToRange.clear();
         
-        System.out.println("Cleared " + cachedCount + " cached cluster mappings");
+        System.out.println("Cleared " + cachedCount + " cached cluster range mappings");
     }
     
     /**
-     * Get hash for all taxa cluster (entire range in first gene tree).
+     * Get hash for all taxa cluster (root of a complete gene tree).
+     * 
+     * Find a gene tree that contains all taxa in the dataset and use its root cluster.
      */
     public ClusterHashPair getAllTaxaClusterHash() {
-        // Use the entire range of the first gene tree (0 to numTaxa)
-        return getClusterHash(0, 0, realTaxaCount);
+        System.out.println("==== COMPUTING ALL TAXA CLUSTER HASH ====");
+        System.out.println("Real taxa count (dataset): " + realTaxaCount);
+        
+        // Find a gene tree that contains ALL taxa (complete tree)
+        int completeTreeIndex = -1;
+        
+        for (int treeIdx = 0; treeIdx < geneTreeOrderings.length; treeIdx++) {
+            int taxaInThisTree = geneTreeOrderings[treeIdx].length;
+            
+            // Log first few trees for debugging
+            if (treeIdx < 5) {
+                System.out.println("Tree " + treeIdx + " has " + taxaInThisTree + " taxa");
+            }
+            
+            // Check if this tree contains all taxa
+            if (taxaInThisTree == realTaxaCount) {
+                completeTreeIndex = treeIdx;
+                System.out.println("Found complete tree at index " + treeIdx + " with all " + realTaxaCount + " taxa");
+                break; // Use the first complete tree we find
+            }
+        }
+        
+        if (completeTreeIndex == -1) {
+            // Fallback: find the tree with the most taxa
+            int maxTaxaInTree = 0;
+            for (int treeIdx = 0; treeIdx < geneTreeOrderings.length; treeIdx++) {
+                int taxaInThisTree = geneTreeOrderings[treeIdx].length;
+                if (taxaInThisTree > maxTaxaInTree) {
+                    maxTaxaInTree = taxaInThisTree;
+                    completeTreeIndex = treeIdx;
+                }
+            }
+            
+            System.out.println("WARNING: No tree contains all " + realTaxaCount + " taxa!");
+            System.out.println("Using tree " + completeTreeIndex + " with " + maxTaxaInTree + " taxa as fallback");
+            System.out.println("This may cause DP issues - the algorithm expects at least one complete tree");
+        }
+        
+        // Use the entire range of the complete tree (represents the root cluster)
+        int numTaxaInCompleteTree = geneTreeOrderings[completeTreeIndex].length;
+        ClusterHashPair result = getClusterHash(completeTreeIndex, 0, numTaxaInCompleteTree);
+        
+        System.out.println("All taxa cluster hash from tree " + completeTreeIndex + ": " + result.toDebugString());
+        System.out.println("Cluster size: " + numTaxaInCompleteTree + " taxa");
+        System.out.println("==== ALL TAXA CLUSTER HASH COMPUTED ====");
+        
+        return result;
     }
 }

@@ -16,6 +16,8 @@ The code structure and conventions should be all the same as the current code. F
 
 The only and only representation of ST biparitions will be like Rangebiparitions, so completely get rid of any kind of memory intensive bitset expansions. Wipe out all instances of STBipartitions, and we should always use RangeBiparititions instead. 
 
+keep in mind that there may be missing taxa in trees, in that case the gene tree ordering should have sentinel values as padding 
+
 
 
 

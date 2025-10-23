@@ -461,15 +461,31 @@ public class MemoryOptimizedWeightCalculator {
         int numTrees = inverseIndex.length;
         int numTaxa = inverseIndex[0].length;
         
+        System.out.println("==== FLATTENING INVERSE INDEX ====");
+        System.out.println("Inverse index dimensions: " + numTrees + " trees x " + numTaxa + " taxa");
+        
         Memory memory = new Memory((long) numTrees * numTaxa * 4); // 4 bytes per int
         
         for (int tree = 0; tree < numTrees; tree++) {
+            // Validate array dimensions
+            if (inverseIndex[tree].length != numTaxa) {
+                System.err.println("ERROR: Inverse index tree " + tree + " has " + 
+                                 inverseIndex[tree].length + " taxa, expected " + numTaxa);
+                throw new RuntimeException("Inconsistent inverse index dimensions");
+            }
+            
             for (int taxon = 0; taxon < numTaxa; taxon++) {
                 long offset = ((long) tree * numTaxa + taxon) * 4;
                 memory.setInt(offset, inverseIndex[tree][taxon]);
             }
+            
+            // Log progress for large datasets
+            if (tree % 100 == 0 || tree == numTrees - 1) {
+                System.out.println("Flattened inverse index for " + (tree + 1) + "/" + numTrees + " trees");
+            }
         }
         
+        System.out.println("==== INVERSE INDEX FLATTENING COMPLETED ====");
         return memory;
     }
     
@@ -479,16 +495,73 @@ public class MemoryOptimizedWeightCalculator {
     private Memory flattenOrderings() {
         int[][] orderings = inverseIndexManager.getGeneTreeOrderings();
         int numTrees = orderings.length;
-        int numTaxa = orderings[0].length;
         
-        Memory memory = new Memory((long) numTrees * numTaxa * 4); // 4 bytes per int
+        System.out.println("==== FLATTENING ORDERINGS WITH VARIABLE TREE SIZES ====");
+        System.out.println("Number of trees: " + numTrees);
+        
+        // Find the maximum number of taxa across all trees
+        int maxNumTaxa = 0;
+        int minNumTaxa = Integer.MAX_VALUE;
+        int totalTaxa = 0;
         
         for (int tree = 0; tree < numTrees; tree++) {
-            for (int pos = 0; pos < numTaxa; pos++) {
-                long offset = ((long) tree * numTaxa + pos) * 4;
-                memory.setInt(offset, orderings[tree][pos]);
+            if (orderings[tree] == null) {
+                System.err.println("ERROR: Tree " + tree + " has null ordering array");
+                throw new RuntimeException("Null ordering array for tree " + tree);
+            }
+            
+            int actualLength = orderings[tree].length;
+            maxNumTaxa = Math.max(maxNumTaxa, actualLength);
+            minNumTaxa = Math.min(minNumTaxa, actualLength);
+            totalTaxa += actualLength;
+            
+            // Log first few trees and some statistics
+            if (tree < 5) {
+                System.out.println("Tree " + tree + " length: " + actualLength);
             }
         }
+        
+        System.out.println("Tree size statistics:");
+        System.out.println("  Min taxa per tree: " + minNumTaxa);
+        System.out.println("  Max taxa per tree: " + maxNumTaxa);
+        System.out.println("  Average taxa per tree: " + (totalTaxa / (double) numTrees));
+        System.out.println("Using padded size: " + maxNumTaxa + " taxa per tree");
+        
+        // Use the maximum size and pad shorter trees with -1 (sentinel value)
+        int paddedNumTaxa = maxNumTaxa;
+        Memory memory = new Memory((long) numTrees * paddedNumTaxa * 4); // 4 bytes per int
+        System.out.println("Allocated memory for " + numTrees + " x " + paddedNumTaxa + " = " + 
+                         (numTrees * paddedNumTaxa) + " integers");
+        
+        int paddedPositions = 0;
+        
+        for (int tree = 0; tree < numTrees; tree++) {
+            int actualTreeSize = orderings[tree].length;
+            
+            // Copy actual taxa positions
+            for (int pos = 0; pos < actualTreeSize; pos++) {
+                long offset = ((long) tree * paddedNumTaxa + pos) * 4;
+                memory.setInt(offset, orderings[tree][pos]);
+            }
+            
+            // Pad remaining positions with -1 (sentinel value indicating "no taxon")
+            for (int pos = actualTreeSize; pos < paddedNumTaxa; pos++) {
+                long offset = ((long) tree * paddedNumTaxa + pos) * 4;
+                memory.setInt(offset, -1); // Sentinel value
+                paddedPositions++;
+            }
+            
+            // Log progress for large datasets
+            if (tree % 100 == 0 || tree == numTrees - 1) {
+                System.out.println("Processed " + (tree + 1) + "/" + numTrees + 
+                                 " trees (tree " + tree + " has " + actualTreeSize + " taxa)");
+            }
+        }
+        
+        System.out.println("Padding statistics:");
+        System.out.println("  Total padded positions: " + paddedPositions);
+        System.out.println("  Padding overhead: " + (paddedPositions / (double)(numTrees * paddedNumTaxa) * 100) + "%");
+        System.out.println("==== FLATTEN ORDERINGS COMPLETED ====");
         
         return memory;
     }

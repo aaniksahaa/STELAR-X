@@ -22,6 +22,7 @@ tree/ClusterHashPair.class
 core/QuartetFrequencyCounter$Quadripartition.class
 core/BranchSupportCalculator$BranchAnnotationType.class
 core/QuartetFrequencyCounter.class
+core/ClusterHashManager$ClusterRange.class
 utils/Threading.class
 utils/BipartitionExpansionConfig.class
 utils/Config$ComputationMode.class

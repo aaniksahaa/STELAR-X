@@ -97,11 +97,11 @@ public class MemoryOptimizedInferenceDP {
             
             processedCandidates++;
             
-            // Log progress for large datasets
-            if (processedCandidates % 1000 == 0 || processedCandidates == candidateRangeBips.size()) {
-                System.out.println("Processed " + processedCandidates + "/" + candidateRangeBips.size() + 
-                                 " candidates, unique clusters: " + uniqueClusters);
-            }
+            // // Log progress for large datasets
+            // if (processedCandidates % 1000 == 0 || processedCandidates == candidateRangeBips.size()) {
+            //     System.out.println("Processed " + processedCandidates + "/" + candidateRangeBips.size() + 
+            //                      " candidates, unique clusters: " + uniqueClusters);
+            // }
         }
         
         System.out.println("Hash-based preprocessing completed");
