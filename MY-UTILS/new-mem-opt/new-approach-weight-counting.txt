@@ -47,65 +47,11 @@ T = \sum_{R_a, R_b \in \mathcal{R}} \operatorname{cost}(R_a, R_b)
   = \Theta\!\left( \sum_{R_a, R_b \in \mathcal{R}} \min(|R_a|, |R_b|) \right).
 \]
 
-\section{Complexity Analysis}
 
-\subsection{Preliminary Observation}
 
-Since all trees share identical hierarchical structure, it suffices to analyze the interaction between two trees $T_i$ and $T_j$ and then multiply appropriately.  
-We denote this pairwise cost by $T_{\mathrm{pair}}$ and later extend to $k$ trees.
 
-\begin{lemma}[Pairwise range cost by depth]
-For depths $d_1, d_2 \in \{0, \dots, \log_2 n\}$, the total cost of comparing all ranges from levels $d_1$ and $d_2$ satisfies
-\[
-C(d_1, d_2) = 2^{d_1 + d_2} \cdot \frac{n}{2^{\max(d_1, d_2)}}.
-\]
-\end{lemma}
 
-\begin{proof}
-At depth $d_i$, there are $2^{d_i}$ ranges, each of length $n/2^{d_i}$.  
-For every pair $(R_{a}, R_{b})$ with depths $d_1$ and $d_2$, the cost is proportional to $\min(S_{d_1}, S_{d_2}) = n / 2^{\max(d_1, d_2)}$.  
-Since there are $2^{d_1 + d_2}$ such pairs, the stated expression follows.
-\end{proof}
 
-\subsection{Summation over all depth pairs}
-
-Without loss of generality, assume $d_1 \le d_2$.  
-Then $\max(d_1, d_2) = d_2$, and
-\[
-C(d_1, d_2) = n \cdot 2^{d_1}.
-\]
-The total pairwise cost between two trees is
-\begin{align}
-T_{\mathrm{pair}}
-  &= 2 \sum_{d_2=0}^{\log_2 n} \sum_{d_1=0}^{d_2} C(d_1, d_2) \\
-  &= 2n \sum_{d_2=0}^{\log_2 n} \sum_{d_1=0}^{d_2} 2^{d_1}.
-\end{align}
-The inner geometric sum yields
-\[
-\sum_{d_1=0}^{d_2} 2^{d_1} = 2^{d_2 + 1} - 1,
-\]
-so
-\[
-T_{\mathrm{pair}}
-  = 2n \sum_{d_2=0}^{\log_2 n} (2^{d_2 + 1} - 1)
-  = 4n \sum_{d_2=0}^{\log_2 n} 2^{d_2} - 2n (\log_2 n + 1).
-\]
-Since $\sum_{d_2=0}^{\log_2 n} 2^{d_2} = 2n - 1$, it follows that
-\[
-T_{\mathrm{pair}} = 4n (2n - 1) - 2n \log_2 n = \Theta(n^2).
-\]
-\qed
-
-\subsection{Extension to $k$ trees}
-
-All trees share identical depth and structure, hence:
-\[
-T = k \, T_{\mathrm{intra}} + \binom{k}{2} T_{\mathrm{pair}}.
-\]
-Since $T_{\mathrm{intra}} = \Theta(n^2)$ and $T_{\mathrm{pair}} = \Theta(n^2)$,
-\[
-T = \Theta(k^2 n^2).
-\]
 
 
 
@@ -260,6 +206,73 @@ and trivially parallelizable across GPU threads.
 This offers a practical and scalable replacement for
 bitset-based weight computation in large-scale gene tree analyses.
 
+
+
+
+
+
+
+
+
+\section{Complexity Analysis}
+
+\subsection{Preliminary Observation}
+
+Since all trees share identical hierarchical structure, it suffices to analyze the interaction between two trees $T_i$ and $T_j$ and then multiply appropriately.  
+We denote this pairwise cost by $T_{\mathrm{pair}}$ and later extend to $k$ trees.
+
+\begin{lemma}[Pairwise range cost by depth]
+For depths $d_1, d_2 \in \{0, \dots, \log_2 n\}$, the total cost of comparing all ranges from levels $d_1$ and $d_2$ satisfies
+\[
+C(d_1, d_2) = 2^{d_1 + d_2} \cdot \frac{n}{2^{\max(d_1, d_2)}}.
+\]
+\end{lemma}
+
+\begin{proof}
+At depth $d_i$, there are $2^{d_i}$ ranges, each of length $n/2^{d_i}$.  
+For every pair $(R_{a}, R_{b})$ with depths $d_1$ and $d_2$, the cost is proportional to $\min(S_{d_1}, S_{d_2}) = n / 2^{\max(d_1, d_2)}$.  
+Since there are $2^{d_1 + d_2}$ such pairs, the stated expression follows.
+\end{proof}
+
+\subsection{Summation over all depth pairs}
+
+Without loss of generality, assume $d_1 \le d_2$.  
+Then $\max(d_1, d_2) = d_2$, and
+\[
+C(d_1, d_2) = n \cdot 2^{d_1}.
+\]
+The total pairwise cost between two trees is
+\begin{align}
+T_{\mathrm{pair}}
+  &= 2 \sum_{d_2=0}^{\log_2 n} \sum_{d_1=0}^{d_2} C(d_1, d_2) \\
+  &= 2n \sum_{d_2=0}^{\log_2 n} \sum_{d_1=0}^{d_2} 2^{d_1}.
+\end{align}
+The inner geometric sum yields
+\[
+\sum_{d_1=0}^{d_2} 2^{d_1} = 2^{d_2 + 1} - 1,
+\]
+so
+\[
+T_{\mathrm{pair}}
+  = 2n \sum_{d_2=0}^{\log_2 n} (2^{d_2 + 1} - 1)
+  = 4n \sum_{d_2=0}^{\log_2 n} 2^{d_2} - 2n (\log_2 n + 1).
+\]
+Since $\sum_{d_2=0}^{\log_2 n} 2^{d_2} = 2n - 1$, it follows that
+\[
+T_{\mathrm{pair}} = 4n (2n - 1) - 2n \log_2 n = \Theta(n^2).
+\]
+\qed
+
+\subsection{Extension to $k$ trees}
+
+All trees share identical depth and structure, hence:
+\[
+T = k \, T_{\mathrm{intra}} + \binom{k}{2} T_{\mathrm{pair}}.
+\]
+Since $T_{\mathrm{intra}} = \Theta(n^2)$ and $T_{\mathrm{pair}} = \Theta(n^2)$,
+\[
+T = \Theta(k^2 n^2).
+\]
 
 
 

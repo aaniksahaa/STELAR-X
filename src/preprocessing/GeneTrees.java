@@ -296,11 +296,24 @@ public class GeneTrees {
 
         // Now use the memory-efficient bipartition manager to process STBipartitions
         System.out.println("\n=== Memory-Efficient STBipartition Processing ===");
+        System.out.println("Starting bipartition extraction from gene trees...");
+        System.out.println("  Gene trees to process: " + this.geneTrees.size());
+        System.out.println("  Real taxa count: " + this.realTaxaCount);
+        System.out.println("  Using memory-efficient range-based representation");
+        
+        long bipartitionStartTime = System.currentTimeMillis();
         MemoryEfficientBipartitionManager bipartitionManager = 
             new MemoryEfficientBipartitionManager(this.geneTrees, this.realTaxaCount);
         
-        // Process gene trees using range-based representation
+        System.out.println("\nProcessing gene trees with parallel extraction...");
         this.stBipartitions = bipartitionManager.processGeneTreesParallel();
+        
+        long bipartitionEndTime = System.currentTimeMillis();
+        System.out.println("\nBipartition extraction completed:");
+        System.out.println("  Processing time: " + (bipartitionEndTime - bipartitionStartTime) + " ms");
+        System.out.println("  Unique bipartitions found: " + this.stBipartitions.size());
+        System.out.println("  Memory optimization: Range-based representation used");
+        System.out.println("  " + bipartitionManager.getStatistics().replace("\n", "\n  "));
         
         // Output preprocessing statistics
         System.out.println("\n=== Gene Tree Processing Complete ===");
@@ -364,19 +377,29 @@ public class GeneTrees {
      * @return List of candidate bipartitions for inference
      */
     public List<STBipartition> generateCandidateBipartitions(boolean useExpansion) {
+        System.out.println("\n=== Candidate Bipartition Generation ===");
+        System.out.println("Starting candidate generation process...");
+        System.out.println("  Expansion enabled: " + useExpansion);
+        System.out.println("  Source bipartitions: " + stBipartitions.size());
+        
         List<STBipartition> candidates = new ArrayList<>();
         Set<BitSet> processedClusters = new HashSet<>();
         
         // First, add all bipartitions from gene trees
-        System.out.println("\n ***************** Adding all bipartitions from gene trees *****************\n");
+        System.out.println("\nPhase 1: Adding bipartitions from gene trees");
+        int initialCount = 0;
         for (STBipartition stb : stBipartitions.keySet()) {
             candidates.add(stb);
             processedClusters.add(stb.cluster1);
             processedClusters.add(stb.cluster2);
+            initialCount++;
         }
+        System.out.println("  Added " + initialCount + " bipartitions from gene trees");
+        System.out.println("  Processed clusters: " + processedClusters.size());
         
         // Generate complementary bipartitions for each cluster
-        System.out.println("\n ***************** Adding complementary bipartitions for each cluster *****************\n");
+        System.out.println("\nPhase 2: Generating complementary bipartitions");
+        int complementaryCount = 0;
         for (STBipartition stb : stBipartitions.keySet()) {
             BitSet cluster1 = stb.cluster1;
             BitSet cluster2 = stb.cluster2;
@@ -390,6 +413,7 @@ public class GeneTrees {
                     candidates.add(new STBipartition(cluster1, complement));
                     processedClusters.add(cluster1);
                     processedClusters.add(complement);
+                    complementaryCount++;
                 }
             }
             
@@ -401,9 +425,12 @@ public class GeneTrees {
                     candidates.add(new STBipartition(cluster2, complement));
                     processedClusters.add(cluster2);
                     processedClusters.add(complement);
+                    complementaryCount++;
                 }
             }
         }
+        System.out.println("  Added " + complementaryCount + " complementary bipartitions");
+        System.out.println("  Total candidates before expansion: " + candidates.size());
         
         // // Add all possible valid bipartitions for small clusters (size <= 3)
         // for (int size = 1; size <= 3; size++) {

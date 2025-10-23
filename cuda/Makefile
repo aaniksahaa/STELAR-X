@@ -1,8 +1,9 @@
 NVCC = nvcc
 NVCC_FLAGS = -O3 -Xcompiler -fPIC -shared
 
-TARGET = libweight_calc.so
-SRC = weight_calc.cu
+# Memory-efficient CUDA library
+TARGET = libmemory_efficient_weight_calc.so
+SRC = memory_efficient_weight_calc.cu
 
 $(TARGET): $(SRC)
 	$(NVCC) $(NVCC_FLAGS) -o $@ $<
