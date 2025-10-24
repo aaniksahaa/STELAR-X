@@ -133,27 +133,122 @@ START_NS=$(date +%s%N)
 ) 2> "$TIME_TMP" &
 STELAR_WRAPPER_PID=$!
 
-# start GPU monitor only if nvidia-smi exists
+
+
+
+
+
+# # start GPU monitor only if nvidia-smi exists
+# if command -v nvidia-smi >/dev/null 2>&1; then
+#   (
+#     curmax=0
+#     # sample at 0.1s to catch short spikes
+#     while kill -0 "$STELAR_WRAPPER_PID" 2>/dev/null; do
+#       gpu_val=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | awk 'BEGIN{m=0} {v=int($1); if(v>m) m=v} END{print m}')
+#       if [[ -n "$gpu_val" && "$gpu_val" =~ ^[0-9]+$ ]]; then
+#         if (( gpu_val > curmax )); then
+#           curmax=$gpu_val
+#         fi
+#       fi
+#       sleep 0.1
+#     done
+#     echo "$curmax" > "$MON_TMP"
+#   ) &
+#   MON_PID=$!
+# else
+#   echo "NA" > "$MON_TMP"
+#   MON_PID=""
+# fi
+
+
+
+
+# --- ROBUST PER-PROCESS GPU MEMORY MONITOR ---
 if command -v nvidia-smi >/dev/null 2>&1; then
   (
     curmax=0
-    # sample at 0.1s to catch short spikes
+    slept=0
+    max_sleep=5  # wait up to 5s for child to spawn
+
     while kill -0 "$STELAR_WRAPPER_PID" 2>/dev/null; do
-      gpu_val=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | awk 'BEGIN{m=0} {v=int($1); if(v>m) m=v} END{print m}')
-      if [[ -n "$gpu_val" && "$gpu_val" =~ ^[0-9]+$ ]]; then
-        if (( gpu_val > curmax )); then
-          curmax=$gpu_val
-        fi
+      # Wait briefly for GPU process to appear
+      if (( slept < max_sleep )) && ! nvidia-smi --query-compute-apps=pid --format=csv,noheader >/dev/null 2>&1; then
+        sleep 0.5
+        ((slept++))
+        continue
       fi
-      sleep 0.1
+
+      # Query only compute apps and match by ancestry
+      max_for_run=$(nvidia-smi --query-compute-apps=pid,used_gpu_memory --format=csv,noheader,nounits 2>/dev/null | \
+        awk -F', ' -v parent="$STELAR_WRAPPER_PID" '
+          function is_descendant(pid, target,   ppid) {
+            while (pid > 1) {
+              cmd = "ps -o ppid= -p " pid " 2>/dev/null"
+              cmd | getline ppid; close(cmd)
+              if (ppid == target) return 1
+              pid = ppid
+            }
+            return 0
+          }
+          {
+            pid=$1; mem=$2;
+            if (is_descendant(pid, parent) && mem+0 > max) max = mem+0
+          } 
+          END {print (max+0)}' 2>/dev/null || echo 0)
+
+      if (( max_for_run > curmax )); then
+        curmax=$max_for_run
+      fi
+      sleep 0.2
     done
     echo "$curmax" > "$MON_TMP"
   ) &
   MON_PID=$!
 else
   echo "NA" > "$MON_TMP"
-  MON_PID=""
 fi
+
+
+
+
+
+# # start GPU monitor only if nvidia-smi exists
+# if command -v nvidia-smi >/dev/null 2>&1; then
+#   (
+#     curmax=0
+#     while kill -0 "$STELAR_WRAPPER_PID" 2>/dev/null; do
+#       # get all descendant PIDs of the wrapper (Java or CUDA processes)
+#       pids=$(pgrep -P "$STELAR_WRAPPER_PID")
+#       [[ -z "$pids" ]] && pids="$STELAR_WRAPPER_PID"
+
+#       # query GPU memory usage for those PIDs only
+#       gpu_val=$(nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader,nounits 2>/dev/null |
+#         awk -v list="$pids" '
+#           BEGIN{split(list, pset, " "); sum=0}
+#           {for (p in pset) if ($1 == pset[p]) sum += int($2)}
+#           END{print sum}'
+#       )
+
+#       if [[ -n "$gpu_val" && "$gpu_val" =~ ^[0-9]+$ ]]; then
+#         (( gpu_val > curmax )) && curmax=$gpu_val
+#       fi
+#       sleep 0.1
+#     done
+#     echo "$curmax" > "$MON_TMP"
+#   ) &
+#   MON_PID=$!
+# else
+#   echo "NA" > "$MON_TMP"
+#   MON_PID=""
+# fi
+
+
+
+
+
+
+
+
 
 # wait for the STELAR wrapper to finish and capture exit code
 wait "$STELAR_WRAPPER_PID"
