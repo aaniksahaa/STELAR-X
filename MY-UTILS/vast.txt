@@ -7,34 +7,20 @@ add key to instance
     
 nano ~/.ssh/config
     
-ssh -p 11624 root@77.33.143.182 -L 8080:localhost:8080
+    
+    
+    
+vast1:
 
+ssh -p 22083 root@194.14.47.19 -L 8080:localhost:8080
+    
 Host vast1
-    HostName 77.33.143.182
-    Port 11624
+    HostName 194.14.47.19
+    Port 22083
     User root
     IdentityFile ~/.ssh/id_ed25519
-    IdentitiesOnly yes
+    IdentitiesOnly yes    
 
-    
-ssh -p 44949 root@109.198.107.223 -L 8080:localhost:8080
-
-Host vast2
-    HostName 109.198.107.223
-    Port 44949
-    User root
-    IdentityFile ~/.ssh/id_ed25519
-    IdentitiesOnly yes
-    
-    
-ssh -p 44561 root@109.198.107.223 -L 8080:localhost:8080
-    
-Host vast3
-    HostName 109.198.107.223
-    Port 44561
-    User root
-    IdentityFile ~/.ssh/id_ed25519
-    IdentitiesOnly yes
     
 apt install -y nano
 

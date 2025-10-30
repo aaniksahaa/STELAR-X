@@ -69,7 +69,7 @@ cd STELAR-MP
 
 git checkout mem3 
 
-chmod +x build.sh collect-stats-standard.sh collect-stats-simulated.sh run-bulk-standard.sh run-bulk-simulated.sh run.sh sim.sh test-stelar.sh
+chmod +x build.sh collect-stats-standard.sh collect-stats-simulated.sh run-bulk-standard.sh run-bulk-simulated.sh run.sh sim.sh test-stelar.sh test-astral.sh
 
 pip install dendropy
 
