@@ -4,29 +4,37 @@ ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDVIt2qC+49M4Y3FSZVpVFfJWbn6LM/SWGZaj5TV0Snr
 
 
 add key to instance
+    
+nano ~/.ssh/config
+    
+ssh -p 11624 root@77.33.143.182 -L 8080:localhost:8080
 
-
-
-ssh -p 16403 root@93.120.231.186 -L 8080:localhost:8080
-
-Host vast3
-    HostName 93.120.231.186
-    Port 16403
+Host vast1
+    HostName 77.33.143.182
+    Port 11624
     User root
     IdentityFile ~/.ssh/id_ed25519
     IdentitiesOnly yes
+
     
-    
-ssh -p 16412 root@93.120.231.186 -L 8080:localhost:8080
+ssh -p 44949 root@109.198.107.223 -L 8080:localhost:8080
 
 Host vast2
-    HostName 93.120.231.186
-    Port 16412
+    HostName 109.198.107.223
+    Port 44949
     User root
     IdentityFile ~/.ssh/id_ed25519
     IdentitiesOnly yes
-
     
+    
+ssh -p 44561 root@109.198.107.223 -L 8080:localhost:8080
+    
+Host vast3
+    HostName 109.198.107.223
+    Port 44561
+    User root
+    IdentityFile ~/.ssh/id_ed25519
+    IdentitiesOnly yes
     
 apt install -y nano
 
@@ -70,7 +78,7 @@ df -h
 
 and work on a big space dir, not in home 
 
-however, /dev/... do not have exec permission normally..., so write codes like that...
+however, /dev/... do not have exec permission normally..., so write codes in home etc, and store data in those dirs
 
 
 dont take those that have low max duration 

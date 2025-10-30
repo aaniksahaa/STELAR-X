@@ -1,0 +1,8 @@
+- Summary methods for phylogenetic analyses construct species trees from an input collection of gene trees. While triplet-based and quartet-based algorithms exist, they are inadequate in terms of running time and memory to deal with hundreds of thousands of taxa. STELAR is a triplet based phylo inference method. We work on it...
+- We replace the usage of memory-intensive bitsets with a novel and efficient representation of subtree-bipartitions
+- We also introduce a double hashing scheme with a permutation invariant and associative hash function with theoretical guarantee of negligible global hash collisions. We use this hashing scheme in the efficient mapping of bipartitions and the dynamic programming algorithm to reduce the memory usage and running time
+- We propose the first phylogenetic analysis algorithm with memory complexity asymptotically equal to the input size O(nk), which is a lower bound
+- Efficient precomputation of bipartition weights leveraging GPU paralleism
+- Extensive experiments demonstrate that STELAR-X preserves the accuracy of STELAR while achieving unprecendented scale in terms of number of taxa and gene trees
+- With simulated datasets of 5000 taxa and 1000 gene trees, STELAR-X runs 445x faster than ASTRAL-MP while consuming 9x lower CPU RAM.
+- STELAR-X could analyze a simulated dataset of 100 thousand taxa and 1000 gene trees in less than 8 hours while consuming 86GB CPU RAM, demonstrating its high scalability

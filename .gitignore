@@ -4,5 +4,11 @@ simphy/data/
 
 *.log 
 
+BIG-SIMULATED-DATASETS/
+
+backups/
+
+*.zip
+
 
 

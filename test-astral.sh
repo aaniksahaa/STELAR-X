@@ -3,6 +3,11 @@
 # Usage:
 #   ./test_astral.sh -t 1000 -g 500
 #   ./test_astral.sh --taxa_num 1000 --gene_trees 500 --replicate R2 --astral-root /path/to/ASTRAL --fresh
+#
+# Extended to support:
+#   --simphy-dir and --simphy-data-dir (same behavior as test-stelar-simple.sh)
+#   --use-legacy-layout
+#   notification via ntfy.sh (like test-stelar-simple.sh)
 
 set -euo pipefail
 
@@ -11,11 +16,20 @@ TAXA_NUM=""
 GENE_TREES=""
 REPLICATE="R1"
 BASE_DIR="${HOME}/phylogeny"
+
+# simphy/stellar related dirs (new: follow test-stelar-simple.sh behavior)
+SIMPHY_DIR=""                # derived from BASE_DIR unless provided
+SIMPHY_DIR_SET=false
+SIMPHY_DATA_DIR=""           # custom simphy data directory
+SIMPHY_DATA_DIR_SET=false
+
 ASTRAL_DIR=""                # derived from BASE_DIR unless provided
 ASTRAL_DIR_SET=false
 ASTRAL_ROOT=""               # alias for ASTRAL_DIR for compatibility
-
 ASTRAL_ROOT_SET=false
+
+# Keep STELAR_ROOT for RF calculation (script rf.py expected there)
+STELAR_ROOT="${BASE_DIR%/}/STELAR-MP"
 
 # Defaults that match run_simulator.sh (kept for directory naming parity)
 SB="0.000001"
@@ -37,8 +51,10 @@ Required:
 Optional:
   --replicate, -r    Replicate name (default: R1)
   --base-dir, -b     Base directory (default: ${BASE_DIR})
-  --astral-dir        Path to ASTRAL dir (overrides --base-dir)
-  --astral-root       Path to ASTRAL root (alias for --astral-dir)
+  --simphy-dir       Path to simphy dir (overrides --base-dir)
+  --simphy-data-dir  Custom directory for simphy data storage
+  --astral-dir       Path to ASTRAL dir (overrides --base-dir)
+  --astral-root      Path to ASTRAL root (alias for --astral-dir)
   --astral-opts      Extra args for ASTRAL run (default: "$ASTRAL_OPTS")
   --sb               Substitution/birthrate parameter (default: ${SB})
   --spmin            Population size minimum (default: ${SPMIN})
@@ -55,6 +71,8 @@ while [[ $# -gt 0 ]]; do
     --taxa_num|-t) TAXA_NUM="$2"; shift 2 ;;
     --gene_trees|-g) GENE_TREES="$2"; shift 2 ;;
     --replicate|-r) REPLICATE="$2"; shift 2 ;;
+    --simphy-dir) SIMPHY_DIR="$2"; SIMPHY_DIR_SET=true; shift 2 ;;
+    --simphy-data-dir) SIMPHY_DATA_DIR="$2"; SIMPHY_DATA_DIR_SET=true; shift 2 ;;
     --astral-dir) ASTRAL_DIR="$2"; ASTRAL_DIR_SET=true; shift 2 ;;
     --astral-root) ASTRAL_ROOT="$2"; ASTRAL_ROOT_SET=true; shift 2 ;;
     --astral-opts) ASTRAL_OPTS="$2"; shift 2 ;;
@@ -75,7 +93,12 @@ if [[ -z "$TAXA_NUM" || -z "$GENE_TREES" ]]; then
   exit 2
 fi
 
-# Derive ASTRAL_DIR/ASTRAL_ROOT from BASE_DIR if not explicitly set
+# Derive SIMPHY_DIR from BASE_DIR if not explicitly set (to match test-stelar-simple.sh)
+if [[ "$SIMPHY_DIR_SET" = false ]]; then
+  SIMPHY_DIR="${BASE_DIR%/}/STELAR-MP/simphy"
+fi
+
+# Derive ASTRAL_ROOT from BASE_DIR if not explicitly set (preserve previous behavior)
 if [[ "$ASTRAL_DIR_SET" = false && "$ASTRAL_ROOT_SET" = false ]]; then
   ASTRAL_ROOT="${BASE_DIR%/}/ASTRAL"
 elif [[ "$ASTRAL_DIR_SET" = true && "$ASTRAL_ROOT_SET" = false ]]; then
@@ -85,15 +108,23 @@ elif [[ "$ASTRAL_ROOT_SET" = true ]]; then
   :
 fi
 
-STELAR_ROOT="${BASE_DIR%/}/STELAR-MP"
-
 PAIR="${TAXA_NUM}_${GENE_TREES}"
 
 # Construct SIMPHY_RUN_DIR early (so we can check the stat file before doing heavy work)
-if [[ "$USE_LEGACY_LAYOUT" = true ]]; then
-  SIMPHY_RUN_DIR="${BASE_DIR%/}/STELAR-MP/simphy/data/${PAIR}/${REPLICATE}"
+if [[ "$SIMPHY_DATA_DIR_SET" = true ]]; then
+  # Use custom data directory (mirror logic from test-stelar-simple.sh)
+  if [[ "$USE_LEGACY_LAYOUT" = true ]]; then
+    SIMPHY_RUN_DIR="${SIMPHY_DATA_DIR%/}/${PAIR}/${REPLICATE}"
+  else
+    SIMPHY_RUN_DIR="${SIMPHY_DATA_DIR%/}/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}/${REPLICATE}"
+  fi
 else
-  SIMPHY_RUN_DIR="${BASE_DIR%/}/STELAR-MP/simphy/data/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}/${REPLICATE}"
+  # Default: data directory inside SIMPHY_DIR
+  if [[ "$USE_LEGACY_LAYOUT" = true ]]; then
+    SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/${PAIR}/${REPLICATE}"
+  else
+    SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}/${REPLICATE}"
+  fi
 fi
 
 STAT_FILE="${SIMPHY_RUN_DIR%/}/stat-astral.csv"
@@ -111,6 +142,11 @@ echo "Parameters:"
 echo "  taxa_num:       $TAXA_NUM"
 echo "  gene_trees:     $GENE_TREES"
 echo "  replicate:      $REPLICATE"
+if [[ "$SIMPHY_DATA_DIR_SET" = true ]]; then
+  echo "  simphy data dir: $SIMPHY_DATA_DIR (custom)"
+else
+  echo "  simphy data dir: ${SIMPHY_DIR%/}/data (default)"
+fi
 echo "  simphy run dir: $SIMPHY_RUN_DIR"
 echo "  out astral:     $OUT_ASTRAL"
 echo "  stat file:      $STAT_FILE"
@@ -136,17 +172,10 @@ MON_TMP=$(mktemp)
 # time + gpu-monitor wrapper
 START_NS=$(date +%s%N)
 
-# run ASTRAL under /usr/bin/time -v and capture its stderr (resource usage info)
-# (
-#   cd "$ASTRAL_ROOT" && /usr/bin/time -v ./run_astral.sh -i "$ALL_GT_FILE" -o "$OUT_ASTRAL" $ASTRAL_OPTS
-# ) 2> "$TIME_TMP" &
-# ASTRAL_WRAPPER_PID=$!
-
 (
   cd "$ASTRAL_ROOT" && /usr/bin/time -v ./run_astral.sh -i "$ALL_GT_FILE" -o "$OUT_ASTRAL" $ASTRAL_OPTS
 ) 2> >(tee "$TIME_TMP" >&2) &
 ASTRAL_WRAPPER_PID=$!
-
 
 # start GPU monitor only if nvidia-smi exists (some clusters may have GPUs even if ASTRAL is CPU-bound)
 if command -v nvidia-smi >/dev/null 2>&1; then
@@ -219,19 +248,24 @@ RF_RATE="NA"
 if [[ -f "$OUT_ASTRAL" && -f "$TRUE_SPECIES_TREE" ]]; then
   echo
   echo "==> Calculating RF rate (using rf.py)"
-  rf_output=$(cd "$STELAR_ROOT" && python rf.py "$OUT_ASTRAL" "$TRUE_SPECIES_TREE" 2>&1) || rf_output="$rf_output"
-  rf_candidate=$(echo "$rf_output" | grep -Eo '[0-9]+(\.[0-9]+)?' | head -n1 || true)
-  if [[ -n "$rf_candidate" ]]; then
-    RF_RATE="$rf_candidate"
-    echo ""
-    echo "ASTRAL RF rate: ${RF_RATE}"
-    echo ""
+  # rf.py lives in STELAR_ROOT in your other script; keep the same behavior
+  if [[ -f "${STELAR_ROOT%/}/rf.py" ]]; then
+    rf_output=$(cd "$STELAR_ROOT" && python rf.py "$OUT_ASTRAL" "$TRUE_SPECIES_TREE" 2>&1) || rf_output="$rf_output"
+    rf_candidate=$(echo "$rf_output" | grep -Eo '[0-9]+(\.[0-9]+)?' | head -n1 || true)
+    if [[ -n "$rf_candidate" ]]; then
+      RF_RATE="$rf_candidate"
+      echo ""
+      echo "ASTRAL RF rate: ${RF_RATE}"
+      echo ""
+    else
+      RF_RATE="NA"
+      echo "Warning: couldn't parse RF rate from rf.py output. rf.py output:"
+      echo "-----"
+      echo "$rf_output"
+      echo "-----"
+    fi
   else
-    RF_RATE="NA"
-    echo "Warning: couldn't parse RF rate from rf.py output. rf.py output:"
-    echo "-----"
-    echo "$rf_output"
-    echo "-----"
+    echo "Warning: rf.py not found in ${STELAR_ROOT%/}; skipping RF calculation."
   fi
 else
   echo
@@ -240,7 +274,22 @@ fi
 
 # Write CSV (overwrite every run) — includes replicate after gene-trees, and max-cpu-mb and max-gpu-mb
 echo "alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb" > "$STAT_FILE"
-echo "astral,${TAXA_NUM},${GENE_TREES},${REPLICATE},${SB},${SPMIN},${SPMAX},${RF_RATE},${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB}" >> "$STAT_FILE"
+CSV_ROW="astral,${TAXA_NUM},${GENE_TREES},${REPLICATE},${SB},${SPMIN},${SPMAX},${RF_RATE},${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB}"
+echo "$CSV_ROW" >> "$STAT_FILE"
 
 echo "Wrote stats to $STAT_FILE"
+
+# Send notification with results (same format as test-stelar-simple.sh)
+echo "Sending notification..."
+curl -s -d "🎉 ASTRAL completed for ${TAXA_NUM} taxa and ${GENE_TREES} gene trees!
+
+📊 Results:
+alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb
+$CSV_ROW
+
+📁 Stats saved to: $STAT_FILE" ntfy.sh/anik-test
+
 echo "Done."
+
+# Exit with the same exit code as ASTRAL (so CI/automation can detect failure)
+exit "${ASTRAL_EXIT_CODE}"
