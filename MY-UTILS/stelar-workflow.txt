@@ -122,3 +122,20 @@ git fetch origin && git reset --hard origin/mem3
 
 
 
+
+
+
+### HARD UPDATE
+
+# Make sure you're on main
+git checkout main
+
+# Reset main to match B exactly
+git reset --hard mem3
+
+# Push the new main to remote (overwrite remote history)
+git push origin main --force
+
+
+
+
