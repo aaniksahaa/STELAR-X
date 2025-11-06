@@ -1,4 +1,4 @@
-# STELAR-MP: Massively Parallel Phylogenetic Tree Inference
+# STELAR-X: Scaling Coalescent-Based Species Tree Inference to 100,000 Species and Beyond
 
 This project implements a massively parallel version of the STELAR algorithm for phylogenetic tree inference, with support for CPU and GPU computation.
 
