@@ -21,6 +21,19 @@ Host vast1
     IdentityFile ~/.ssh/id_ed25519
     IdentitiesOnly yes    
 
+
+vast2:
+
+ssh -p 52994 root@111.237.107.89 -L 8080:localhost:8080
+
+Host vast2
+    HostName 111.237.107.89
+    Port 52994
+    User root
+    IdentityFile ~/.ssh/id_ed25519
+    IdentitiesOnly yes  
+
+
     
 apt install -y nano
 
@@ -55,6 +68,10 @@ make
 make install PREFIX=/usr/local
 
 
+if not works
+
+apt install btop
+
 apt update
 apt install -y htop
 
@@ -72,4 +89,10 @@ dont take those that have low max duration
 us and russia good maybe
 
 i used 1xrtx6000ada 48gb vram from russia - $0.403/hr
+
+
+
+write an idle reminder
+
+
 
