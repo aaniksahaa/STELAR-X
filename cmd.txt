@@ -1,7 +1,11 @@
 ./run.sh all_gt_500.tre out.tre GPU_PARALLEL NONE
 
+./run.sh all_gt_bs_rooted_37.tre out.tre GPU_PARALLEL NONE
+
 ./run.sh bb.tre out.tre GPU_PARALLEL NONE
 
 ./run.sh out.trees a.tre GPU_PARALLEL NONE
 
 ./run.sh 1kp.tre out.tre GPU_PARALLEL NONE
+
+./run.sh avian-14k-og-strca.tre out.tre GPU_PARALLEL NONE
