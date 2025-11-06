@@ -9,3 +9,5 @@
 ./run.sh all_gt_bs_rooted_37.tre out.tre GPU_PARALLEL NONE
 
 ./run.sh all_gt_bs_rooted_200.tre out.tre GPU_PARALLEL NONE
+
+./run.sh avian-14k-og-strca.tre out.tre GPU_PARALLEL NONE

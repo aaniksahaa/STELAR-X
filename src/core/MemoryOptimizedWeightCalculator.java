@@ -5,7 +5,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 
 import com.sun.jna.Memory;
-import com.sun.jna.Pointer;
 
 import preprocessing.GeneTrees;
 import tree.*;
@@ -209,10 +208,16 @@ public class MemoryOptimizedWeightCalculator {
     
     /**
      * Calculate score between two range bipartitions using inverse index.
+     * 
+     * ENHANCED: Properly handles trees with different taxa using sentinel values.
+     * - InverseIndexManager automatically handles -1 sentinel values
+     * - Only counts intersections for taxa present in both trees
+     * 
      * Implements the same scoring formula as original calculateScore method.
      */
     private double calculateRangeScore(RangeBipartition range1, RangeBipartition range2) {
         // Calculate four intersection sizes: AA, AB, BA, BB
+        // InverseIndexManager handles sentinel values automatically
         int aa = inverseIndexManager.getRangeIntersectionSize(
             range1.geneTreeIndex, range1.leftStart, range1.leftEnd,
             range2.geneTreeIndex, range2.leftStart, range2.leftEnd);
@@ -270,33 +275,9 @@ public class MemoryOptimizedWeightCalculator {
     // Removed expensive buildCandidateRangeMapping and findMatchingRange methods
     // Using direct calculation approach instead
     
-    /**
-     * Convert BitSet to set of taxon IDs.
-     */
-    private Set<Integer> bitSetToTaxonSet(utils.BitSet bitSet) {
-        Set<Integer> taxonSet = new HashSet<>();
-        for (int i = bitSet.nextSetBit(0); i >= 0; i = bitSet.nextSetBit(i + 1)) {
-            taxonSet.add(i);
-        }
-        return taxonSet;
-    }
-    
-    /**
-     * Get taxon set for a range in a gene tree.
-     */
-    private Set<Integer> getRangeTaxonSet(int geneTreeIndex, int start, int end) {
-        Set<Integer> taxonSet = new HashSet<>();
-        int[][] orderings = bipartitionManager.getGeneTreeTaxaOrdering();
-        
-        if (geneTreeIndex >= 0 && geneTreeIndex < orderings.length) {
-            int[] ordering = orderings[geneTreeIndex];
-            for (int i = start; i < end && i < ordering.length; i++) {
-                taxonSet.add(ordering[i]);
-            }
-        }
-        
-        return taxonSet;
-    }
+    // Removed unused utility methods:
+    // - bitSetToTaxonSet: No longer needed with range-based approach
+    // - getRangeTaxonSet: Replaced by InverseIndexManager functionality
     
     /**
      * Memory-optimized GPU weight calculation using compact range representations.
@@ -308,10 +289,6 @@ public class MemoryOptimizedWeightCalculator {
         try {
             // Convert candidates and gene tree bipartitions to compact representations
             System.out.println("Converting bipartitions to compact range representations...");
-            
-            // Use direct compact representation without expensive mapping
-            List<RangeBipartition> candidateRanges = new ArrayList<>();
-            List<RangeBipartition> mappedCandidates = new ArrayList<>();
             
             // Use hybrid GPU approach: BitSet candidates vs Range gene trees
             System.out.println("Using hybrid GPU approach: BitSet candidates vs compact range gene trees");
@@ -421,6 +398,10 @@ public class MemoryOptimizedWeightCalculator {
             
             // Launch compact GPU kernel
             System.out.println("Launching pure range-based GPU kernel with inverse index arrays...");
+            System.out.println("IMPORTANT: GPU kernel must handle -1 sentinel values in inverse index");
+            System.out.println("  - inverseIndex[tree][taxon] == -1 means taxon not present in tree");
+            System.out.println("  - Only count intersections for taxa present in both trees");
+            
             WeightCalcLib.INSTANCE.launchCompactWeightCalculation(
                 candidateArray,
                 geneTreeArray,
@@ -455,16 +436,26 @@ public class MemoryOptimizedWeightCalculator {
     
     /**
      * Flatten inverse index array for GPU transfer.
+     * 
+     * CRITICAL: Handles sentinel values for trees with different taxa.
+     * - GPU kernel MUST check for -1 values before using positions
+     * - Format: memory[tree * numTaxa + taxon] = position (or -1 if taxon not in tree)
+     * - Memory layout: [tree0_taxon0, tree0_taxon1, ..., tree1_taxon0, tree1_taxon1, ...]
      */
+    @SuppressWarnings("resource") // Memory is managed by JNA and GPU kernel
     private Memory flattenInverseIndex() {
         int[][] inverseIndex = inverseIndexManager.getInverseIndex();
         int numTrees = inverseIndex.length;
         int numTaxa = inverseIndex[0].length;
         
-        System.out.println("==== FLATTENING INVERSE INDEX ====");
+        System.out.println("==== FLATTENING INVERSE INDEX WITH SENTINEL SUPPORT ====");
         System.out.println("Inverse index dimensions: " + numTrees + " trees x " + numTaxa + " taxa");
+        System.out.println("Sentinel value: -1 (indicates taxon not present in tree)");
         
         Memory memory = new Memory((long) numTrees * numTaxa * 4); // 4 bytes per int
+        
+        int totalSentinels = 0;
+        int totalValidPositions = 0;
         
         for (int tree = 0; tree < numTrees; tree++) {
             // Validate array dimensions
@@ -474,24 +465,48 @@ public class MemoryOptimizedWeightCalculator {
                 throw new RuntimeException("Inconsistent inverse index dimensions");
             }
             
+            int treeSentinels = 0;
+            
             for (int taxon = 0; taxon < numTaxa; taxon++) {
                 long offset = ((long) tree * numTaxa + taxon) * 4;
-                memory.setInt(offset, inverseIndex[tree][taxon]);
+                int position = inverseIndex[tree][taxon];
+                
+                memory.setInt(offset, position);
+                
+                // Count sentinels for statistics
+                if (position == -1) {
+                    treeSentinels++;
+                    totalSentinels++;
+                } else {
+                    totalValidPositions++;
+                }
             }
             
-            // // Log progress for large datasets
-            // if (tree % 100 == 0 || tree == numTrees - 1) {
-            //     System.out.println("Flattened inverse index for " + (tree + 1) + "/" + numTrees + " trees");
-            // }
+            // Log progress for large datasets (with sentinel statistics)
+            if (tree % 100 == 0 || tree == numTrees - 1) {
+                System.out.println("Flattened tree " + (tree + 1) + "/" + numTrees + 
+                                 " (" + treeSentinels + " sentinels, " + 
+                                 (numTaxa - treeSentinels) + " valid positions)");
+            }
         }
         
+        System.out.println("Inverse index flattening statistics:");
+        System.out.println("  Total positions: " + (numTrees * numTaxa));
+        System.out.println("  Valid positions: " + totalValidPositions);
+        System.out.println("  Sentinel positions: " + totalSentinels);
+        System.out.println("  Taxa coverage: " + String.format("%.2f%%", 
+                         100.0 * totalValidPositions / (numTrees * numTaxa)));
         System.out.println("==== INVERSE INDEX FLATTENING COMPLETED ====");
+        
+        // Note: Memory object will be automatically freed by JNA when no longer referenced
+        // GPU kernel is responsible for copying data before this method returns
         return memory;
     }
     
     /**
      * Flatten ordering arrays for GPU transfer.
      */
+    @SuppressWarnings("resource") // Memory is managed by JNA and GPU kernel
     private Memory flattenOrderings() {
         int[][] orderings = inverseIndexManager.getGeneTreeOrderings();
         int numTrees = orderings.length;
@@ -563,6 +578,8 @@ public class MemoryOptimizedWeightCalculator {
         System.out.println("  Padding overhead: " + (paddedPositions / (double)(numTrees * paddedNumTaxa) * 100) + "%");
         System.out.println("==== FLATTEN ORDERINGS COMPLETED ====");
         
+        // Note: Memory object will be automatically freed by JNA when no longer referenced
+        // GPU kernel is responsible for copying data before this method returns
         return memory;
     }
     

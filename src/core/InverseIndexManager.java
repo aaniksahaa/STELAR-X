@@ -54,12 +54,24 @@ public class InverseIndexManager {
     /**
      * Build inverse index from gene trees using left-to-right leaf ordering.
      * This mirrors the approach used in MemoryEfficientBipartitionManager.
+     * 
+     * CRITICAL: Handles trees with different taxa by using sentinel values.
+     * - inverseIndex[treeIdx][taxonId] = position if taxon exists in tree
+     * - inverseIndex[treeIdx][taxonId] = -1 if taxon does NOT exist in tree
      */
     private void buildInverseIndex(List<Tree> geneTrees) {
         System.out.println("Building inverse index mappings...");
         
+        // CRITICAL FIX: Initialize all inverse index positions to -1 (sentinel value)
+        // This distinguishes between "taxon at position 0" vs "taxon not in this tree"
+        System.out.println("Initializing inverse index with sentinel values (-1 for non-existent taxa)...");
+        for (int treeIdx = 0; treeIdx < numTrees; treeIdx++) {
+            java.util.Arrays.fill(inverseIndex[treeIdx], -1);
+        }
+        
         int processedTrees = 0;
         int totalLeaves = 0;
+        int totalSentinelPositions = 0;
         
         for (int treeIdx = 0; treeIdx < numTrees; treeIdx++) {
             Tree tree = geneTrees.get(treeIdx);
@@ -72,9 +84,12 @@ public class InverseIndexManager {
             totalLeaves += ordering.size();
             
             // Build inverse mapping: taxonId -> position
+            // Only taxa that exist in this tree get their actual positions
+            // All other taxa remain at -1 (sentinel value)
             for (int pos = 0; pos < geneTreeOrderings[treeIdx].length; pos++) {
                 int taxonId = geneTreeOrderings[treeIdx][pos];
                 if (taxonId >= 0 && taxonId < numTaxa) {
+                    // Set actual position for taxa that exist in this tree
                     inverseIndex[treeIdx][taxonId] = pos;
                 } else {
                     System.err.println("WARNING: Invalid taxon ID " + taxonId + 
@@ -82,21 +97,32 @@ public class InverseIndexManager {
                 }
             }
             
+            // Count how many taxa are NOT in this tree (remain at -1)
+            int sentinelCount = 0;
+            for (int taxonId = 0; taxonId < numTaxa; taxonId++) {
+                if (inverseIndex[treeIdx][taxonId] == -1) {
+                    sentinelCount++;
+                }
+            }
+            totalSentinelPositions += sentinelCount;
+            
             processedTrees++;
             
-            // // Log progress for large datasets
-            // if (processedTrees % 100 == 0 || processedTrees == numTrees) {
-            //     System.out.println("Processed " + processedTrees + "/" + numTrees + 
-            //                      " trees, average leaves per tree: " + 
-            //                      (totalLeaves / (double) processedTrees));
-            // }
+            // Log progress for large datasets (uncomment if needed for debugging)
+            if (processedTrees % 100 == 0 || processedTrees == numTrees) {
+                System.out.println("Processed " + processedTrees + "/" + numTrees + 
+                                 " trees, average leaves per tree: " + 
+                                 (totalLeaves / (double) processedTrees));
+            }
         }
         
         System.out.println("Inverse index built successfully");
         System.out.println("Total leaves processed: " + totalLeaves);
         System.out.println("Average leaves per tree: " + (totalLeaves / (double) numTrees));
+        System.out.println("Total sentinel positions (taxa not in trees): " + totalSentinelPositions);
+        System.out.println("Average missing taxa per tree: " + (totalSentinelPositions / (double) numTrees));
         
-        // Validate index consistency
+        // Validate index consistency (including sentinel values)
         validateInverseIndex();
     }
     
@@ -124,45 +150,85 @@ public class InverseIndexManager {
     
     /**
      * Validate that inverse index is consistent with gene tree orderings.
+     * 
+     * ENHANCED: Also validates sentinel values for taxa not in trees.
+     * - Taxa in tree: inverseIndex[tree][taxon] should equal actual position
+     * - Taxa not in tree: inverseIndex[tree][taxon] should equal -1 (sentinel)
      */
     private void validateInverseIndex() {
-        System.out.println("Validating inverse index consistency...");
+        System.out.println("Validating inverse index consistency (including sentinel values)...");
         
         int validationErrors = 0;
+        int sentinelValidationErrors = 0;
         
         for (int treeIdx = 0; treeIdx < numTrees; treeIdx++) {
             int[] ordering = geneTreeOrderings[treeIdx];
             
+            // Create set of taxa that exist in this tree for sentinel validation
+            java.util.Set<Integer> taxaInTree = new java.util.HashSet<>();
+            for (int taxonId : ordering) {
+                taxaInTree.add(taxonId);
+            }
+            
+            // Validate forward mapping: ordering -> inverse index
             for (int pos = 0; pos < ordering.length; pos++) {
                 int taxonId = ordering[pos];
                 int retrievedPos = inverseIndex[treeIdx][taxonId];
                 
                 if (retrievedPos != pos) {
-                    System.err.println("Validation error: tree " + treeIdx + 
+                    System.err.println("Forward validation error: tree " + treeIdx + 
                                      ", taxon " + taxonId + 
                                      ", expected pos " + pos + 
                                      ", got pos " + retrievedPos);
                     validationErrors++;
                     
                     if (validationErrors >= 10) {
-                        System.err.println("Too many validation errors, stopping validation");
+                        System.err.println("Too many forward validation errors, stopping validation");
                         break;
                     }
                 }
             }
             
             if (validationErrors >= 10) break;
+            
+            // CRITICAL: Validate sentinel values for taxa NOT in this tree
+            for (int taxonId = 0; taxonId < numTaxa; taxonId++) {
+                if (!taxaInTree.contains(taxonId)) {
+                    // This taxon should NOT be in this tree, so inverse index should be -1
+                    int retrievedPos = inverseIndex[treeIdx][taxonId];
+                    if (retrievedPos != -1) {
+                        System.err.println("Sentinel validation error: tree " + treeIdx + 
+                                         ", taxon " + taxonId + 
+                                         " not in tree but inverse index is " + retrievedPos + 
+                                         " (should be -1)");
+                        sentinelValidationErrors++;
+                        
+                        if (sentinelValidationErrors >= 10) {
+                            System.err.println("Too many sentinel validation errors, stopping validation");
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if (sentinelValidationErrors >= 10) break;
         }
         
-        if (validationErrors == 0) {
-            System.out.println("Inverse index validation passed");
+        if (validationErrors == 0 && sentinelValidationErrors == 0) {
+            System.out.println("Inverse index validation passed (forward mapping and sentinel values)");
         } else {
-            System.err.println("Inverse index validation failed with " + validationErrors + " errors");
+            System.err.println("Inverse index validation failed: " + 
+                             validationErrors + " forward errors, " + 
+                             sentinelValidationErrors + " sentinel errors");
         }
     }
     
     /**
      * Calculate intersection size between two ranges using inverse index.
+     * 
+     * ENHANCED: Properly handles trees with different taxa using sentinel values.
+     * - Only counts taxa that exist in BOTH trees AND fall within specified ranges
+     * - Uses -1 sentinel values to detect taxa not present in a tree
      * 
      * Complexity: O(min(|range1|, |range2|)) instead of O(n) for BitSet operations.
      * 
@@ -187,6 +253,12 @@ public class InverseIndexManager {
             return 0;
         }
         
+        // Additional validation for tree orderings
+        if (geneTreeOrderings[tree1] == null || geneTreeOrderings[tree2] == null) {
+            System.err.println("Null gene tree orderings for tree1=" + tree1 + " or tree2=" + tree2);
+            return 0;
+        }
+        
         // Update statistics
         totalIntersectionCalls++;
         int size1 = end1 - start1;
@@ -195,6 +267,7 @@ public class InverseIndexManager {
         minRangeSize = Math.min(minRangeSize, Math.min(size1, size2));
         
         // Choose smaller range for iteration (complexity optimization)
+        // This is especially important when trees have different taxa counts
         if (size1 <= size2) {
             totalElementsProcessed += size1;
             return countIntersection(tree1, start1, end1, tree2, start2, end2);
@@ -206,6 +279,10 @@ public class InverseIndexManager {
     
     /**
      * Count intersection by iterating over the smaller range.
+     * 
+     * CRITICAL: Handles trees with different taxa using sentinel values.
+     * - If inverseIndex[tree][taxonId] == -1, taxon does NOT exist in that tree
+     * - Only count intersections for taxa that exist in both trees AND fall within ranges
      * 
      * @param smallTree Tree index for the smaller range
      * @param smallStart Start position in smaller range
@@ -227,6 +304,7 @@ public class InverseIndexManager {
         }
         
         int maxPos = Math.min(smallEnd, smallOrdering.length);
+        int taxaNotInLargeTree = 0;  // Statistics for debugging
         
         for (int pos = smallStart; pos < maxPos; pos++) {
             int taxonId = smallOrdering[pos];
@@ -239,10 +317,22 @@ public class InverseIndexManager {
             
             int positionInLargeTree = inverseIndex[largeTree][taxonId];
             
-            // Check if taxon falls within large tree's range
+            // CRITICAL FIX: Check if taxon exists in large tree first (sentinel check)
+            if (positionInLargeTree == -1) {
+                // Taxon does NOT exist in the large tree, skip it
+                taxaNotInLargeTree++;
+                continue;
+            }
+            
+            // Taxon exists in large tree, now check if it falls within the specified range
             if (positionInLargeTree >= largeStart && positionInLargeTree < largeEnd) {
                 count++;
             }
+        }
+        
+        // Log statistics for debugging (only for first few calls to avoid spam)
+        if (totalIntersectionCalls < 5) {
+            System.out.println("Intersection debug: " + taxaNotInLargeTree + " taxa from small tree not found in large tree");
         }
         
         return count;
@@ -250,6 +340,8 @@ public class InverseIndexManager {
     
     /**
      * Get statistics about intersection calculations for performance monitoring.
+     * 
+     * ENHANCED: Includes information about sentinel value handling.
      */
     public String getStatistics() {
         StringBuilder sb = new StringBuilder();
@@ -264,6 +356,21 @@ public class InverseIndexManager {
             sb.append("  Min range size: ").append(minRangeSize == Long.MAX_VALUE ? 0 : minRangeSize).append("\n");
             sb.append("  Max range size: ").append(maxRangeSize).append("\n");
         }
+        
+        // Calculate sentinel statistics
+        int totalSentinels = 0;
+        for (int treeIdx = 0; treeIdx < numTrees; treeIdx++) {
+            for (int taxonId = 0; taxonId < numTaxa; taxonId++) {
+                if (inverseIndex[treeIdx][taxonId] == -1) {
+                    totalSentinels++;
+                }
+            }
+        }
+        
+        sb.append("  Sentinel positions (taxa not in trees): ").append(totalSentinels).append("\n");
+        sb.append("  Average missing taxa per tree: ").append(totalSentinels / (double) numTrees).append("\n");
+        sb.append("  Taxa coverage: ").append(String.format("%.2f%%", 
+                 100.0 * (numTrees * numTaxa - totalSentinels) / (double)(numTrees * numTaxa))).append("\n");
         
         return sb.toString();
     }
