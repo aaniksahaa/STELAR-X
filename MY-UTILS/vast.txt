@@ -8,30 +8,20 @@ add key to instance
 nano ~/.ssh/config
     
     
+
     
     
 vast1:
 
-ssh -p 22083 root@194.14.47.19 -L 8080:localhost:8080
+ssh -p 49529 root@51.68.52.177 -L 8080:localhost:8080
     
 Host vast1
-    HostName 194.14.47.19
-    Port 22083
+    HostName 51.68.52.177
+    Port 49529
     User root
     IdentityFile ~/.ssh/id_ed25519
     IdentitiesOnly yes    
 
-
-vast2:
-
-ssh -p 52994 root@111.237.107.89 -L 8080:localhost:8080
-
-Host vast2
-    HostName 111.237.107.89
-    Port 52994
-    User root
-    IdentityFile ~/.ssh/id_ed25519
-    IdentitiesOnly yes  
 
 
     
