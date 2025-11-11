@@ -1,14 +1,9 @@
 #!/usr/bin/env bash
-# test_astral.sh
-# Usage:
-#   ./test_astral.sh -t 1000 -g 500
-#   ./test_astral.sh --taxa_num 1000 --gene_trees 500 --replicate R2 --astral-root /path/to/ASTRAL --fresh
-#
-# Extended to support:
-#   --simphy-dir and --simphy-data-dir (same behavior as test-stelar-simple.sh)
-#   --use-legacy-layout
-#   notification via ntfy.sh (like test-stelar-simple.sh)
-
+# test_astral_like_stelar.sh
+# ASTRAL wrapper modeled after test-stelar-default-monitor.sh
+# Usage examples:
+#   ./test_astral_like_stelar.sh -t 1000 -g 500
+#   ./test_astral_like_stelar.sh -t 1000 -g 500 --astral-root /path/to/ASTRAL --fresh --debug
 set -euo pipefail
 
 # Defaults
@@ -17,51 +12,51 @@ GENE_TREES=""
 REPLICATE="R1"
 BASE_DIR="${HOME}/phylogeny"
 
-# simphy/stellar related dirs (new: follow test-stelar-simple.sh behavior)
 SIMPHY_DIR=""                # derived from BASE_DIR unless provided
 SIMPHY_DIR_SET=false
-SIMPHY_DATA_DIR=""           # custom simphy data directory
+SIMPHY_DATA_DIR=""           # custom simphy data directory (overrides simphy-dir/data)
 SIMPHY_DATA_DIR_SET=false
 
-ASTRAL_DIR=""                # derived from BASE_DIR unless provided
-ASTRAL_DIR_SET=false
-ASTRAL_ROOT=""               # alias for ASTRAL_DIR for compatibility
+ASTRAL_ROOT=""               # derived from BASE_DIR unless provided
 ASTRAL_ROOT_SET=false
+ASTRAL_OPTS=""
 
-# Keep STELAR_ROOT for RF calculation (script rf.py expected there)
-STELAR_ROOT="${BASE_DIR%/}/STELAR-MP"
-
-# Defaults that match run_simulator.sh (kept for directory naming parity)
 SB="0.000001"
 SPMIN="500000"
 SPMAX="1500000"
 
 USE_LEGACY_LAYOUT=false
-ASTRAL_OPTS=""
 FRESH=false
+
+# Monitoring options (DEFAULT: ON)
+TIME_MONITOR=true
+GPU_MONITOR=true
+DEBUG=0
 
 print_help() {
   cat <<EOF
-test_astral.sh
+test_astral_like_stelar.sh
 
 Required:
   --taxa_num, -t     Number of taxa (e.g. 1000)
   --gene_trees, -g   Number of gene trees (e.g. 500)
 
 Optional:
-  --replicate, -r    Replicate name (default: R1)
-  --base-dir, -b     Base directory (default: ${BASE_DIR})
-  --simphy-dir       Path to simphy dir (overrides --base-dir)
-  --simphy-data-dir  Custom directory for simphy data storage
-  --astral-dir       Path to ASTRAL dir (overrides --base-dir)
-  --astral-root      Path to ASTRAL root (alias for --astral-dir)
-  --astral-opts      Extra args for ASTRAL run (default: "$ASTRAL_OPTS")
-  --sb               Substitution/birthrate parameter (default: ${SB})
-  --spmin            Population size minimum (default: ${SPMIN})
-  --spmax            Population size maximum (default: ${SPMAX})
+  --replicate, -r      Replicate name (default: R1)
+  --base-dir, -b       Base directory (default: ${BASE_DIR})
+  --simphy-dir         Path to simphy dir (overrides --base-dir)
+  --simphy-data-dir    Custom directory for simphy data storage (overrides simphy-dir/data)
+  --astral-root        Path to ASTRAL root (overrides --base-dir)
+  --astral-opts        Extra args for ASTRAL run (default: "$ASTRAL_OPTS")
+  --sb                 Substitution/birthrate parameter (default: ${SB})
+  --spmin              Population size minimum (default: ${SPMIN})
+  --spmax              Population size maximum (default: ${SPMAX})
   --use-legacy-layout  Use legacy simphy layout
-  --fresh            Force rerun even if stat-astral.csv exists
-  --help, -h         Show this message
+  --fresh              Force rerun even if stat-astral.csv exists
+  --no-time-monitor    Disable time-monitoring (overrides default ON)
+  --no-gpu-monitor     Disable GPU-monitoring (overrides default ON)
+  --debug              Enable shell tracing (set DEBUG=1)
+  --help, -h           Show this message
 EOF
 }
 
@@ -73,7 +68,6 @@ while [[ $# -gt 0 ]]; do
     --replicate|-r) REPLICATE="$2"; shift 2 ;;
     --simphy-dir) SIMPHY_DIR="$2"; SIMPHY_DIR_SET=true; shift 2 ;;
     --simphy-data-dir) SIMPHY_DATA_DIR="$2"; SIMPHY_DATA_DIR_SET=true; shift 2 ;;
-    --astral-dir) ASTRAL_DIR="$2"; ASTRAL_DIR_SET=true; shift 2 ;;
     --astral-root) ASTRAL_ROOT="$2"; ASTRAL_ROOT_SET=true; shift 2 ;;
     --astral-opts) ASTRAL_OPTS="$2"; shift 2 ;;
     --base-dir|-b) BASE_DIR="$2"; shift 2 ;;
@@ -82,6 +76,9 @@ while [[ $# -gt 0 ]]; do
     --spmax) SPMAX="$2"; shift 2 ;;
     --use-legacy-layout) USE_LEGACY_LAYOUT=true; shift ;;
     --fresh) FRESH=true; shift ;;
+    --no-time-monitor) TIME_MONITOR=false; shift ;;
+    --no-gpu-monitor) GPU_MONITOR=false; shift ;;
+    --debug) DEBUG=1; shift ;;
     --help|-h) print_help; exit 0 ;;
     *) echo "Unknown option: $1"; print_help; exit 1 ;;
   esac
@@ -93,33 +90,26 @@ if [[ -z "$TAXA_NUM" || -z "$GENE_TREES" ]]; then
   exit 2
 fi
 
-# Derive SIMPHY_DIR from BASE_DIR if not explicitly set (to match test-stelar-simple.sh)
+STELAR_ROOT="${BASE_DIR%/}/STELAR-MP"   # used for rf.py lookup (matches your other script)
+
+# Derive SIMPHY_DIR/ASTRAL_ROOT from BASE_DIR if not explicitly set
 if [[ "$SIMPHY_DIR_SET" = false ]]; then
   SIMPHY_DIR="${BASE_DIR%/}/STELAR-MP/simphy"
 fi
-
-# Derive ASTRAL_ROOT from BASE_DIR if not explicitly set (preserve previous behavior)
-if [[ "$ASTRAL_DIR_SET" = false && "$ASTRAL_ROOT_SET" = false ]]; then
+if [[ "$ASTRAL_ROOT_SET" = false ]]; then
   ASTRAL_ROOT="${BASE_DIR%/}/ASTRAL"
-elif [[ "$ASTRAL_DIR_SET" = true && "$ASTRAL_ROOT_SET" = false ]]; then
-  ASTRAL_ROOT="$ASTRAL_DIR"
-elif [[ "$ASTRAL_ROOT_SET" = true ]]; then
-  # ASTRAL_ROOT already set by user
-  :
 fi
 
 PAIR="${TAXA_NUM}_${GENE_TREES}"
 
-# Construct SIMPHY_RUN_DIR early (so we can check the stat file before doing heavy work)
+# Choose simphy run dir using SIMPHY_DATA_DIR if provided, otherwise use SIMPHY_DIR/data
 if [[ "$SIMPHY_DATA_DIR_SET" = true ]]; then
-  # Use custom data directory (mirror logic from test-stelar-simple.sh)
   if [[ "$USE_LEGACY_LAYOUT" = true ]]; then
     SIMPHY_RUN_DIR="${SIMPHY_DATA_DIR%/}/${PAIR}/${REPLICATE}"
   else
     SIMPHY_RUN_DIR="${SIMPHY_DATA_DIR%/}/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}/${REPLICATE}"
   fi
 else
-  # Default: data directory inside SIMPHY_DIR
   if [[ "$USE_LEGACY_LAYOUT" = true ]]; then
     SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/${PAIR}/${REPLICATE}"
   else
@@ -132,7 +122,12 @@ ALL_GT_FILE="${SIMPHY_RUN_DIR%/}/all_gt.tre"
 TRUE_SPECIES_TREE="${SIMPHY_RUN_DIR%/}/s_tree.trees"
 OUT_ASTRAL="${SIMPHY_RUN_DIR%/}/out-astral.tre"
 
-# Checkpoint: if stat file exists and --fresh not provided, skip everything
+# Debug/tracing
+if [[ "${DEBUG:-0}" = "1" ]]; then
+  set -x
+fi
+
+# checkpoint: if stat file exists and --fresh not provided, skip everything
 if [[ "$FRESH" = false && -f "${STAT_FILE}" ]]; then
   echo "SKIPPING: ${STAT_FILE} already exists. Use --fresh to force rerun."
   exit 0
@@ -165,43 +160,109 @@ echo "==> Running ASTRAL (output will be written to $OUT_ASTRAL)"
 
 mkdir -p "${SIMPHY_RUN_DIR%/}"
 
-# prepare tempfiles
-TIME_TMP=$(mktemp)
-MON_TMP=$(mktemp)
+# create log paths inside run dir so they're easy to inspect remotely
+TIME_TMP="${SIMPHY_RUN_DIR%/}/.astral_time_err.log"
+MON_TMP="${SIMPHY_RUN_DIR%/}/.astral_gpu_mem.log"
 
-# time + gpu-monitor wrapper
+# Ensure old logs are removed
+rm -f "$TIME_TMP" "$MON_TMP" || true
+
+# START timer
 START_NS=$(date +%s%N)
 
-(
-  cd "$ASTRAL_ROOT" && /usr/bin/time -v ./run_astral.sh -i "$ALL_GT_FILE" -o "$OUT_ASTRAL" $ASTRAL_OPTS
-) 2> >(tee "$TIME_TMP" >&2) &
-ASTRAL_WRAPPER_PID=$!
+# --- Detect a usable 'time' command that supports -v ---
+TIME_CMD=""
+if [[ "${TIME_MONITOR:-false}" = true ]]; then
+  if [[ -x "/usr/bin/time" ]]; then
+    TIME_CMD="/usr/bin/time"
+  else
+    if command -v time >/dev/null 2>&1; then
+      TMP_TEST="$(mktemp)"
+      # prefer external 'time' via 'command time' to avoid shell builtin
+      sh -c "command time -v true" 2> "$TMP_TEST" >/dev/null || true
+      if grep -qi "Maximum resident set size" "$TMP_TEST" 2>/dev/null; then
+        TIME_CMD="$(command -v time)"
+      fi
+      rm -f "$TMP_TEST"
+    fi
+  fi
 
-# start GPU monitor only if nvidia-smi exists (some clusters may have GPUs even if ASTRAL is CPU-bound)
-if command -v nvidia-smi >/dev/null 2>&1; then
+  if [[ -z "$TIME_CMD" ]]; then
+    echo "Warning: time-monitor requested (default) but no suitable 'time -v' binary found."
+    echo "  - install it on Debian/Ubuntu with: sudo apt update && sudo apt install -y time"
+    echo "Proceeding without time-monitor; GPU-monitor (if enabled) will still run."
+    TIME_MONITOR=false
+  else
+    echo "Using time command: $TIME_CMD"
+  fi
+fi
+
+# Start GPU monitor if requested and available
+MON_PID=""
+if [[ "$GPU_MONITOR" = true && -x "$(command -v nvidia-smi)" ]]; then
   (
     curmax=0
-    # sample at 0.1s to catch short spikes
-    while kill -0 "$ASTRAL_WRAPPER_PID" 2>/dev/null; do
-      gpu_val=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | awk 'BEGIN{m=0} {v=int($1); if(v>m) m=v} END{print m}')
+    while true; do
+      # query per-GPU memory used and take the maximum across GPUs this sample
+      gpu_val=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | awk 'BEGIN{m=0} {v=int($1); if(v>m) m=v} END{print m+0}')
       if [[ -n "$gpu_val" && "$gpu_val" =~ ^[0-9]+$ ]]; then
         if (( gpu_val > curmax )); then
           curmax=$gpu_val
         fi
       fi
-      sleep 0.1
+      if [[ -f "${SIMPHY_RUN_DIR%/}/.astral_done" ]]; then
+        break
+      fi
+      sleep 0.2
     done
     echo "$curmax" > "$MON_TMP"
   ) &
   MON_PID=$!
 else
-  echo "NA" > "$MON_TMP"
-  MON_PID=""
+  if [[ "$GPU_MONITOR" = true ]]; then
+    echo "Warning: GPU monitor requested but nvidia-smi not found or not executable. Skipping GPU monitor."
+    GPU_MONITOR=false
+  fi
 fi
 
-# wait for the ASTRAL wrapper to finish and capture exit code
-wait "$ASTRAL_WRAPPER_PID"
+# Launch ASTRAL -- prefer using TIME_CMD if available, otherwise run directly
+ASTRAL_PID=""
+if [[ "${TIME_MONITOR:-false}" = true && -n "$TIME_CMD" ]]; then
+  # Use tee to show ASTRAL output while capturing time stats
+  (
+    cd "$ASTRAL_ROOT"
+    "$TIME_CMD" -v ./run_astral.sh -i "$ALL_GT_FILE" -o "$OUT_ASTRAL" $ASTRAL_OPTS 2>&1 | tee >(grep -E "(Command being timed|User time|System time|Elapsed|Maximum resident set size|Exit status)" > "$TIME_TMP")
+  ) &
+  ASTRAL_PID=$!
+else
+  (
+    cd "$ASTRAL_ROOT" && ./run_astral.sh -i "$ALL_GT_FILE" -o "$OUT_ASTRAL" $ASTRAL_OPTS
+  ) &
+  ASTRAL_PID=$!
+fi
+
+# Give a short moment and verify the job didn't die immediately
+sleep 0.25
+if ! kill -0 "$ASTRAL_PID" >/dev/null 2>&1; then
+  echo "Error: ASTRAL process (pid ${ASTRAL_PID}) failed to start or died immediately."
+  echo "----- Captured time/generic stderr (first 200 lines) -----"
+  head -n 200 "$TIME_TMP" 2>/dev/null || true
+  echo "---------------------------------------------------------"
+  touch "${SIMPHY_RUN_DIR%/}/.astral_done"
+  if [[ -n "${MON_PID:-}" ]]; then
+    wait "$MON_PID" 2>/dev/null || true
+  fi
+  exit 5
+fi
+
+echo "ASTRAL started with PID ${ASTRAL_PID} (logging to ${TIME_TMP} if time-monitor enabled)"
+
+# Wait for ASTRAL to finish
+wait "$ASTRAL_PID"
 ASTRAL_EXIT_CODE=$?
+
+# Stop GPU monitor by placing sentinel file
+touch "${SIMPHY_RUN_DIR%/}/.astral_done"
 
 END_NS=$(date +%s%N)
 ELAPSED_MS=$(( (END_NS - START_NS) / 1000000 ))
@@ -212,32 +273,45 @@ if [[ -n "${MON_PID:-}" ]]; then
   wait "$MON_PID" 2>/dev/null || true
 fi
 
-MAX_GPU_VAL=$(cat "$MON_TMP" 2>/dev/null || echo "NA")
+MAX_GPU_VAL="NA"
+if [[ -f "$MON_TMP" ]]; then
+  MAX_GPU_VAL=$(cat "$MON_TMP" 2>/dev/null || echo "NA")
+fi
 
-# Normalize GPU: nvidia-smi reports MiB (integer). Convert to decimal MB with 3 decimal places (MiB * 1.024).
+# Convert GPU MiB -> MB (decimal) if numeric
 if [[ "$MAX_GPU_VAL" =~ ^[0-9]+$ ]]; then
   MAX_GPU_MB=$(awk "BEGIN{printf \"%.3f\", ${MAX_GPU_VAL} * 1.024}")
 else
   MAX_GPU_MB="NA"
 fi
 
-# parse /usr/bin/time -v output to get Maximum resident set size (kbytes)
+# Parse time output for Maximum resident set size
 MAX_CPU_MB="NA"
-if grep -qi "Maximum resident set size" "$TIME_TMP" 2>/dev/null; then
-  MAX_RSS_KB=$(grep -i "Maximum resident set size" "$TIME_TMP" | awk -F: '{gsub(/^[ \t]+/,"",$2); print $2}' | awk '{print int($1)}')
-elif grep -qi "Maximum resident set size (kbytes)" "$TIME_TMP" 2>/dev/null; then
-  MAX_RSS_KB=$(grep -i "Maximum resident set size (kbytes)" "$TIME_TMP" | awk -F: '{gsub(/^[ \t]+/,"",$2); print $2}' | awk '{print int($1)}')
-else
-  MAX_RSS_KB=""
+if [[ -f "$TIME_TMP" && -s "$TIME_TMP" ]]; then
+  if grep -qi "Maximum resident set size" "$TIME_TMP" 2>/dev/null; then
+    MAX_RSS_KB=$(grep -i "Maximum resident set size" "$TIME_TMP" | awk -F: '{gsub(/^[ \t]+/,"",$2); print $2}' | awk '{print int($1)}' | head -n1)
+  elif grep -qi "Maximum resident set size (kbytes)" "$TIME_TMP" 2>/dev/null; then
+    MAX_RSS_KB=$(grep -i "Maximum resident set size (kbytes)" "$TIME_TMP" | awk -F: '{gsub(/^[ \t]+/,"",$2); print $2}' | awk '{print int($1)}' | head -n1)
+  else
+    MAX_RSS_KB=""
+  fi
+
+  if [[ -n "${MAX_RSS_KB:-}" && "${MAX_RSS_KB}" =~ ^[0-9]+$ ]]; then
+    MAX_CPU_MB=$(awk "BEGIN{printf \"%.3f\", ${MAX_RSS_KB}/1024}")
+  fi
 fi
 
-if [[ -n "$MAX_RSS_KB" && "$MAX_RSS_KB" =~ ^[0-9]+$ ]]; then
-  # convert kB -> MB (1024 kB = 1 MiB) and show 3 decimal places
-  MAX_CPU_MB=$(awk "BEGIN{printf \"%.3f\", ${MAX_RSS_KB}/1024}")
+# If time-monitor wasn't used or cpu RSS not parsed, try a best-effort read of memory using ps for the ASTRAL PID (peak not available):
+if [[ "$TIME_MONITOR" = false && "$MAX_CPU_MB" == "NA" ]]; then
+  if ps -p "$ASTRAL_PID" >/dev/null 2>&1; then
+    MAX_CPU_MB=$(ps -o rss= -p "$ASTRAL_PID" 2>/dev/null | awk '{print ($1+0)/1024}')
+  else
+    MAX_CPU_MB="NA"
+  fi
 fi
 
-# clean up tempfiles
-rm -f "$TIME_TMP" "$MON_TMP" 2>/dev/null || true
+# cleanup small sentinel
+rm -f "${SIMPHY_RUN_DIR%/}/.astral_done" 2>/dev/null || true
 
 echo "ASTRAL finished in ${RUNNING_TIME}s (exit code ${ASTRAL_EXIT_CODE})"
 echo "Max CPU RAM (MB): ${MAX_CPU_MB}"
@@ -248,7 +322,6 @@ RF_RATE="NA"
 if [[ -f "$OUT_ASTRAL" && -f "$TRUE_SPECIES_TREE" ]]; then
   echo
   echo "==> Calculating RF rate (using rf.py)"
-  # rf.py lives in STELAR_ROOT in your other script; keep the same behavior
   if [[ -f "${STELAR_ROOT%/}/rf.py" ]]; then
     rf_output=$(cd "$STELAR_ROOT" && python rf.py "$OUT_ASTRAL" "$TRUE_SPECIES_TREE" 2>&1) || rf_output="$rf_output"
     rf_candidate=$(echo "$rf_output" | grep -Eo '[0-9]+(\.[0-9]+)?' | head -n1 || true)
@@ -272,24 +345,57 @@ else
   echo "ASTRAL output or true species tree missing; skipping ASTRAL RF."
 fi
 
-# Write CSV (overwrite every run) — includes replicate after gene-trees, and max-cpu-mb and max-gpu-mb
+# Write CSV (overwrite every run)
+mkdir -p "$(dirname "$STAT_FILE")"
 echo "alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb" > "$STAT_FILE"
 CSV_ROW="astral,${TAXA_NUM},${GENE_TREES},${REPLICATE},${SB},${SPMIN},${SPMAX},${RF_RATE},${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB}"
 echo "$CSV_ROW" >> "$STAT_FILE"
 
 echo "Wrote stats to $STAT_FILE"
 
-# Send notification with results (same format as test-stelar-simple.sh)
-echo "Sending notification..."
-curl -s -d "🎉 ASTRAL completed for ${TAXA_NUM} taxa and ${GENE_TREES} gene trees!
+# Send notification (ntfy) if curl present
+if command -v curl >/dev/null 2>&1; then
+  curl -s -d "🎉 ASTRAL completed for ${TAXA_NUM} taxa and ${GENE_TREES} gene trees!
 
 📊 Results:
 alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb
 $CSV_ROW
 
-📁 Stats saved to: $STAT_FILE" ntfy.sh/anik-test
+📁 Stats saved to: $STAT_FILE" ntfy.sh/anik-test || true
+fi
 
-echo "Done."
+# Nicely display stat-astral.csv summary (same format as stelar script)
+if [[ -f "${STAT_FILE}" ]]; then
+  echo
+  echo "=== ASTRAL run summary (from ${STAT_FILE}) ==="
 
-# Exit with the same exit code as ASTRAL (so CI/automation can detect failure)
-exit "${ASTRAL_EXIT_CODE}"
+  IFS= read -r header_line < <(head -n1 "$STAT_FILE")
+  IFS= read -r data_line   < <(sed -n '2p' "$STAT_FILE" || true)
+
+  IFS=, read -r -a headers <<< "$header_line"
+  IFS=, read -r -a values  <<< "$data_line"
+
+  maxlabel=0
+  for h in "${headers[@]}"; do
+    len=${#h}
+    (( len > maxlabel )) && maxlabel=$len
+  done
+  (( maxlabel < 16 )) && maxlabel=16
+
+  for i in "${!headers[@]}"; do
+    label="${headers[$i]}"
+    value="${values[$i]:-}"
+    printf "  %-*s : %s\n" "$maxlabel" "$label" "$value"
+  done
+
+  echo
+  echo "Raw CSV:"
+  sed -n '1,2p' "$STAT_FILE" | sed -e 's/,/, /g'
+  echo "============================================="
+else
+  echo
+  echo "Warning: stat file not found at ${STAT_FILE}"
+fi
+
+# Exit with same code as ASTRAL so callers can detect failures
+exit "${ASTRAL_EXIT_CODE:-0}"

@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# test-stelar.sh
-# Usage:
-#   ./test-stelar.sh -t 1000 -g 500
-#   ./test-stelar.sh --taxa_num 1000 --gene_trees 500 --replicate R2 --stelar-root /path/to/STELAR-MP --fresh
-
+# test-stelar-default-monitor.sh
+# Defaults to enabling both time and GPU monitoring, but falls back gracefully if
+# a suitable `time -v` binary isn't available.
+# Usage examples:
+#   ./test-stelar-default-monitor.sh -t 1000 -g 500
+#   ./test-stelar-default-monitor.sh -t 100 -g 100 --fresh --debug
+#
 set -euo pipefail
 
 # Defaults
@@ -13,6 +15,8 @@ REPLICATE="R1"
 BASE_DIR="${HOME}/phylogeny"
 SIMPHY_DIR=""                # derived from BASE_DIR unless provided
 SIMPHY_DIR_SET=false
+SIMPHY_DATA_DIR=""           # custom simphy data directory (overrides SIMPHY_DIR/data)
+SIMPHY_DATA_DIR_SET=false
 STELAR_ROOT=""               # derived from BASE_DIR unless provided
 STELAR_ROOT_SET=false
 
@@ -25,9 +29,14 @@ USE_LEGACY_LAYOUT=false
 STELAR_OPTS="GPU_PARALLEL NONE"
 FRESH=false
 
+# Monitoring options (DEFAULT: ON)
+TIME_MONITOR=true     # when true: run `time -v` if available and capture stderr to TIME_TMP
+GPU_MONITOR=true      # when true: sample nvidia-smi while stelar runs
+DEBUG=0               # set DEBUG=1 to enable set -x
+
 print_help() {
   cat <<EOF
-test-stelar.sh
+test-stelar-default-monitor.sh
 
 Required:
   --taxa_num, -t     Number of taxa (e.g. 1000)
@@ -37,6 +46,7 @@ Optional:
   --replicate, -r    Replicate name (default: R1)
   --base-dir, -b     Base directory (default: ${BASE_DIR})
   --simphy-dir       Path to simphy dir (overrides --base-dir)
+  --simphy-data-dir  Custom directory for simphy data storage (overrides simphy-dir/data)
   --stelar-root      Path to STELAR-MP root (overrides --base-dir)
   --stelar-opts      Extra args for STELAR run (default: "$STELAR_OPTS")
   --sb               Substitution/birthrate parameter (default: ${SB})
@@ -44,6 +54,9 @@ Optional:
   --spmax            Population size maximum (default: ${SPMAX})
   --use-legacy-layout  Use legacy simphy layout
   --fresh            Force rerun even if stat-stelar.csv exists
+  --no-time-monitor  Disable time-monitoring (overrides default ON)
+  --no-gpu-monitor   Disable GPU-monitoring (overrides default ON)
+  --debug            Enable shell tracing (set DEBUG=1)
   --help, -h         Show this message
 EOF
 }
@@ -55,6 +68,7 @@ while [[ $# -gt 0 ]]; do
     --gene_trees|-g) GENE_TREES="$2"; shift 2 ;;
     --replicate|-r) REPLICATE="$2"; shift 2 ;;
     --simphy-dir) SIMPHY_DIR="$2"; SIMPHY_DIR_SET=true; shift 2 ;;
+    --simphy-data-dir) SIMPHY_DATA_DIR="$2"; SIMPHY_DATA_DIR_SET=true; shift 2 ;;
     --stelar-root) STELAR_ROOT="$2"; STELAR_ROOT_SET=true; shift 2 ;;
     --stelar-opts) STELAR_OPTS="$2"; shift 2 ;;
     --base-dir|-b) BASE_DIR="$2"; shift 2 ;;
@@ -63,6 +77,9 @@ while [[ $# -gt 0 ]]; do
     --spmax) SPMAX="$2"; shift 2 ;;
     --use-legacy-layout) USE_LEGACY_LAYOUT=true; shift ;;
     --fresh) FRESH=true; shift ;;
+    --no-time-monitor) TIME_MONITOR=false; shift ;;
+    --no-gpu-monitor) GPU_MONITOR=false; shift ;;
+    --debug) DEBUG=1; shift ;;
     --help|-h) print_help; exit 0 ;;
     *) echo "Unknown option: $1"; print_help; exit 1 ;;
   esac
@@ -84,11 +101,19 @@ fi
 
 PAIR="${TAXA_NUM}_${GENE_TREES}"
 
-# Construct SIMPHY_RUN_DIR early (so we can check the stat file before doing heavy work)
-if [[ "$USE_LEGACY_LAYOUT" = true ]]; then
-  SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/${PAIR}/${REPLICATE}"
+# Choose simphy run dir using SIMPHY_DATA_DIR if provided, otherwise use SIMPHY_DIR/data
+if [[ "$SIMPHY_DATA_DIR_SET" = true ]]; then
+  if [[ "$USE_LEGACY_LAYOUT" = true ]]; then
+    SIMPHY_RUN_DIR="${SIMPHY_DATA_DIR%/}/${PAIR}/${REPLICATE}"
+  else
+    SIMPHY_RUN_DIR="${SIMPHY_DATA_DIR%/}/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}/${REPLICATE}"
+  fi
 else
-  SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}/${REPLICATE}"
+  if [[ "$USE_LEGACY_LAYOUT" = true ]]; then
+    SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/${PAIR}/${REPLICATE}"
+  else
+    SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}/${REPLICATE}"
+  fi
 fi
 
 STAT_FILE="${SIMPHY_RUN_DIR%/}/stat-stelar.csv"
@@ -96,7 +121,12 @@ ALL_GT_FILE="${SIMPHY_RUN_DIR%/}/all_gt.tre"
 TRUE_SPECIES_TREE="${SIMPHY_RUN_DIR%/}/s_tree.trees"
 OUT_STELAR="${SIMPHY_RUN_DIR%/}/out-stelar.tre"
 
-# Checkpoint: if stat file exists and --fresh not provided, skip everything
+# Debug/tracing
+if [[ "${DEBUG:-0}" = "1" ]]; then
+  set -x
+fi
+
+# checkpoint: if stat file exists and --fresh not provided, skip everything
 if [[ "$FRESH" = false && -f "${STAT_FILE}" ]]; then
   echo "SKIPPING: ${STAT_FILE} already exists. Use --fresh to force rerun."
   exit 0
@@ -106,6 +136,11 @@ echo "Parameters:"
 echo "  taxa_num:       $TAXA_NUM"
 echo "  gene_trees:     $GENE_TREES"
 echo "  replicate:      $REPLICATE"
+if [[ "$SIMPHY_DATA_DIR_SET" = true ]]; then
+  echo "  simphy data dir: $SIMPHY_DATA_DIR (custom)"
+else
+  echo "  simphy data dir: ${SIMPHY_DIR%/}/data (default)"
+fi
 echo "  simphy run dir: $SIMPHY_RUN_DIR"
 echo "  out stelar:     $OUT_STELAR"
 echo "  stat file:      $STAT_FILE"
@@ -120,84 +155,60 @@ echo "==> Running STELAR (output will be written to $OUT_STELAR)"
 
 mkdir -p "${SIMPHY_RUN_DIR%/}"
 
-# prepare tempfiles
-TIME_TMP=$(mktemp)
-MON_TMP=$(mktemp)
+# create log paths inside run dir so they're easy to inspect remotely
+TIME_TMP="${SIMPHY_RUN_DIR%/}/.stelar_time_err.log"
+MON_TMP="${SIMPHY_RUN_DIR%/}/.stelar_gpu_mem.log"
 
-# time + gpu-monitor wrapper
+# Ensure old logs are removed
+rm -f "$TIME_TMP" "$MON_TMP" || true
+
+# START timer
 START_NS=$(date +%s%N)
 
-# run STELAR under /usr/bin/time -v and capture its stderr (resource usage info)
-(
-  cd "$STELAR_ROOT" && /usr/bin/time -v ./run.sh "$ALL_GT_FILE" "$OUT_STELAR" $STELAR_OPTS
-) 2> "$TIME_TMP" &
-STELAR_WRAPPER_PID=$!
+# --- Detect a usable 'time' command that supports -v ---
+TIME_CMD=""
+if [[ "${TIME_MONITOR:-false}" = true ]]; then
+  # prefer /usr/bin/time if present and executable
+  if [[ -x "/usr/bin/time" ]]; then
+    TIME_CMD="/usr/bin/time"
+  else
+    # try to find a binary 'time' that supports -v
+    if command -v time >/dev/null 2>&1; then
+      # test it: run 'time -v true' via sh -c and capture stderr
+      TMP_TEST="$(mktemp)"
+      # Use command to prefer external time when available; shell builtin 'time' won't write 'Maximum resident set size'
+      sh -c "command time -v true" 2> "$TMP_TEST" >/dev/null || true
+      if grep -qi "Maximum resident set size" "$TMP_TEST" 2>/dev/null; then
+        TIME_CMD="$(command -v time)"
+      fi
+      rm -f "$TMP_TEST"
+    fi
+  fi
 
+  if [[ -z "$TIME_CMD" ]]; then
+    echo "Warning: time-monitor requested (default) but no suitable 'time -v' binary found."
+    echo "  - install it on Debian/Ubuntu with: sudo apt update && sudo apt install -y time"
+    echo "Proceeding without time-monitor; GPU-monitor (if enabled) will still run."
+    TIME_MONITOR=false
+  else
+    echo "Using time command: $TIME_CMD"
+  fi
+fi
 
-
-
-
-
-# # start GPU monitor only if nvidia-smi exists
-# if command -v nvidia-smi >/dev/null 2>&1; then
-#   (
-#     curmax=0
-#     # sample at 0.1s to catch short spikes
-#     while kill -0 "$STELAR_WRAPPER_PID" 2>/dev/null; do
-#       gpu_val=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | awk 'BEGIN{m=0} {v=int($1); if(v>m) m=v} END{print m}')
-#       if [[ -n "$gpu_val" && "$gpu_val" =~ ^[0-9]+$ ]]; then
-#         if (( gpu_val > curmax )); then
-#           curmax=$gpu_val
-#         fi
-#       fi
-#       sleep 0.1
-#     done
-#     echo "$curmax" > "$MON_TMP"
-#   ) &
-#   MON_PID=$!
-# else
-#   echo "NA" > "$MON_TMP"
-#   MON_PID=""
-# fi
-
-
-
-
-# --- ROBUST PER-PROCESS GPU MEMORY MONITOR ---
-if command -v nvidia-smi >/dev/null 2>&1; then
+# Start GPU monitor if requested and available
+MON_PID=""
+if [[ "$GPU_MONITOR" = true && -x "$(command -v nvidia-smi)" ]]; then
   (
     curmax=0
-    slept=0
-    max_sleep=5  # wait up to 5s for child to spawn
-
-    while kill -0 "$STELAR_WRAPPER_PID" 2>/dev/null; do
-      # Wait briefly for GPU process to appear
-      if (( slept < max_sleep )) && ! nvidia-smi --query-compute-apps=pid --format=csv,noheader >/dev/null 2>&1; then
-        sleep 0.5
-        ((slept++))
-        continue
+    while true; do
+      gpu_val=$(nvidia-smi --query-compute-apps=used_gpu_memory --format=csv,noheader,nounits 2>/dev/null | awk 'BEGIN{m=0} {v=int($1); if(v>m) m=v} END{print m+0}')
+      if [[ -n "$gpu_val" && "$gpu_val" =~ ^[0-9]+$ ]]; then
+        if (( gpu_val > curmax )); then
+          curmax=$gpu_val
+        fi
       fi
-
-      # Query only compute apps and match by ancestry
-      max_for_run=$(nvidia-smi --query-compute-apps=pid,used_gpu_memory --format=csv,noheader,nounits 2>/dev/null | \
-        awk -F', ' -v parent="$STELAR_WRAPPER_PID" '
-          function is_descendant(pid, target,   ppid) {
-            while (pid > 1) {
-              cmd = "ps -o ppid= -p " pid " 2>/dev/null"
-              cmd | getline ppid; close(cmd)
-              if (ppid == target) return 1
-              pid = ppid
-            }
-            return 0
-          }
-          {
-            pid=$1; mem=$2;
-            if (is_descendant(pid, parent) && mem+0 > max) max = mem+0
-          } 
-          END {print (max+0)}' 2>/dev/null || echo 0)
-
-      if (( max_for_run > curmax )); then
-        curmax=$max_for_run
+      if [[ -f "${SIMPHY_RUN_DIR%/}/.stelar_done" ]]; then
+        break
       fi
       sleep 0.2
     done
@@ -205,54 +216,48 @@ if command -v nvidia-smi >/dev/null 2>&1; then
   ) &
   MON_PID=$!
 else
-  echo "NA" > "$MON_TMP"
+  if [[ "$GPU_MONITOR" = true ]]; then
+    echo "Warning: GPU monitor requested but nvidia-smi not found or not executable. Skipping GPU monitor."
+    GPU_MONITOR=false
+  fi
 fi
 
+# Launch STELAR -- prefer using TIME_CMD if available, otherwise run directly
+STELAR_PID=""
+if [[ "${TIME_MONITOR:-false}" = true && -n "$TIME_CMD" ]]; then
+  (
+    cd "$STELAR_ROOT" && "$TIME_CMD" -v ./run.sh "$ALL_GT_FILE" "$OUT_STELAR" $STELAR_OPTS < /dev/null
+  ) 2> "$TIME_TMP" &
+  STELAR_PID=$!
+else
+  (
+    cd "$STELAR_ROOT" && ./run.sh "$ALL_GT_FILE" "$OUT_STELAR" $STELAR_OPTS < /dev/null
+  ) &
+  STELAR_PID=$!
+fi
 
+# Give a short moment and verify the job didn't die immediately
+sleep 0.25
+if ! kill -0 "$STELAR_PID" >/dev/null 2>&1; then
+  echo "Error: STELAR process (pid ${STELAR_PID}) failed to start or died immediately."
+  echo "----- Captured time/generic stderr (first 200 lines) -----"
+  head -n 200 "$TIME_TMP" 2>/dev/null || true
+  echo "---------------------------------------------------------"
+  touch "${SIMPHY_RUN_DIR%/}/.stelar_done"
+  if [[ -n "${MON_PID:-}" ]]; then
+    wait "$MON_PID" 2>/dev/null || true
+  fi
+  exit 5
+fi
 
+echo "STELAR started with PID ${STELAR_PID} (logging to ${TIME_TMP} if time-monitor enabled)"
 
-
-# # start GPU monitor only if nvidia-smi exists
-# if command -v nvidia-smi >/dev/null 2>&1; then
-#   (
-#     curmax=0
-#     while kill -0 "$STELAR_WRAPPER_PID" 2>/dev/null; do
-#       # get all descendant PIDs of the wrapper (Java or CUDA processes)
-#       pids=$(pgrep -P "$STELAR_WRAPPER_PID")
-#       [[ -z "$pids" ]] && pids="$STELAR_WRAPPER_PID"
-
-#       # query GPU memory usage for those PIDs only
-#       gpu_val=$(nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader,nounits 2>/dev/null |
-#         awk -v list="$pids" '
-#           BEGIN{split(list, pset, " "); sum=0}
-#           {for (p in pset) if ($1 == pset[p]) sum += int($2)}
-#           END{print sum}'
-#       )
-
-#       if [[ -n "$gpu_val" && "$gpu_val" =~ ^[0-9]+$ ]]; then
-#         (( gpu_val > curmax )) && curmax=$gpu_val
-#       fi
-#       sleep 0.1
-#     done
-#     echo "$curmax" > "$MON_TMP"
-#   ) &
-#   MON_PID=$!
-# else
-#   echo "NA" > "$MON_TMP"
-#   MON_PID=""
-# fi
-
-
-
-
-
-
-
-
-
-# wait for the STELAR wrapper to finish and capture exit code
-wait "$STELAR_WRAPPER_PID"
+# Wait for stelar to finish
+wait "$STELAR_PID"
 STELAR_EXIT_CODE=$?
+
+# Stop GPU monitor by placing sentinel file
+touch "${SIMPHY_RUN_DIR%/}/.stelar_done"
 
 END_NS=$(date +%s%N)
 ELAPSED_MS=$(( (END_NS - START_NS) / 1000000 ))
@@ -263,32 +268,45 @@ if [[ -n "${MON_PID:-}" ]]; then
   wait "$MON_PID" 2>/dev/null || true
 fi
 
-MAX_GPU_VAL=$(cat "$MON_TMP" 2>/dev/null || echo "NA")
+MAX_GPU_VAL="NA"
+if [[ -f "$MON_TMP" ]]; then
+  MAX_GPU_VAL=$(cat "$MON_TMP" 2>/dev/null || echo "NA")
+fi
 
-# Normalize GPU: nvidia-smi reports MiB (integer). Convert to decimal MB with 3 decimal places (MiB * 1.024).
+# Convert GPU MiB -> MB (decimal) if numeric
 if [[ "$MAX_GPU_VAL" =~ ^[0-9]+$ ]]; then
   MAX_GPU_MB=$(awk "BEGIN{printf \"%.3f\", ${MAX_GPU_VAL} * 1.024}")
 else
   MAX_GPU_MB="NA"
 fi
 
-# parse /usr/bin/time -v output to get Maximum resident set size (kbytes)
+# If time-monitor was used, try to parse its Maximum resident set size
 MAX_CPU_MB="NA"
-if grep -qi "Maximum resident set size" "$TIME_TMP" 2>/dev/null; then
-  MAX_RSS_KB=$(grep -i "Maximum resident set size" "$TIME_TMP" | awk -F: '{gsub(/^[ \t]+/,"",$2); print $2}' | awk '{print int($1)}')
-elif grep -qi "Maximum resident set size (kbytes)" "$TIME_TMP" 2>/dev/null; then
-  MAX_RSS_KB=$(grep -i "Maximum resident set size (kbytes)" "$TIME_TMP" | awk -F: '{gsub(/^[ \t]+/,"",$2); print $2}' | awk '{print int($1)}')
-else
-  MAX_RSS_KB=""
+if [[ -f "$TIME_TMP" && -s "$TIME_TMP" ]]; then
+  if grep -qi "Maximum resident set size" "$TIME_TMP" 2>/dev/null; then
+    MAX_RSS_KB=$(grep -i "Maximum resident set size" "$TIME_TMP" | awk -F: '{gsub(/^[ \t]+/,"",$2); print $2}' | awk '{print int($1)}' | head -n1)
+  elif grep -qi "Maximum resident set size (kbytes)" "$TIME_TMP" 2>/dev/null; then
+    MAX_RSS_KB=$(grep -i "Maximum resident set size (kbytes)" "$TIME_TMP" | awk -F: '{gsub(/^[ \t]+/,"",$2); print $2}' | awk '{print int($1)}' | head -n1)
+  else
+    MAX_RSS_KB=""
+  fi
+
+  if [[ -n "${MAX_RSS_KB:-}" && "${MAX_RSS_KB}" =~ ^[0-9]+$ ]]; then
+    MAX_CPU_MB=$(awk "BEGIN{printf \"%.3f\", ${MAX_RSS_KB}/1024}")
+  fi
 fi
 
-if [[ -n "$MAX_RSS_KB" && "$MAX_RSS_KB" =~ ^[0-9]+$ ]]; then
-  # convert kB -> MB (1024 kB = 1 MiB) and show 3 decimal places
-  MAX_CPU_MB=$(awk "BEGIN{printf \"%.3f\", ${MAX_RSS_KB}/1024}")
+# If time-monitor wasn't used or cpu RSS not parsed, try a best-effort read of memory using ps for the stelar PID (peak not available):
+if [[ "$TIME_MONITOR" = false && "$MAX_CPU_MB" == "NA" ]]; then
+  if ps -p "$STELAR_PID" >/dev/null 2>&1; then
+    MAX_CPU_MB=$(ps -o rss= -p "$STELAR_PID" 2>/dev/null | awk '{print ($1+0)/1024}')
+  else
+    MAX_CPU_MB="NA"
+  fi
 fi
 
-# clean up tempfiles
-rm -f "$TIME_TMP" "$MON_TMP" 2>/dev/null || true
+# cleanup small sentinel
+rm -f "${SIMPHY_RUN_DIR%/}/.stelar_done" 2>/dev/null || true
 
 echo "STELAR finished in ${RUNNING_TIME}s (exit code ${STELAR_EXIT_CODE})"
 echo "Max CPU RAM (MB): ${MAX_CPU_MB}"
@@ -318,29 +336,26 @@ else
   echo "STELAR output or true species tree missing; skipping STELAR RF."
 fi
 
-# Write CSV (overwrite every run) — includes replicate after gene-trees, and max-cpu-mb and max-gpu-mb
+# Write CSV (overwrite every run)
+mkdir -p "$(dirname "$STAT_FILE")"
 echo "alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb" > "$STAT_FILE"
 CSV_ROW="stelar,${TAXA_NUM},${GENE_TREES},${REPLICATE},${SB},${SPMIN},${SPMAX},${RF_RATE},${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB}"
 echo "$CSV_ROW" >> "$STAT_FILE"
 
 echo "Wrote stats to $STAT_FILE"
 
-# Send notification with results
-echo "Sending notification..."
-curl -s -d "🎉 STELAR completed for ${TAXA_NUM} taxa and ${GENE_TREES} gene trees!
+# Send notification (ntfy)
+if command -v curl >/dev/null 2>&1; then
+  curl -s -d "🎉 STELAR completed for ${TAXA_NUM} taxa and ${GENE_TREES} gene trees!
 
 📊 Results:
 alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb
 $CSV_ROW
 
-📁 Stats saved to: $STAT_FILE" ntfy.sh/anik-test
+📁 Stats saved to: $STAT_FILE" ntfy.sh/anik-test || true
+fi
 
-echo "Done."
-
-# -----------------------
-# Nicely display stat-stelar.csv summary
-# Place this before the final "echo \"Done.\"" / exit in the script
-# -----------------------
+# Nicely display stat-stelar.csv summary (same as before)
 if [[ -f "${STAT_FILE}" ]]; then
   echo
   echo "=== STELAR run summary (from ${STAT_FILE}) ==="
@@ -356,14 +371,11 @@ if [[ -f "${STAT_FILE}" ]]; then
   # determine column width for labels
   maxlabel=0
   for h in "${headers[@]}"; do
-    # trim whitespace, compute length
     len=${#h}
     (( len > maxlabel )) && maxlabel=$len
   done
-  # set a minimum width for nicer look
   (( maxlabel < 16 )) && maxlabel=16
 
-  # print each header:value pair aligned
   for i in "${!headers[@]}"; do
     label="${headers[$i]}"
     value="${values[$i]:-}"
@@ -378,4 +390,7 @@ else
   echo
   echo "Warning: stat file not found at ${STAT_FILE}"
 fi
+
+echo "Done."
+exit 0
 
