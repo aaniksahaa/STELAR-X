@@ -1,0 +1,5 @@
+create dir "tmp" inside "WQFM-TREE" dir
+copy input file to tmp
+./run.sh tmp/all_gt_bs_rooted_48.tre tmp/out.tre
+now get the out.tre and write it in its place
+then clear the created tmp dir
