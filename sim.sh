@@ -9,7 +9,8 @@ set -euo pipefail
 # Defaults
 TAXA_NUM=""
 GENE_TREES=""
-REPLICATE="R1"
+REPLICATE="R1"  # Default test replicate (backward compatible)
+REPLICATES="10"  # Default number of replicates to generate
 BASE_DIR="${HOME}/phylogeny"
 SIMPHY_DIR=""
 SIMPHY_DIR_SET=false
@@ -31,7 +32,8 @@ Required:
   --gene_trees, -g   Number of gene trees (e.g. 500)
 
 Optional:
-  --replicate, -r    Replicate name (default: R1)
+  --replicate, -r    Test replicate number for analysis (default: ${REPLICATE})
+  --replicates, -rs  Number of replicates to generate (default: ${REPLICATES})
   --base-dir, -b     Base directory (default: ${BASE_DIR})
   --simphy-dir       Path to simphy dir (overrides --base-dir)
   --simphy-data-dir  Custom directory for simphy data storage
@@ -40,6 +42,10 @@ Optional:
   --spmax            Population size maximum (default: ${SPMAX})
   --fresh            Force rerun even if stat-sim.csv exists
   --help, -h         Show this message
+
+Examples:
+  ./sim.sh -t 1000 -g 500 -rs 5 -r 3    # Generate 5 replicates, analyze replicate 3
+  ./sim.sh -t 1000 -g 500 --fresh       # Generate 10 replicates (default), analyze replicate 1
 EOF
 }
 
@@ -49,6 +55,7 @@ while [[ $# -gt 0 ]]; do
     --taxa_num|-t) TAXA_NUM="$2"; shift 2 ;;
     --gene_trees|-g) GENE_TREES="$2"; shift 2 ;;
     --replicate|-r) REPLICATE="$2"; shift 2 ;;
+    --replicates|-rs) REPLICATES="$2"; shift 2 ;;
     --base-dir|-b) BASE_DIR="$2"; shift 2 ;;
     --simphy-dir) SIMPHY_DIR="$2"; SIMPHY_DIR_SET=true; shift 2 ;;
     --simphy-data-dir) SIMPHY_DATA_DIR="$2"; SIMPHY_DATA_DIR_SET=true; shift 2 ;;
@@ -72,10 +79,10 @@ if [[ "$SIMPHY_DIR_SET" = false ]]; then
   SIMPHY_DIR="${BASE_DIR%/}/STELAR-MP/simphy"
 fi
 
-# Construct expected output paths early
-OUT_DIR="${SIMPHY_DIR%/}/data/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}"
-REPL_DIR="${OUT_DIR%/}/${REPLICATE}"
-CSV_FILE="${REPL_DIR%/}/stat-sim.csv"
+# Construct expected output paths early (will be updated after simulation)
+OUT_DIR_TEMP="${SIMPHY_DIR%/}/data/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}"
+REPL_DIR_TEMP="${OUT_DIR_TEMP%/}/${REPLICATE}"
+CSV_FILE="${REPL_DIR_TEMP%/}/stat-sim.csv"
 
 # Checkpoint mechanism
 if [[ "$FRESH" = false && -f "${CSV_FILE}" ]]; then
@@ -86,7 +93,8 @@ fi
 echo "Parameters:"
 echo "  taxa_num:    $TAXA_NUM"
 echo "  gene_trees:  $GENE_TREES"
-echo "  replicate:   $REPLICATE"
+echo "  replicates:  $REPLICATES"
+echo "  test_repl:   $REPLICATE"
 echo "  base_dir:    $BASE_DIR"
 echo "  simphy_dir:  $SIMPHY_DIR"
 echo "  sb:          $SB"
@@ -95,7 +103,7 @@ echo "  spmax:       $SPMAX"
 echo
 
 if [[ ! -d "$SIMPHY_DIR" ]]; then
-  echo "Error: simphy directory \"$SIMPHY_DIR\" not found."
+  echo -e "\033[1;31m❌ ERROR: SimPhy directory not found: \"$SIMPHY_DIR\"\033[0m"
   exit 3
 fi
 
@@ -111,7 +119,7 @@ fi
 echo "==> Running run_simulator.sh in $SIMPHY_DIR"
 
 # Build command with optional data directory
-RUN_CMD="./run_simulator.sh -t \"${TAXA_NUM}\" -g \"${GENE_TREES}\" --sb \"${SB}\" --spmin \"${SPMIN}\" --spmax \"${SPMAX}\""
+RUN_CMD="./run_simulator.sh -t \"${TAXA_NUM}\" -g \"${GENE_TREES}\" --replicates \"${REPLICATES}\" --sb \"${SB}\" --spmin \"${SPMIN}\" --spmax \"${SPMAX}\""
 
 # Add data directory option if specified
 if [[ "$SIMPHY_DATA_DIR_SET" = true ]]; then
@@ -134,26 +142,72 @@ else
   # Default behavior: data directory inside SIMPHY_DIR
   OUT_DIR="${SIMPHY_DIR%/}/data/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}"
 fi
-REPL_DIR="${OUT_DIR%/}/${REPLICATE}"
-ALL_GT_FILE="${REPL_DIR%/}/all_gt.tre"
 
 echo
-if [[ -d "${REPL_DIR}" ]]; then
-  echo "Simulator produced replicate directory: ${REPL_DIR}"
-  if [[ -f "${ALL_GT_FILE}" ]]; then
-    echo "Gene trees available at: ${ALL_GT_FILE}"
+echo "Checking generated replicate directories..."
+MISSING_REPLICATES=()
+GENERATED_REPLICATES=()
+
+for i in $(seq 1 ${REPLICATES}); do
+  repl_dir="${OUT_DIR}/R${i}"
+  if [[ -d "${repl_dir}" ]]; then
+    GENERATED_REPLICATES+=("$i")
+    echo "✓ Replicate ${i}: ${repl_dir}"
   else
-    echo "Warning: expected gene-tree file not found at ${ALL_GT_FILE}"
+    MISSING_REPLICATES+=("$i")
+    echo "✗ Replicate ${i}: ${repl_dir} (MISSING)"
   fi
+done
+
+echo
+if [[ ${#MISSING_REPLICATES[@]} -eq 0 ]]; then
+  echo -e "\033[1;32m🎉 SUCCESS: All ${REPLICATES}/${REPLICATES} replicates generated successfully!\033[0m"
 else
-  echo "Warning: expected replicate directory ${REPL_DIR} not found."
+  echo -e "\033[1;33m⚠️  PARTIAL SUCCESS: ${#GENERATED_REPLICATES[@]}/${REPLICATES} replicates generated successfully\033[0m"
+  echo -e "\033[1;31m❌ Missing replicates: R${MISSING_REPLICATES[*]// /,R}\033[0m"
+fi
+
+# Check if test replicate exists
+REPL_DIR="${OUT_DIR}/${REPLICATE}"
+ALL_GT_FILE="${REPL_DIR}/all_gt.tre"
+
+if [[ -d "${REPL_DIR}" && -f "${ALL_GT_FILE}" ]]; then
+  echo -e "\033[1;32m🚀 READY: Test replicate ${REPLICATE} available for analysis!\033[0m"
+elif [[ -d "${REPL_DIR}" ]]; then
+  echo -e "\033[1;31m❌ ERROR: Gene tree file missing at ${ALL_GT_FILE}\033[0m"
+else
+  echo -e "\033[1;31m❌ ERROR: Test replicate ${REPLICATE} not found!\033[0m"
+  if [[ ${#GENERATED_REPLICATES[@]} -gt 0 ]]; then
+    echo -e "\033[1;33m💡 Available replicates: R${GENERATED_REPLICATES[*]// /,R}\033[0m"
+  fi
 fi
 
 # -------------------------
 # New block: run analysis and write stat-sim.csv
 # -------------------------
-# Only proceed if replicate dir exists and all_gt.tre exists
+
+# Add colorful analysis message with time warning
 if [[ -d "${REPL_DIR}" && -f "${ALL_GT_FILE}" ]]; then
+  echo
+  echo -e "\033[1;36m============================================================\033[0m"
+  echo -e "\033[1;33m🔬 STARTING PHYLOGENETIC ANALYSIS\033[0m"
+  echo -e "\033[1;36m============================================================\033[0m"
+  echo -e "\033[1;32m📊 Computing GT-GT and GT-ST distances for replicate ${REPLICATE}\033[0m"
+  echo -e "\033[1;31m⚠️  WARNING: This analysis may take significant time for large datasets!\033[0m"
+  echo
+  echo -e "\033[1;33m💡 You can stop this process anytime with Ctrl+C\033[0m"
+  echo -e "\033[1;36m============================================================\033[0m"
+  echo
+  
+  # Give user a moment to read and potentially stop
+  echo -e "\033[1;37mStarting analysis in 3 seconds... (Press Ctrl+C to stop)\033[0m"
+  sleep 1
+  echo -e "\033[1;37m2...\033[0m"
+  sleep 1
+  echo -e "\033[1;37m1...\033[0m"
+  sleep 1
+  echo -e "\033[1;32m🚀 Starting analysis now!\033[0m"
+  echo
   # Try to locate a species tree file within the replicate dir.
   SPECIES_TREE=""
   for f in "${REPL_DIR}"/s_tree* "${REPL_DIR}"/species_tree* "${REPL_DIR}"/species*; do
@@ -222,12 +276,13 @@ if [[ -d "${REPL_DIR}" && -f "${ALL_GT_FILE}" ]]; then
         "${TAXA_NUM}" "${GENE_TREES}" "${REPLICATE}" "${SB}" "${SPMIN}" "${SPMAX}" \
         "${gt_gt:-}" "${gt_st:-}" >> "${CSV_FILE}"
 
-      echo "Wrote/updated stats CSV: ${CSV_FILE}"
+      echo -e "\033[1;32m✅ SUCCESS: Analysis completed and saved to ${CSV_FILE}\033[0m"
     fi
   fi
 else
   echo "Skipping analysis: replicate directory or all_gt.tre missing."
 fi
 
-echo "Done. Output directory (if created): ${OUT_DIR}"
+echo -e "\033[1;32m🎉 COMPLETED: Simulation and analysis finished successfully!\033[0m"
+echo -e "\033[1;36m📁 Output directory: ${OUT_DIR}\033[0m"
 

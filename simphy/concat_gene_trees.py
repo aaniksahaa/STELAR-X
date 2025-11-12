@@ -26,6 +26,7 @@ def collect_into(dirpath: Path):
 
 def main():
     root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("out")
+    # print("***" + str(root))
     if root.is_dir() and any(d.is_dir() for d in root.iterdir()):
         # If given 'out', process each numeric subdir
         any_done = False
