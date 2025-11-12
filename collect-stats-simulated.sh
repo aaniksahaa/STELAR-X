@@ -1,28 +1,33 @@
 #!/usr/bin/env bash
-# collect-stelar-stats.sh (simplified)
-# Merges stat-stelar.csv files under simphy/data into one perf-stelar.csv
+# collect-stats-simulated.sh (multi-algorithm version)
+# Merges stat-*.csv files under simphy/data into one combined CSV file
 # and appends gt-gt,gt-st from a stat-sim.csv in the same directory (if present).
 # Handles header mismatches by taking the union of columns, filling missing ones with empty values.
 # Outputs columns in the prescribed order: alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb,gt-gt,gt-st
 #
 # Usage:
-#   ./collect-stelar-stats.sh
-#   ./collect-stelar-stats.sh --base-dir /home/you/research --out /tmp/perf-stelar.csv
-#   ./collect-stelar-stats.sh --simphy-dir /home/you/research/STELAR-MP/simphy
+#   ./collect-stats-simulated.sh
+#   ./collect-stats-simulated.sh --base-dir /home/you/research --out /tmp/perf-combined.csv
+#   ./collect-stats-simulated.sh --simphy-dir /home/you/research/STELAR-MP/simphy
 
 set -euo pipefail
 
+# Algorithm configuration - modify this to select which algorithms to collect
+ALGORITHMS=("stelar" "astral" "tree-qmc" "wqfm-tree")
+
 BASE_DIR="${HOME}/phylogeny"
 SIMPHY_DIR=""
-OUT_FILE="./perf-stelar.csv"
+OUT_FILE="./perf-combined.csv"
 
 print_help() {
   cat <<EOF
-collect-stelar-stats.sh
+collect-stats-simulated.sh
 
-Finds all stat-stelar.csv under <SIMPHY_DIR>/data (default derived from --base-dir),
+Finds all stat-*.csv files for configured algorithms under <SIMPHY_DIR>/data (default derived from --base-dir),
 takes the union of headers, merges them into --out with columns in prescribed order,
-and appends gt-gt,gt-st from a stat-sim.csv located in the same directory as each stat-stelar.csv (if present).
+and appends gt-gt,gt-st from a stat-sim.csv located in the same directory as each stat file (if present).
+
+Configured algorithms: ${ALGORITHMS[*]}
 
 Options:
   --base-dir, -b    Base directory (default: ${BASE_DIR})
@@ -54,15 +59,28 @@ if [[ ! -d "$SIMPHY_DATA_DIR" ]]; then
   exit 2
 fi
 
-# find stat-stelar.csv files
-mapfile -t stelar_files < <(find "$SIMPHY_DATA_DIR" -type f -name 'stat-stelar.csv' -print 2>/dev/null | sort)
+# find stat files for all configured algorithms
+declare -a all_stat_files
+total_files=0
 
-if [[ ${#stelar_files[@]} -eq 0 ]]; then
-  echo "No stat-stelar.csv files found under $SIMPHY_DATA_DIR"
+for alg in "${ALGORITHMS[@]}"; do
+  mapfile -t alg_files < <(find "$SIMPHY_DATA_DIR" -type f -name "stat-${alg}.csv" -print 2>/dev/null | sort)
+  if [[ ${#alg_files[@]} -gt 0 ]]; then
+    echo "Found ${#alg_files[@]} stat-${alg}.csv files"
+    all_stat_files+=("${alg_files[@]}")
+    total_files=$((total_files + ${#alg_files[@]}))
+  else
+    echo "No stat-${alg}.csv files found"
+  fi
+done
+
+if [[ ${#all_stat_files[@]} -eq 0 ]]; then
+  echo "No stat files found for any configured algorithms under $SIMPHY_DATA_DIR"
+  echo "Configured algorithms: ${ALGORITHMS[*]}"
   exit 0
 fi
 
-echo "Found ${#stelar_files[@]} stat-stelar.csv files. Merging..."
+echo "Found total ${total_files} stat files across all algorithms. Merging..."
 
 # helper: normalize a single line (remove CR and trim)
 norm_line() {
@@ -82,14 +100,14 @@ printf "%s\n" "$PRESCRIBED_HEADER" > "$OUT_FILE"
 merged_rows=0
 skipped_files=0
 
-for stelar in "${stelar_files[@]}"; do
-  if [[ ! -f "$stelar" ]]; then
-    echo "Warning: file disappeared: $stelar" >&2
+for stat_file in "${all_stat_files[@]}"; do
+  if [[ ! -f "$stat_file" ]]; then
+    echo "Warning: file disappeared: $stat_file" >&2
     ((skipped_files++))
     continue
   fi
 
-  file_header=$(head -n 1 "$stelar" | tr -d '\r' | awk '{$1=$1;print}')
+  file_header=$(head -n 1 "$stat_file" | tr -d '\r' | awk '{$1=$1;print}')
   IFS=',' read -ra file_cols <<< "$file_header"
 
   # Create mapping of file columns to indices
@@ -99,7 +117,7 @@ for stelar in "${stelar_files[@]}"; do
   done
 
   # Process stat-sim.csv for gt-gt, gt-st
-  dir=$(dirname "$stelar")
+  dir=$(dirname "$stat_file")
   stat_sim="${dir%/}/stat-sim.csv"
   gt_gt=""
   gt_st=""
@@ -142,9 +160,9 @@ for stelar in "${stelar_files[@]}"; do
       line=(line ? line "," : "") out[i];
     }
     print line;
-  }' "$stelar" >> "$OUT_FILE"
+  }' "$stat_file" >> "$OUT_FILE"
 
-  appended=$(awk 'END{print NR-1}' "$stelar")
+  appended=$(awk 'END{print NR-1}' "$stat_file")
   appended=$(echo "$appended" | tr -d '[:space:]')
   merged_rows=$((merged_rows + appended))
 done

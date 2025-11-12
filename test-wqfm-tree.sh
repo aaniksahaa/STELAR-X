@@ -54,7 +54,7 @@ Optional:
   --sb                    Substitution/birthrate parameter (default: ${SB})
   --spmin                 Population size minimum (default: ${SPMIN})
   --spmax                 Population size maximum (default: ${SPMAX})
-  --fresh                 Force rerun even if stat-wqfm.csv exists
+  --fresh                 Force rerun even if stat-wqfm-tree.csv exists
   --no-time-monitor       Disable time-monitoring
   --no-gpu-monitor        Disable GPU-monitoring
   --debug                 Enable shell tracing (set DEBUG=1)
@@ -109,7 +109,7 @@ else
   SIMPHY_RUN_DIR="${SIMPHY_DIR%/}/data/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}/${REPLICATE}"
 fi
 
-STAT_FILE="${SIMPHY_RUN_DIR%/}/stat-wqfm.csv"
+STAT_FILE="${SIMPHY_RUN_DIR%/}/stat-wqfm-tree.csv"
 ALL_GT_FILE="${SIMPHY_RUN_DIR%/}/all_gt.tre"
 TRUE_SPECIES_TREE="${SIMPHY_RUN_DIR%/}/s_tree.trees"
 OUT_WQFM="${SIMPHY_RUN_DIR%/}/out-wqfm.tre"
