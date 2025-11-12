@@ -199,13 +199,16 @@ if [[ -d "${REPL_DIR}" && -f "${ALL_GT_FILE}" ]]; then
   echo -e "\033[1;36m============================================================\033[0m"
   echo
   
-  # Give user a moment to read and potentially stop
-  echo -e "\033[1;37mStarting analysis in 3 seconds... (Press Ctrl+C to stop)\033[0m"
-  sleep 1
-  echo -e "\033[1;37m2...\033[0m"
-  sleep 1
-  echo -e "\033[1;37m1...\033[0m"
-  sleep 1
+
+  # # Give user a moment to read and potentially stop
+  # echo -e "\033[1;37mStarting analysis in 3 seconds... (Press Ctrl+C to stop)\033[0m"
+  # sleep 1
+  # echo -e "\033[1;37m2...\033[0m"
+  # sleep 1
+  # echo -e "\033[1;37m1...\033[0m"
+  # sleep 1
+
+
   echo -e "\033[1;32m🚀 Starting analysis now!\033[0m"
   echo
   # Try to locate a species tree file within the replicate dir.

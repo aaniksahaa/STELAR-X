@@ -31,6 +31,7 @@ FRESH=false
 # Monitoring options (DEFAULT: ON)
 TIME_MONITOR=true
 GPU_MONITOR=true
+NO_NOTIFY=false       # when true: skip ntfy.sh notifications
 DEBUG=0
 
 print_help() {
@@ -55,6 +56,7 @@ Optional:
   --fresh              Force rerun even if stat-astral.csv exists
   --no-time-monitor    Disable time-monitoring (overrides default ON)
   --no-gpu-monitor     Disable GPU-monitoring (overrides default ON)
+  --no-notify, -nn     Disable ntfy.sh notifications
   --debug              Enable shell tracing (set DEBUG=1)
   --help, -h           Show this message
 EOF
@@ -78,6 +80,7 @@ while [[ $# -gt 0 ]]; do
     --fresh) FRESH=true; shift ;;
     --no-time-monitor) TIME_MONITOR=false; shift ;;
     --no-gpu-monitor) GPU_MONITOR=false; shift ;;
+    --no-notify|-nn) NO_NOTIFY=true; shift ;;
     --debug) DEBUG=1; shift ;;
     --help|-h) print_help; exit 0 ;;
     *) echo "Unknown option: $1"; print_help; exit 1 ;;
@@ -354,7 +357,7 @@ echo "$CSV_ROW" >> "$STAT_FILE"
 echo "Wrote stats to $STAT_FILE"
 
 # Send notification (ntfy) if curl present
-if command -v curl >/dev/null 2>&1; then
+if [[ "$NO_NOTIFY" = false ]] && command -v curl >/dev/null 2>&1; then
   curl -s -d "🎉 ASTRAL completed for ${TAXA_NUM} taxa and ${GENE_TREES} gene trees!
 
 📊 Results:

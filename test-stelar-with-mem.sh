@@ -32,6 +32,7 @@ FRESH=false
 # Monitoring options (DEFAULT: ON)
 TIME_MONITOR=true     # when true: run `time -v` if available and capture stderr to TIME_TMP
 GPU_MONITOR=true      # when true: sample nvidia-smi while stelar runs
+NO_NOTIFY=false       # when true: skip ntfy.sh notifications
 DEBUG=0               # set DEBUG=1 to enable set -x
 
 print_help() {
@@ -56,6 +57,7 @@ Optional:
   --fresh            Force rerun even if stat-stelar.csv exists
   --no-time-monitor  Disable time-monitoring (overrides default ON)
   --no-gpu-monitor   Disable GPU-monitoring (overrides default ON)
+  --no-notify, -nn   Disable ntfy.sh notifications
   --debug            Enable shell tracing (set DEBUG=1)
   --help, -h         Show this message
 EOF
@@ -79,6 +81,7 @@ while [[ $# -gt 0 ]]; do
     --fresh) FRESH=true; shift ;;
     --no-time-monitor) TIME_MONITOR=false; shift ;;
     --no-gpu-monitor) GPU_MONITOR=false; shift ;;
+    --no-notify|-nn) NO_NOTIFY=true; shift ;;
     --debug) DEBUG=1; shift ;;
     --help|-h) print_help; exit 0 ;;
     *) echo "Unknown option: $1"; print_help; exit 1 ;;
@@ -345,7 +348,7 @@ echo "$CSV_ROW" >> "$STAT_FILE"
 echo "Wrote stats to $STAT_FILE"
 
 # Send notification (ntfy)
-if command -v curl >/dev/null 2>&1; then
+if [[ "$NO_NOTIFY" = false ]] && command -v curl >/dev/null 2>&1; then
   curl -s -d "🎉 STELAR completed for ${TAXA_NUM} taxa and ${GENE_TREES} gene trees!
 
 📊 Results:
