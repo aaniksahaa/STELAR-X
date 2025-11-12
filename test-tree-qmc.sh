@@ -201,7 +201,7 @@ fi
 TREE_QMC_PID=""
 if [[ "${TIME_MONITOR:-false}" = true && -n "$TIME_CMD" ]]; then
   (
-    cd "$TREE_QMC_ROOT" && "$TIME_CMD" -v ./tree-qmc -i "$ALL_GT_FILE" -o "$OUT_QMC" < /dev/null
+    cd "$TREE_QMC_ROOT" && "$TIME_CMD" -v ./TREE-QMC/tree-qmc -i "$ALL_GT_FILE" -o "$OUT_QMC" < /dev/null
   ) 2> "$TIME_TMP" &
   TREE_QMC_PID=$!
 else
