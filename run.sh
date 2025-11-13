@@ -21,6 +21,7 @@
 
 
 #  ./run.sh all_gt_bs_rooted_11.tre out.tre GPU_PARALLEL NONE
+#  ./run.sh all_gt_bs_rooted_37.tre out.tre GPU_PARALLEL NONE
 #  ./run.sh all_gt_bs_rooted_200.tre out.tre GPU_PARALLEL NONE
 #  ./run.sh all_gt_bs_rooted_200.tre out.tre GPU_PARALLEL FULL UPGMA true
 
