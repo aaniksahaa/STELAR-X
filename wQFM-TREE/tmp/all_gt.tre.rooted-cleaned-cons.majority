@@ -1,0 +1,14 @@
+#NEXUS 
+
+Begin trees;  [Treefile saved Sun Nov 16 01:31:08 2025]
+[!
+>Consensus of 200 trees
+>
+>Source of trees from which consensus(es) calculated...
+>
+>Processing TREES block from file "tmp/all_gt.tre.rooted-cleaned-cons.nexus":
+>   Keeping: trees from file (replacing trees in memory)
+>   200 trees read from file
+]
+	tree MajRule = [&U] (BOS,((((((CAL,((GOR,(HOM,PAN)),PON),NEW),(MIC,OTO),TAR),CAV,DIP,(MUS,RAT),(OCH,ORY),SPE,TUP),((CHO,DAS),(ECH,(LOX,PRO)),(GAL,(MAC,MON),ORN))),(CAN,FEL),EQU,ERI,(MYO,PTE),SOR),SUS,VIC),TUR);
+end;

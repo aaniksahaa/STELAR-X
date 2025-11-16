@@ -40,6 +40,15 @@ Host github.com-ak
   User git
   IdentityFile ~/.ssh/id_ed25519_ak
   IdentitiesOnly yes
+  
+cat >> ~/.ssh/config << 'EOF'
+Host github.com-ak
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519_ak
+  IdentitiesOnly yes
+EOF
+
 
 mkdir ~/phylogeny
 cd ~/phylogeny
@@ -53,7 +62,8 @@ git clone git@github.com-ak:aaniksahaa/ASTRAL.git
 
 cd ASTRAL
 git checkout anik-MP
-chmod +x compile_astral.sh run_astral.sh
+chmod +x compile_astral.sh run_astral.sh setup_gpu_astral.sh
+./setup_gpu_astral.sh
 ./compile_astral.sh
 
 be very careful whether ASTRAL can use the GPU or not 
@@ -71,12 +81,12 @@ cd STELAR-MP
 
 git checkout mem3 
 
-chmod +x build.sh collect-stats-standard.sh collect-stats-simulated.sh run-bulk-standard.sh run-bulk-simulated.sh run.sh sim.sh test-stelar.sh test-astral.sh
+chmod +x build.sh collect-stats-standard.sh collect-stats-simulated.sh run-bulk-standard.sh run-bulk-simulated.sh run.sh sim.sh test-stelar.sh test-astral.sh test-stelar-with-mem.sh test-astral-with-mem.sh run-with-monitor.sh run-astral-with-monitor.sh
 
 pip install dendropy
 
 # Install Maven
-sudo apt install maven
+sudo apt install -y maven
 
 # Verify Maven installation and Java version
 mvn -version

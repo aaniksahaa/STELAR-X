@@ -12,7 +12,15 @@
 
 ./run.sh avian-14k-og-strca.tre out.tre GPU_PARALLEL NONE
 
+./run-with-monitor.sh avian-14k-og-strca.tre out.tre
+
+./run-with-monitor.sh avian-14k-og-melga-galga.tre out.tre
+
 
 ./run-with-monitor.sh all_gt_bs_rooted_37.tre out.tre
 
+./run-with-monitor.sh avian-gt-363-og-strcam.tre out.tre
+
 ./run-astral-with-monitor.sh all_gt_bs_rooted_37.tre out.tre -b /home/aaniksahaa/research
+
+./run-astral-with-monitor.sh 1kp-2.tre out.tre -b /home/aaniksahaa/research

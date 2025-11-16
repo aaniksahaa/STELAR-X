@@ -8,42 +8,24 @@ add key to instance
 nano ~/.ssh/config
     
     
-    
-    
+
 vast1:
 
-ssh -p 22083 root@194.14.47.19 -L 8080:localhost:8080
-    
+ssh -p 50013 root@51.68.50.194 -L 8080:localhost:8080
+
 Host vast1
-    HostName 194.14.47.19
-    Port 22083
+    HostName 51.68.50.194
+    Port 50013
     User root
     IdentityFile ~/.ssh/id_ed25519
-    IdentitiesOnly yes    
-
-
-vast2:
-
-ssh -p 52994 root@111.237.107.89 -L 8080:localhost:8080
-
-Host vast2
-    HostName 111.237.107.89
-    Port 52994
-    User root
-    IdentityFile ~/.ssh/id_ed25519
-    IdentitiesOnly yes  
-
+    IdentitiesOnly yes 
 
     
 apt install -y nano
-
-
-no need of sudo in cmds
-
 apt install -y openjdk-17-jdk
-
-by default auto-tmux, if not wanted,
-
+apt install -y time 
+apt install -y btop
+apt install -y htop
 touch ~/.no_auto_tmux
 exit
 

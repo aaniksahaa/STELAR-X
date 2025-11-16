@@ -1,0 +1,19 @@
+
+#NEXUS
+
+begin taxa;
+        dimensions ntax=0;
+        taxlabels ;
+end;
+
+begin paup;
+        set autoclose = yes warntree = no warnreset = no notifybeep = no monitor = yes taxlabels = full;
+        set criterion = parsimony;
+        set increase = auto;
+        gettrees file = tmp/all_gt.tre.rooted-cleaned-cons.nexus allblocks = yes warntree = no unrooted = yes;
+        contree all / strict = yes treefile = tmp/all_gt.tre.rooted-cleaned-cons.strict replace;
+        contree all / strict = no majrule = yes treefile = tmp/all_gt.tre.rooted-cleaned-cons.majority replace;
+        contree all / strict = no majrule = yes le50 = yes treefile = tmp/all_gt.tre.rooted-cleaned-cons.greedy replace;
+end;
+
+quit warntsave = no;
