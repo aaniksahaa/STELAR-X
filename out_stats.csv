@@ -1,2 +1,2 @@
 algorithm,input_file,output_file,running_time_s,max_cpu_mb,max_gpu_mb,exit_code
-stelar-x,all_gt_bs_rooted_37.tre,out.tre,0.689,229.836,15.360,0
+stelar-x,1kp-og.tre,out.tre,122.337,2223.996,121.856,0
