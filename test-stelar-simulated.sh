@@ -12,7 +12,8 @@ set -euo pipefail
 TAXA_NUM=""
 GENE_TREES=""
 REPLICATE="R1"
-BASE_DIR="${HOME}/phylogeny"
+# BASE_DIR="${HOME}/phylogeny"
+BASE_DIR=".."
 SIMPHY_DIR=""                # derived from BASE_DIR unless provided
 SIMPHY_DIR_SET=false
 SIMPHY_DATA_DIR=""           # custom simphy data directory (overrides SIMPHY_DIR/data)
