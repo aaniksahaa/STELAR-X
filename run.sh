@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-# STELAR-MP Run Script with Bipartition Expansion Support
+# STELAR-X Run Script with Bipartition Expansion Support
 # Usage: ./run.sh [input_file] [output_file] [computation_mode] [expansion_method] [distance_method] [verbose]
 #
 # Arguments (all optional, will use defaults if not provided):
@@ -27,7 +27,7 @@
 
 # Check for help flag
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    echo "STELAR-MP Run Script with Bipartition Expansion Support"
+    echo "STELAR-X Run Script"
     echo ""
     echo "Usage: $0 [input_file] [output_file] [computation_mode] [expansion_method] [distance_method] [verbose]"
     echo ""
@@ -101,7 +101,7 @@ if [[ ! " ${VALID_DISTANCE_METHODS[@]} " =~ " ${DISTANCE_METHOD} " ]]; then
     exit 1
 fi
 
-echo "=== STELAR-MP Run Script ==="
+echo "=== STELAR-X Run Script ==="
 echo "Input file: $INPUT_FILE"
 echo "Output file: $OUTPUT_FILE"
 echo "Computation mode: $COMPUTATION_MODE"
@@ -160,7 +160,7 @@ if [ "$EXPANSION_METHOD" = "NONE" ]; then
 fi
 
 # Run the program with the library path set for this run only
-echo -e "${YELLOW}Running STELAR-MP...${NC}"
+echo -e "${YELLOW}Running STELAR-X...${NC}"
 echo -e "${YELLOW}Command: java ... Main $JAVA_ARGS${NC}"
 echo
 

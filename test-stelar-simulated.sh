@@ -48,7 +48,7 @@ Optional:
   --base-dir, -b     Base directory (default: ${BASE_DIR})
   --simphy-dir       Path to simphy dir (overrides --base-dir)
   --simphy-data-dir  Custom directory for simphy data storage (overrides simphy-dir/data)
-  --stelar-root      Path to STELAR-MP root (overrides --base-dir)
+  --stelar-root      Path to STELAR-X root (overrides --base-dir)
   --stelar-opts      Extra args for STELAR run (default: "$STELAR_OPTS")
   --sb               Substitution/birthrate parameter (default: ${SB})
   --spmin            Population size minimum (default: ${SPMIN})
@@ -96,10 +96,12 @@ fi
 
 # Derive SIMPHY_DIR/STELAR_ROOT from BASE_DIR if not explicitly set
 if [[ "$SIMPHY_DIR_SET" = false ]]; then
-  SIMPHY_DIR="${BASE_DIR%/}/STELAR-MP/simphy"
+  SIMPHY_DIR="${BASE_DIR%/}/STELAR-X/simphy"
+  # SIMPHY_DIR="./simphy"
 fi
 if [[ "$STELAR_ROOT_SET" = false ]]; then
-  STELAR_ROOT="${BASE_DIR%/}/STELAR-MP"
+  STELAR_ROOT="${BASE_DIR%/}/STELAR-X"
+  # STELAR_ROOT="."
 fi
 
 PAIR="${TAXA_NUM}_${GENE_TREES}"

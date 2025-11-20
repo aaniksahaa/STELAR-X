@@ -6,7 +6,7 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}Setting up STELAR-MP environment...${NC}"
+echo -e "${YELLOW}Setting up STELAR-X environment...${NC}"
 
 # Check if Java 17 is installed
 if ! command -v java &> /dev/null; then
