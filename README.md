@@ -99,6 +99,8 @@ Examples:
 
 ```bash
 ./run.sh all_gt_bs_rooted_37.tre out-37.tre
+```
+```bash
 ./run.sh avian-48-gt.tre out-avian-48.tre
 ```
 
@@ -118,6 +120,9 @@ Example:
 
 ```bash
 ./run-with-monitor.sh all_gt_bs_rooted_37.tre out-37.tre
+```
+```bash
+./run-with-monitor.sh avian-48-gt.tre out-avian-48.tre
 ```
 
 ---
