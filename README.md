@@ -77,9 +77,14 @@ sudo apt install maven
 mvn -version
 ```
 
-Expected output:
-Apache Maven 3.x.x ...
-Java version: 21.x.x ...
+Sample output:
+```
+Apache Maven 3.8.7
+Maven home: /usr/share/maven
+Java version: 21.0.8, vendor: Ubuntu, runtime: /usr/lib/jvm/java-21-openjdk-amd64
+Default locale: en_US, platform encoding: UTF-8
+OS name: "linux", version: "6.14.0-35-generic", arch: "amd64", family: "unix"
+```
 
 
 
