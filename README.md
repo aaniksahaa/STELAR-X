@@ -13,11 +13,11 @@ STELAR-X requires the following software:
 
 Before proceeding, please ensure that these dependencies are available on your system.
 
-### 1. Install Java (tested with JDK 21)
+### 1. Install Java (tested with JDK 17, 21)
 
 ```bash
 sudo apt update
-sudo apt install openjdk-21-jdk
+sudo apt install -y openjdk-21-jdk
 ```
 
 Verify the installation:
@@ -26,7 +26,7 @@ Verify the installation:
 java -version
 ```
 
-Example output:
+Sample Output:
 
 ```
 openjdk version "21.0.8" 2025-07-15
@@ -37,7 +37,7 @@ OpenJDK 64-Bit Server VM (build 21.0.8+9-Ubuntu-0ubuntu122.04.1, mixed mode, sha
 ### 2. Install Maven
 
 ```bash
-sudo apt install maven
+sudo apt install -y maven
 ```
 
 Check the version:
@@ -46,8 +46,7 @@ Check the version:
 mvn -version
 ```
 
-Example:
-
+Sample Output:
 ```
 Apache Maven 3.8.7
 Maven home: /usr/share/maven
