@@ -12,7 +12,7 @@ import core.QuartetFrequencyCounter.QuartetFrequencies;
  * Main class for calculating branch support and branch lengths for species trees.
  * 
  * This class integrates quartet frequency counting with posterior probability calculation
- * to provide ASTRAL-style branch annotations including:
+ * to provide branch annotations including:
  * - Posterior probabilities
  * - Branch lengths based on coalescent theory
  * - P-values for polytomy testing

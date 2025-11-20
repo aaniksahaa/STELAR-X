@@ -1,19 +1,7 @@
 package core;
 
 /**
- * Computes branch length and posterior support using ASTRAL's mathematical framework.
- * 
- * This implementation follows the mathematical formulation from ASTRAL for calculating
- * posterior probabilities and branch lengths based on quartet frequencies.
- * 
- * Key mathematical components:
- * - f1, f2, f3: frequencies of three quartet topologies around a branch
- * - n: total effective number of quartets
- * - lambda: prior parameter for Beta-Binomial model
- * 
- * References:
- * - ASTRAL-III: polynomial time species tree reconstruction from partially resolved gene trees
- * - Sayyari & Mirarab, BMC Bioinformatics 2016
+ * Computes branch length and posterior support 
  */
 public class PosteriorCalculator {
     

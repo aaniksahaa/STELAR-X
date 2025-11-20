@@ -7,7 +7,7 @@ import tree.TreeNode;
 import utils.BitSet;
 
 /**
- * Counts quartet frequencies for branch support calculation following ASTRAL's methodology.
+ * Counts quartet frequencies for branch support calculation
  * 
  * For each internal branch in the species tree, this class counts how many quartets
  * in the gene trees support each of the three possible topologies around that branch.

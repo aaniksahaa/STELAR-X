@@ -1,13 +1,7 @@
 package utils;
 
 /**
- * Configuration class for bipartition expansion options.
- * This class controls which expansion methods are used and their parameters.
- * 
- * Based on ASTRAL-II bipartition expansion strategies:
- * 1. Distance-based expansion (UPGMA/NJ trees)
- * 2. Consensus-based expansion (greedy consensus with multiple thresholds)
- * 3. Polytomy resolution (distance and sampling methods)
+ * This is under-development
  */
 public class BipartitionExpansionConfig {
     
@@ -57,7 +51,7 @@ public class BipartitionExpansionConfig {
     public static boolean ENABLE_POLYTOMY_RESOLUTION = false;
     
     /**
-     * Consensus support thresholds (similar to ASTRAL's GREEDY_ADDITION_THRESHOLDS)
+     * Consensus support thresholds
      * Lower values are more permissive, higher values are more strict
      */
     public static double[] CONSENSUS_THRESHOLDS = {0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5};
