@@ -38,15 +38,6 @@ openjdk version "21.0.8" 2025-07-15
 OpenJDK Runtime Environment (build 21.0.8+9-Ubuntu-0ubuntu122.04.1)
 OpenJDK 64-Bit Server VM (build 21.0.8+9-Ubuntu-0ubuntu122.04.1, mixed mode, sharing)
 ```
-<!-- Finally set up JAVA_HOME,
-
-```bash
-# Set JAVA_HOME (adjust path if different)
-export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
-# Make it persistent
-echo 'export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64' >> ~/.bashrc
-source ~/.bashrc
-``` -->
 
 2. Install Maven
 
@@ -109,6 +100,8 @@ Where:
 Example:
 ```bash
 ./run.sh all_gt_bs_rooted_37.tre out-37.tre
+```
+```bash
 ./run.sh avian-48-gt.tre out-avian-48.tre
 ```
 
@@ -117,6 +110,8 @@ To also monitor the running time and memory usage, you may use `run-with-monitor
 Example:
 ```bash
 ./run-with-monitor.sh all_gt_bs_rooted_37.tre out-37.tre
+```
+```bash
 ./run-with-monitor.sh avian-48-gt.tre out-avian-48.tre
 ```
 
@@ -126,14 +121,28 @@ To test STELAR-X with large simulated datasets, we use Simphy (https://github.co
 
 Example Commands for Testing STELAR-X with simulated datasets.
 
+```bash
+./sim.sh -t 100 -g 200 --sb 0.000001 --spmin 100000 --spmax 200000 -rs 1 --fresh
+./test-stelar-simulated.sh -t 100 -g 200 --sb 0.000001 --spmin 100000 --spmax 200000 -r R1 --fresh
 ```
+
+The options `-t` and `-g` indicate the number of taxa and gene trees respectively.
+
+You may also specify a base-dir as follows.
+
+```bash
 ./sim.sh -b $HOME/research -t 100 -g 200 --sb 0.000001 --spmin 100000 --spmax 200000 -rs 1 --fresh
 ./test-stelar-simulated.sh -b $HOME/research -t 100 -g 200 --sb 0.000001 --spmin 100000 --spmax 200000 -r R1 --fresh
 ```
 
 Here, the option `-b` expects the base directory where STELAR-X is set up. For instance, if you have set up it at `$HOME/research/STELAR-X`, then "-b" should be set as `$HOME/research`. 
 
-The options `-t` and `-g` indicate the number of taxa and gene trees respectively.
+To specify a directory where to store the simulated data (instead of the default location), you may use the option `--simphy-data-dir`
+
+```bash
+./sim.sh -b $HOME/research --simphy-data-dir /dev/shm/data -t 100 -g 200 --sb 0.000001 --spmin 100000 --spmax 200000 -rs 1 --fresh
+./test-stelar-simulated.sh -b $HOME/research --simphy-data-dir /dev/shm/data -t 100 -g 200 --sb 0.000001 --spmin 100000 --spmax 200000 -r R1 --fresh
+```
 
 ## Building Upon the Codebase
 
