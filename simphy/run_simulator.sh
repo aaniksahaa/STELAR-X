@@ -89,21 +89,45 @@ echo "  data_base_dir = ${data_base_dir}"
 echo "  out_dir     = ${out_dir}"
 echo ""
 
+# sb = Speciation rate
+# spmin Minimum population size
+# spmax Maximum population size
+# ld Loss rate
+# lb Duplication rate
+# lt HGT rate
+# rs Number of replicates
+# rl Number of gene trees
+# rg Number of gene trees per replicate
+# o Output directory
+# sp Effective population size is uniform between spmin and spmax
+# su Substitution rate is log-normal with mean -17.27461 and standard deviation 0.6931472
+# sg Generation time is fixed at 1
+# sl Number of taxa
+# st Species tree height is log-normal with mean 16.2 and standard deviation 1
+# om Output mode
+
+# v Verbosity level
+# od Output directory
+# op Output mode
+# oc Output mode
+# on Output mode
+# cs Seed
+
 # Run SimPhy (adjust path to simphy_lnx64 if necessary)
 ./simphy_lnx64 \
-  -sb f:${sb} \                   # Speciation rate
-  -ld f:0 \                       # Loss rate 0
-  -lb f:0 \                       # Duplication rate 0
-  -lt f:0 \                       # HGT rate 0
-  -rs ${replicates} \             # Number of replicates
-  -rl f:${gene_trees} \           # Number of gene trees
+  -sb f:${sb} \                   
+  -ld f:0 \                       
+  -lb f:0 \                       
+  -lt f:0 \                       
+  -rs ${replicates} \             
+  -rl f:${gene_trees} \           
   -rg 1 \
   -o ${out_dir} \
-  -sp u:${spmin},${spmax} \       # Effective population size is uniform between spmin and spmax
-  -su ln:-17.27461,0.6931472 \    # Substitution rate is log-normal with mean -17.27461 and standard deviation 0.6931472
-  -sg f:1 \                       # Generation time is fixed at 1
-  -sl f:${taxa_num} \             # Number of taxa 
-  -st ln:16.2,1 \                 # Species tree height is log-normal with mean 16.2 and standard deviation 1
+  -sp u:${spmin},${spmax} \       
+  -su ln:-17.27461,0.6931472 \    
+  -sg f:1 \                       
+  -sl f:${taxa_num} \             
+  -st ln:16.2,1 \                 
   -om 1 \
   -v 2 \
   -od 1 \
