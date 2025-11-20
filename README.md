@@ -94,7 +94,11 @@ Example:
 ./run.sh avian-48-gt.tre out-avian-48.tre
 ```
 
-To also monitor the running time and memory usage, you may use `run-with-monitor.sh`.
+To also monitor the running time and memory usage, you may use `run-with-monitor.sh`. This may require installing `time`.
+
+```bash
+sudo apt install -y time 
+```
 
 Example:
 ```bash
