@@ -11,13 +11,7 @@ An extended implementation of the STELAR (Species Tree Estimation by maximizing 
 
 We recommend checking whether the following is supported in your machine, and installing in case they do not exist currently.
 
-1. Check whether java is there.
-
-```bash
-java -version
-```
-
-If not, install Java. We tested with JDK 21.
+1. Install Java. We tested with JDK 21.
 
 ```bash
 # Update package index
@@ -25,8 +19,6 @@ sudo apt update
 # Check if OpenJDK 21 is available in default repositories
 sudo apt install openjdk-21-jdk
 ```
-
-Then check again,
 
 ```bash
 java -version
@@ -42,12 +34,10 @@ OpenJDK 64-Bit Server VM (build 21.0.8+9-Ubuntu-0ubuntu122.04.1, mixed mode, sha
 2. Install Maven
 
 ```bash
-# Install Maven
 sudo apt install maven
 ```
 
 ```bash
-# Verify Maven installation and Java version
 mvn -version
 ```
 
@@ -59,7 +49,6 @@ Java version: 21.0.8, vendor: Ubuntu, runtime: /usr/lib/jvm/java-21-openjdk-amd6
 Default locale: en_US, platform encoding: UTF-8
 OS name: "linux", version: "6.14.0-35-generic", arch: "amd64", family: "unix"
 ```
-
 
 
 ## Setting up the Project
