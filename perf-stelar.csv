@@ -1,2 +1,0 @@
-alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb,gt-gt,gt-st
-stelar,100,100,R3,0.000001,75000,750000,0.0103,2.203,227.332,83.968,,
