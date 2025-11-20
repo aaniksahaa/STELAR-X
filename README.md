@@ -11,26 +11,7 @@ An extended implementation of the STELAR (Species Tree Estimation by maximizing 
 
 We recommend checking whether the following is supported in your machine, and installing in case they do not exist currently.
 
-1. Check whether nvcc is there.
-
-```bash
-nvcc --version
-```
-
-If not, install with,
-
-```bash
-sudo apt update
-sudo apt-get install nvidia-cuda-toolkit
-```
-
-And then check,
-
-```bash
-nvcc --version
-```
-
-2. Check whether java is there.
+1. Check whether java is there.
 
 ```bash
 java -version
@@ -65,7 +46,7 @@ echo 'export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-3. Install Maven
+2. Install Maven
 
 ```bash
 # Install Maven
@@ -88,7 +69,7 @@ OS name: "linux", version: "6.14.0-35-generic", arch: "amd64", family: "unix"
 
 
 
-## Building the Project
+## Setting up the Project
 
 1. Clone the repository:
 ```bash
@@ -152,6 +133,52 @@ Here, the option `-b` expects the base directory where STELAR-X is set up. For i
 
 The options `-t` and `-g` indicate the number of taxa and gene trees respectively.
 
+## Building Upon the Codebase
+
+### Changing the Java code
+
+If the Java codebase is modified, it is sufficient to recompile the sources files and build the Java classes again as follows.
+
+```
+./build.sh
+```
+
+### Changing the CUDA kernel
+
+1. Check whether nvcc is there.
+
+```bash
+nvcc --version
+```
+
+If not, install with,
+
+```bash
+sudo apt update
+sudo apt-get install nvidia-cuda-toolkit
+```
+
+And then check,
+
+```bash
+nvcc --version
+```
+
+2. Make your changes to the Kernel code. Then build the CUDA kernel again.
+
+```
+# Build CUDA code
+echo -e "\n${YELLOW}Building CUDA code...${NC}"
+cd cuda
+make clean
+make
+if [ $? -ne 0 ]; then
+    echo -e "${RED}CUDA compilation failed!${NC}"
+    exit 1
+fi
+cd ..
+echo -e "${GREEN}CUDA compilation successful${NC}"
+```
 
 ## Troubleshooting
 

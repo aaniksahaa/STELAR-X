@@ -8,7 +8,7 @@ NC='\033[0m' # No Color
 
 echo "=== STELAR-MP Build Script ==="
 
-# Build CUDA code
+# # Build CUDA code
 # echo -e "\n${YELLOW}Building CUDA code...${NC}"
 # cd cuda
 # make clean
