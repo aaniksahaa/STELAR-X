@@ -18,6 +18,8 @@ ascode/
 
 MY-UTILS/
 
+*.pyc
 
+__pycache__/
 
 
