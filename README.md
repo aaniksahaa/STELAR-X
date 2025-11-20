@@ -61,6 +61,12 @@ OS name: "linux", version: "6.14.0-35-generic", arch: "amd64", family: "unix"
 pip install dendropy
 ```
 
+### 3. Install `time`
+
+```bash
+sudo apt install -y time
+```
+
 ---
 
 # Setting Up the Project
@@ -114,12 +120,6 @@ To record running time and memory usage, use:
 
 ```bash
 ./run-with-monitor.sh <input_file> <output_file>
-```
-
-If `time` is not installed:
-
-```bash
-sudo apt install -y time
 ```
 
 Example:
