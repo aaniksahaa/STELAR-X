@@ -55,6 +55,12 @@ Default locale: en_US, platform encoding: UTF-8
 OS name: "linux", version: "6.14.0-35-generic", arch: "amd64", family: "unix"
 ```
 
+### 3. Install Dendropy
+
+```bash
+pip install dendropy
+```
+
 ---
 
 # Setting Up the Project
