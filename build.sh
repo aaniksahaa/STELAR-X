@@ -6,7 +6,7 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo "=== STELAR-MP Build Script ==="
+echo "=== STELAR-X Build Script ==="
 
 # # Build CUDA code
 # echo -e "\n${YELLOW}Building CUDA code...${NC}"
