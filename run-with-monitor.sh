@@ -4,7 +4,6 @@
 # Usage examples:
 #   ./run-with-monitor.sh input.tre output.tre
 #   ./run-with-monitor.sh input.tre output.tre --no-time-monitor --no-gpu-monitor
-#   ./run-with-monitor.sh input.tre output.tre --stelar-opts "CPU_PARALLEL DISTANCE_CONSENSUS"
 #
 set -euo pipefail
 

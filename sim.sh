@@ -182,110 +182,111 @@ else
   fi
 fi
 
-# -------------------------
-# New block: run analysis and write stat-sim.csv
-# -------------------------
+# # -------------------------
+# # New block: run analysis and write stat-sim.csv
+# # -------------------------
 
-# Add colorful analysis message with time warning
-if [[ -d "${REPL_DIR}" && -f "${ALL_GT_FILE}" ]]; then
-  echo
-  echo -e "\033[1;36m============================================================\033[0m"
-  echo -e "\033[1;33m🔬 STARTING PHYLOGENETIC ANALYSIS\033[0m"
-  echo -e "\033[1;36m============================================================\033[0m"
-  echo -e "\033[1;32m📊 Computing GT-GT and GT-ST distances for replicate ${REPLICATE}\033[0m"
-  echo -e "\033[1;31m⚠️  WARNING: This analysis may take significant time for large datasets!\033[0m"
-  echo
-  echo -e "\033[1;33m💡 You can stop this process anytime with Ctrl+C\033[0m"
-  echo -e "\033[1;36m============================================================\033[0m"
-  echo
+# # Add colorful analysis message with time warning
+# if [[ -d "${REPL_DIR}" && -f "${ALL_GT_FILE}" ]]; then
+#   echo
+#   echo -e "\033[1;36m============================================================\033[0m"
+#   echo -e "\033[1;33m🔬 STARTING PHYLOGENETIC ANALYSIS\033[0m"
+#   echo -e "\033[1;36m============================================================\033[0m"
+#   echo -e "\033[1;32m📊 Computing GT-GT and GT-ST distances for replicate ${REPLICATE}\033[0m"
+#   echo -e "\033[1;31m⚠️  WARNING: This analysis may take significant time for large datasets!\033[0m"
+#   echo
+#   echo -e "\033[1;33m💡 You can stop this process anytime with Ctrl+C\033[0m"
+#   echo -e "\033[1;36m============================================================\033[0m"
+#   echo
   
 
-  # # Give user a moment to read and potentially stop
-  # echo -e "\033[1;37mStarting analysis in 3 seconds... (Press Ctrl+C to stop)\033[0m"
-  # sleep 1
-  # echo -e "\033[1;37m2...\033[0m"
-  # sleep 1
-  # echo -e "\033[1;37m1...\033[0m"
-  # sleep 1
+#   # # Give user a moment to read and potentially stop
+#   # echo -e "\033[1;37mStarting analysis in 3 seconds... (Press Ctrl+C to stop)\033[0m"
+#   # sleep 1
+#   # echo -e "\033[1;37m2...\033[0m"
+#   # sleep 1
+#   # echo -e "\033[1;37m1...\033[0m"
+#   # sleep 1
 
 
-  echo -e "\033[1;32m🚀 Starting analysis now!\033[0m"
-  echo
-  # Try to locate a species tree file within the replicate dir.
-  SPECIES_TREE=""
-  for f in "${REPL_DIR}"/s_tree* "${REPL_DIR}"/species_tree* "${REPL_DIR}"/species*; do
-    if [[ -f "$f" ]]; then
-      SPECIES_TREE="$f"
-      break
-    fi
-  done
+#   echo -e "\033[1;32m🚀 Starting analysis now!\033[0m"
+#   echo
+#   # Try to locate a species tree file within the replicate dir.
+#   SPECIES_TREE=""
+#   for f in "${REPL_DIR}"/s_tree* "${REPL_DIR}"/species_tree* "${REPL_DIR}"/species*; do
+#     if [[ -f "$f" ]]; then
+#       SPECIES_TREE="$f"
+#       break
+#     fi
+#   done
 
-  if [[ -z "${SPECIES_TREE}" ]]; then
-    echo "Warning: no species-tree file discovered in ${REPL_DIR}. Skipping analysis."
-  else
-    echo "Found species tree: ${SPECIES_TREE}"
-    # Try to run analyze-dataset.py. We'll attempt from replicate dir first, then from SIMPHY_DIR, then rely on PATH.
-    ANALYZE_OUTPUT=""
-    set +e
-    (
-      cd "${REPL_DIR}"
-      ANALYZE_OUTPUT=$(python analyze-dataset.py "${ALL_GT_FILE##*/}" "${SPECIES_TREE##*/}" 2>&1) || true
-    )
-    if [[ -z "${ANALYZE_OUTPUT}" ]]; then
-      (
-        cd "${SIMPHY_DIR}"
-        ANALYZE_OUTPUT=$(python analyze-dataset.py "${ALL_GT_FILE}" "${SPECIES_TREE}" 2>&1) || true
-      )
-    fi
-    if [[ -z "${ANALYZE_OUTPUT}" ]]; then
-      ANALYZE_OUTPUT=$(python analyze-dataset.py "${ALL_GT_FILE}" "${SPECIES_TREE}" 2>&1) || true
-    fi
-    set -e
+#   if [[ -z "${SPECIES_TREE}" ]]; then
+#     echo "Warning: no species-tree file discovered in ${REPL_DIR}. Skipping analysis."
+#   else
+#     echo "Found species tree: ${SPECIES_TREE}"
+#     # Try to run analyze-dataset.py. We'll attempt from replicate dir first, then from SIMPHY_DIR, then rely on PATH.
+#     ANALYZE_OUTPUT=""
+#     set +e
+#     (
+#       cd "${REPL_DIR}"
+#       ANALYZE_OUTPUT=$(python analyze-dataset.py "${ALL_GT_FILE##*/}" "${SPECIES_TREE##*/}" 2>&1) || true
+#     )
+#     if [[ -z "${ANALYZE_OUTPUT}" ]]; then
+#       (
+#         cd "${SIMPHY_DIR}"
+#         ANALYZE_OUTPUT=$(python analyze-dataset.py "${ALL_GT_FILE}" "${SPECIES_TREE}" 2>&1) || true
+#       )
+#     fi
+#     if [[ -z "${ANALYZE_OUTPUT}" ]]; then
+#       ANALYZE_OUTPUT=$(python analyze-dataset.py "${ALL_GT_FILE}" "${SPECIES_TREE}" 2>&1) || true
+#     fi
+#     set -e
 
-    if [[ -z "${ANALYZE_OUTPUT}" ]]; then
-      echo "Warning: analyze-dataset.py produced no output or failed to run. Skipping CSV write."
-    else
-      echo "${ANALYZE_OUTPUT}"
+#     if [[ -z "${ANALYZE_OUTPUT}" ]]; then
+#       echo "Warning: analyze-dataset.py produced no output or failed to run. Skipping CSV write."
+#     else
+#       echo "${ANALYZE_OUTPUT}"
 
-      # Extract gt-gt and gt-st using patterns from your example output lines
-      gt_gt=$(echo "${ANALYZE_OUTPUT}" | grep -F "Average pairwise discordance (gene trees):" | awk '{print $NF}' || true)
-      gt_st=$(echo "${ANALYZE_OUTPUT}" | grep -F "Average discordance (gene trees vs species tree):" | awk '{print $NF}' || true)
+#       # Extract gt-gt and gt-st using patterns from your example output lines
+#       gt_gt=$(echo "${ANALYZE_OUTPUT}" | grep -F "Average pairwise discordance (gene trees):" | awk '{print $NF}' || true)
+#       gt_st=$(echo "${ANALYZE_OUTPUT}" | grep -F "Average discordance (gene trees vs species tree):" | awk '{print $NF}' || true)
 
-      # If extraction failed, try slightly different phrases (be permissive)
-      if [[ -z "${gt_gt}" ]]; then
-        gt_gt=$(echo "${ANALYZE_OUTPUT}" | grep -E "Average pairwise.*discord|pairwise RF" | awk '{print $NF}' || true)
-      fi
-      if [[ -z "${gt_st}" ]]; then
-        gt_st=$(echo "${ANALYZE_OUTPUT}" | grep -E "discordance .*gene trees vs species tree|gene trees vs species" | awk '{print $NF}' || true)
-      fi
+#       # If extraction failed, try slightly different phrases (be permissive)
+#       if [[ -z "${gt_gt}" ]]; then
+#         gt_gt=$(echo "${ANALYZE_OUTPUT}" | grep -E "Average pairwise.*discord|pairwise RF" | awk '{print $NF}' || true)
+#       fi
+#       if [[ -z "${gt_st}" ]]; then
+#         gt_st=$(echo "${ANALYZE_OUTPUT}" | grep -E "discordance .*gene trees vs species tree|gene trees vs species" | awk '{print $NF}' || true)
+#       fi
 
-      echo ""
-      echo "============================================================"
-      echo "EXTRACTED VALUES:"
-      echo "============================================================"
-      echo "gt_gt: ${gt_gt:-N/A}"
-      echo "gt_st: ${gt_st:-N/A}"
+#       echo ""
+#       echo "============================================================"
+#       echo "EXTRACTED VALUES:"
+#       echo "============================================================"
+#       echo "gt_gt: ${gt_gt:-N/A}"
+#       echo "gt_st: ${gt_st:-N/A}"
 
-      # Prepare CSV path
-      CSV_FILE="${REPL_DIR%/}/stat-sim.csv"
+#       # Prepare CSV path
+#       CSV_FILE="${REPL_DIR%/}/stat-sim.csv"
 
-      # Write header if not present
-      if [[ ! -f "${CSV_FILE}" ]]; then
-        echo "num-taxa,gene-trees,replicate,sb,spmin,spmax,gt-gt,gt-st" > "${CSV_FILE}"
-      fi
+#       # Write header if not present
+#       if [[ ! -f "${CSV_FILE}" ]]; then
+#         echo "num-taxa,gene-trees,replicate,sb,spmin,spmax,gt-gt,gt-st" > "${CSV_FILE}"
+#       fi
 
-      # Append the row (use empty fields if values missing)
-      printf "%s,%s,%s,%s,%s,%s,%s,%s\n" \
-        "${TAXA_NUM}" "${GENE_TREES}" "${REPLICATE}" "${SB}" "${SPMIN}" "${SPMAX}" \
-        "${gt_gt:-}" "${gt_st:-}" >> "${CSV_FILE}"
+#       # Append the row (use empty fields if values missing)
+#       printf "%s,%s,%s,%s,%s,%s,%s,%s\n" \
+#         "${TAXA_NUM}" "${GENE_TREES}" "${REPLICATE}" "${SB}" "${SPMIN}" "${SPMAX}" \
+#         "${gt_gt:-}" "${gt_st:-}" >> "${CSV_FILE}"
 
-      echo -e "\033[1;32m✅ SUCCESS: Analysis completed and saved to ${CSV_FILE}\033[0m"
-    fi
-  fi
-else
-  echo "Skipping analysis: replicate directory or all_gt.tre missing."
-fi
+#       echo -e "\033[1;32m✅ SUCCESS: Analysis completed and saved to ${CSV_FILE}\033[0m"
+#     fi
+#   fi
+# else
+#   echo "Skipping analysis: replicate directory or all_gt.tre missing."
+# fi
 
-echo -e "\033[1;32m🎉 COMPLETED: Simulation and analysis finished successfully!\033[0m"
+
+echo -e "\033[1;32m🎉 COMPLETED: Simulation finished successfully!\033[0m"
 echo -e "\033[1;36m📁 Output directory: ${OUT_DIR}\033[0m"
 
