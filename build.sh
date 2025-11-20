@@ -39,7 +39,7 @@ M2_REPO="$HOME/.m2/repository"
 # Compile Java classes with Maven dependencies in classpath
 javac -sourcepath src \
       -d bin \
-      -cp "target/stelar-mp-1.0-SNAPSHOT.jar:$M2_REPO/net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar:$M2_REPO/net/java/dev/jna/jna-platform/5.13.0/jna-platform-5.13.0.jar" \
+      -cp "target/stelar-x-1.0.0-SNAPSHOT.jar:$M2_REPO/net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar:$M2_REPO/net/java/dev/jna/jna-platform/5.13.0/jna-platform-5.13.0.jar" \
       $(find src -name "*.java")
 
 if [ $? -ne 0 ]; then

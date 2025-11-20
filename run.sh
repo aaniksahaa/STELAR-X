@@ -117,7 +117,7 @@ if [ ! -f "$INPUT_FILE" ]; then
 fi
 
 # Check if binaries exist
-if [ ! -f "target/stelar-mp-1.0-SNAPSHOT.jar" ] || [ ! -d "bin" ]; then
+if [ ! -f "target/stelar-x-1.0.0-SNAPSHOT.jar" ] || [ ! -d "bin" ]; then
     echo -e "${RED}Error: Binaries not found. Please run build.sh first.${NC}"
     exit 1
 fi
@@ -171,7 +171,7 @@ eval "java -Xms4g -Xmx44g -Djava.library.path=\"$(pwd)/cuda\" \
      -Djna.memory.contiguous=true \
      -Djna.memory.contiguous.alignment=8 \
      -Djna.memory.contiguous.size=1024 \
-     -cp target/stelar-mp-1.0-SNAPSHOT.jar Main $JAVA_ARGS"
+     -cp target/stelar-x-1.0.0-SNAPSHOT.jar Main $JAVA_ARGS"
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}Program execution failed!${NC}"
