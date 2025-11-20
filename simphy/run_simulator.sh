@@ -119,7 +119,7 @@ echo ""
   -ld f:0 \
   -lb f:0 \
   -lt f:0 \
-  -rs 1 \
+  -rs ${replicates} \
   -rl f:${gene_trees} \
   -rg 1 \
   -o ${out_dir} \
