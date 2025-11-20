@@ -164,7 +164,7 @@ echo -e "${YELLOW}Running STELAR-X...${NC}"
 echo -e "${YELLOW}Command: java ... Main $JAVA_ARGS${NC}"
 echo
 
-eval "java -Xms4g -Xmx44g -Djava.library.path=\"$(pwd)/cuda\" \
+eval "java -Xms4g -Xmx128g -Djava.library.path=\"$(pwd)/cuda\" \
      -Djna.debug_load=true \
      -Djna.debug_load.jna=true \
      -Djna.platform.library.path=\"$(pwd)/cuda\" \

@@ -163,6 +163,12 @@ Here, `-b` should point to the directory *containing* the STELAR-X folder.
 ./test-stelar-simulated.sh -b $HOME/research --simphy-data-dir /dev/shm/data -t 100 -g 200 --sb 0.000001 --spmin 100000 --spmax 200000 -r R1 --fresh
 ```
 
+**Note**: Currently, the maximum heap size is set to be 128GB. If you need to set a different value, please modify this line of `run.sh`.
+
+```
+eval "java -Xms4g -Xmx128g ...
+```
+
 ---
 
 # Building Upon the Codebase
