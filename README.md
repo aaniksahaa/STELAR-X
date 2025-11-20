@@ -30,9 +30,6 @@ And then check,
 nvcc --version
 ```
 
-
-This may require almost 7GB of disk space. Note that `nvcc` is only needed if you want to test with GPU parallelism.
-
 2. Check whether java is there.
 
 ```bash
@@ -125,6 +122,14 @@ Example:
 ```bash
 ./run.sh all_gt_bs_rooted_37.tre out-37.tre
 ./run.sh avian-48-gt.tre out-avian-48.tre
+```
+
+To also monitor the running time and memory usage, you may use `run-with-monitor.sh`.
+
+Example:
+```bash
+./run-with-monitor.sh all_gt_bs_rooted_37.tre out-37.tre
+./run-with-monitor.sh avian-48-gt.tre out-avian-48.tre
 ```
 
 ## Testing with Simulated Datasets
