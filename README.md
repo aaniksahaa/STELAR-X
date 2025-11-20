@@ -143,9 +143,9 @@ Example Commands for Testing STELAR-X with simulated datasets.
 ./test-stelar-simulated.sh -b $HOME/research -t 100 -g 200 --sb 0.000001 --spmin 100000 --spmax 200000 -r R1 --fresh
 ```
 
-Here, the parameter "-b" expects the base directory where STELAR-X is set up. For instance, if you have set up it at `$HOME/research/STELAR-X`, then "-b" should be set as "$HOME/research". 
+Here, the option `-b` expects the base directory where STELAR-X is set up. For instance, if you have set up it at `$HOME/research/STELAR-X`, then "-b" should be set as `$HOME/research`. 
 
-The options "-t" and "-g" indicate the number of taxa and gene trees respectively.
+The options `-t` and `-g` indicate the number of taxa and gene trees respectively.
 
 
 ## Troubleshooting
