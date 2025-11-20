@@ -1,5 +1,0 @@
-python run_paup_consensus.py -i 1kp.tre -o out --greedy-start 50 --greedy-end 65 --greedy-step 5
-
-python cleaner.py out.consensus.trees con.tre 
-
-# Then we may append the con.tre trees with the input for testing 
