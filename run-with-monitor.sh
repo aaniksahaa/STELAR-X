@@ -302,23 +302,24 @@ echo "algorithm,input_file,output_file,running_time_s,max_cpu_mb,max_gpu_mb,exit
 echo "stelar-x,$(basename "$INPUT_FILE"),$(basename "$OUTPUT_FILE"),${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB},${STELAR_EXIT_CODE}" >> "$STATS_FILE"
 echo "Stats saved to: $STATS_FILE"
 
-# Send notification (ntfy) if enabled and curl available
-if [[ "$NO_NOTIFY" = false ]] && command -v curl >/dev/null 2>&1; then
-  STATUS_EMOJI=$(if [[ $STELAR_EXIT_CODE -eq 0 ]]; then echo "🎉"; else echo "❌"; fi)
-  STATUS_TEXT=$(if [[ $STELAR_EXIT_CODE -eq 0 ]]; then echo "completed successfully"; else echo "failed (exit $STELAR_EXIT_CODE)"; fi)
+# Notification disabled
+# # Send notification (ntfy) if enabled and curl available
+# if [[ "$NO_NOTIFY" = false ]] && command -v curl >/dev/null 2>&1; then
+#   STATUS_EMOJI=$(if [[ $STELAR_EXIT_CODE -eq 0 ]]; then echo "🎉"; else echo "❌"; fi)
+#   STATUS_TEXT=$(if [[ $STELAR_EXIT_CODE -eq 0 ]]; then echo "completed successfully"; else echo "failed (exit $STELAR_EXIT_CODE)"; fi)
   
-  curl -s -d "${STATUS_EMOJI} STELAR-X ${STATUS_TEXT}!
+#   curl -s -d "${STATUS_EMOJI} STELAR-X ${STATUS_TEXT}!
 
-📊 Performance:
-• Running time: ${RUNNING_TIME}s
-• Max CPU RAM: ${MAX_CPU_MB} MB
-• Max GPU VRAM: ${MAX_GPU_MB} MB
+# 📊 Performance:
+# • Running time: ${RUNNING_TIME}s
+# • Max CPU RAM: ${MAX_CPU_MB} MB
+# • Max GPU VRAM: ${MAX_GPU_MB} MB
 
-📁 Files:
-• Input: $(basename "$INPUT_FILE")
-• Output: $(basename "$OUTPUT_FILE")
-• Stats: $(basename "$STATS_FILE")" ntfy.sh/anik-test || true
-fi
+# 📁 Files:
+# • Input: $(basename "$INPUT_FILE")
+# • Output: $(basename "$OUTPUT_FILE")
+# • Stats: $(basename "$STATS_FILE")" ntfy.sh/anik-test || true
+# fi
 
 echo
 if [[ $STELAR_EXIT_CODE -eq 0 ]]; then

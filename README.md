@@ -1,6 +1,6 @@
-# STELAR-MP: Massively Parallel Phylogenetic Tree Inference
+# STELAR-X: Scaling Coalescent-Based Species Tree Inference to 100,000 Species and Beyond
 
-This project implements a massively parallel version of the STELAR algorithm for phylogenetic tree inference, with support for CPU and GPU computation.
+An extended implementation of the STELAR (Species Tree Estimation by maximizing tripLet AgReement) integrating permutation-invariant double hashing and massive parallelism. STELAR-X is capable of analysing ultra-large phylogenetic datasets.
 
 ## Prerequisites
 
@@ -90,98 +90,58 @@ Java version: 21.x.x ...
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/stelar-mp.git
-cd stelar-mp
+git clone https://github.com/aaniksahaa/STELAR-X.git
+cd STELAR-X
 ```
 
-2. Compile the CUDA code:
-```bash
-cd cuda
-make
-cd ..
+2. Grant permissions to the scripts.
+
+```
+chmod +x build.sh run.sh run-with-monitor.sh sim.sh test-stelar-simulated.sh
 ```
 
-3. Build the Java project:
-```bash
-mvn clean package
-```
-
-## Running the Program
-
-Please note that, if you have made any change in the Java codebase, you must run the command,
+3. Build the Java project.
 
 ```bash
-chmod +x build.sh
 ./build.sh
 ```
 
 This will re-compile and re-generate the jar file.
 
+## Running the Program
+
 Use the provided `run.sh` script to run the program:
 
 ```bash
-./run.sh <input_file> <output_file> [computation_mode]
+./run.sh <input_file> <output_file> 
 ```
 
 Where:
 - `<input_file>`: Path to the input gene tree file in Newick format
 - `<output_file>`: Path where the output species tree will be written
-- `[computation_mode]`: Optional computation mode (default: GPU_PARALLEL)
-  - `CPU_SINGLE`: Single-threaded CPU computation
-  - `CPU_PARALLEL`: Multi-threaded CPU computation
-  - `GPU_PARALLEL`: GPU-accelerated computation
+
 
 Example:
 ```bash
-./run.sh input.tre output.tre GPU_PARALLEL
-# or 
-./run.sh input.tre output.tre GPU_PARALLEL NONE 
+./run.sh all_gt_bs_rooted_37.tre out-37.tre
+./run.sh avian-48-gt.tre out-avian-48.tre
 ```
 
-## Running in bulk for benchmarking
+## Testing with Simulated Datasets
 
-Please use `bulk_runner.sh` to run in bulk and to benchmark.
+To test STELAR-X with large simulated datasets, we use Simphy (https://github.com/adamallo/SimPhy).
 
-## Computation Modes
+Example Commands for Testing STELAR-X with simulated datasets.
 
-1. **CPU_SINGLE**: Uses a single CPU thread for weight calculation. This is the slowest but most memory-efficient mode.
-
-2. **CPU_PARALLEL**: Uses multiple CPU threads for weight calculation, with the number of threads equal to the number of available CPU cores. This provides good performance on systems without a GPU.
-
-3. **GPU_PARALLEL**: Uses NVIDIA GPU for weight calculation, providing massive parallelism for large datasets. This is the fastest mode when a compatible GPU is available.
-
-
-## Generation of Simulated Datasets
-
-To test STELAR-MP with large simulated datasets, we use Simphy (https://github.com/adamallo/SimPhy). Please look at the `simphy` directory to generate simulated datasets. Please read `cmd.txt` there.
-
-```bash
-cd simphy
-# n = 10000, k = 1000
-./run_simulator.sh 10000 1000 10k
-# then this data will be saved at data/15k there...
+```
+./sim.sh -b $HOME/research -t 100 -g 200 --sb 0.000001 --spmin 100000 --spmax 200000 -rs 1 --fresh
+./test-stelar-simulated.sh -b $HOME/research -t 100 -g 200 --sb 0.000001 --spmin 100000 --spmax 200000 -r R1 --fresh
 ```
 
-## Calculation of RF rate
+Here, the parameter "-b" expects the base directory where STELAR-X is set up. For instance, if you have set up it at `$HOME/research/STELAR-X`, then "-b" should be set as "$HOME/research". 
 
-Please use `RF/getFpFn.py`
+The options "-t" and "-g" indicate the number of taxa and gene trees respectively.
 
-## Running for a large dataset
-
-First follow the steps to generate simulated datasets.
-
-Then run, 
-
-```bash
-./run.sh /home/admin/phylogeny/simphy/10k/R1/all_gt.tre out.tre GPU_PARALLEL NONE
-python rf.py out.tre /home/admin/phylogeny/simphy/10k/R1/s_tree.trees
-```
-
-## Performance Considerations
-
-- The GPU mode requires a CUDA-capable NVIDIA GPU with sufficient memory to hold the bipartition data.
-- For very small datasets, CPU_PARALLEL might be faster than GPU_PARALLEL due to the overhead of data transfer to/from the GPU.
-- The program will automatically fall back to CPU_PARALLEL mode if GPU computation fails.
 
 ## Troubleshooting
 
@@ -189,16 +149,3 @@ python rf.py out.tre /home/admin/phylogeny/simphy/10k/R1/s_tree.trees
    - Make sure you have a compatible NVIDIA GPU
    - Verify that CUDA Toolkit is properly installed
    - Check that the GPU has enough memory for your dataset
-
-2. If you get a "JNA error" message:
-   - Make sure the CUDA library is in the system library path
-   - Try running with `-Djava.library.path=cuda` to specify the library location
-
-3. If the program is slow:
-   - Try different computation modes to find the best for your system
-   - For large datasets, ensure you have enough system memory
-   - Consider using a more powerful GPU for better performance
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details. 
