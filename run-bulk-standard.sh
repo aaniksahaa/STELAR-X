@@ -21,7 +21,7 @@ FRESH=false
 
 # Algorithm configuration
 ALGORITHMS=("stelar" "astral" "treeqmc" "wqfmtree")
-ALGORITHMS=("wqfmtree")
+# ALGORITHMS=("wqfmtree")
 
 # Algorithm-specific options
 STELAR_OPTS="GPU_PARALLEL NONE"
@@ -53,8 +53,10 @@ folders=("37-taxon")
 declare -A innerFolderNames
 innerFolderNames["11-taxon"]="estimated_Xgenes_strongILS/estimated_5genes_strongILS estimated_Xgenes_strongILS/estimated_15genes_strongILS estimated_Xgenes_strongILS/estimated_25genes_strongILS estimated_Xgenes_strongILS/estimated_50genes_strongILS estimated_Xgenes_strongILS/estimated_100genes_strongILS"
 innerFolderNames["15-taxon"]="100gene-100bp/estimated-genetrees 100gene-1000bp/estimated-genetrees 100gene-true 1000gene-100bp/estimated-genetrees 1000gene-1000bp/estimated-genetrees 1000gene-true"
+innerFolderNames["37-taxon"]="estimated-genetrees/0.5X-200-500 estimated-genetrees/1X-200-500 estimated-genetrees/1X-200-1000 estimated-genetrees/1X-400-500 estimated-genetrees/1X-400-1000 estimated-genetrees/1X-800-500 estimated-genetrees/1X-800-1000 estimated-genetrees/2X-200-500"
 # innerFolderNames["37-taxon"]="estimated-genetrees/1X-200-500 estimated-genetrees/1X-200-1000 estimated-genetrees/1X-400-500 estimated-genetrees/1X-400-1000 estimated-genetrees/1X-800-500 estimated-genetrees/1X-800-1000 estimated-genetrees/2X-200-500"
-innerFolderNames["37-taxon"]="true-genetrees/0.5X-200-true true-genetrees/1X-200-true true-genetrees/1X-400-true true-genetrees/1X-800-true true-genetrees/2X-200-true"
+innerFolderNames["37-taxon"]="estimated-genetrees/0.5X-200-500"
+# innerFolderNames["37-taxon"]="true-genetrees/0.5X-200-true true-genetrees/1X-200-true true-genetrees/1X-400-true true-genetrees/1X-800-true true-genetrees/2X-200-true"
 innerFolderNames["48-taxon"]="estimated-genetrees/1X-25-500 estimated-genetrees/1X-50-500 estimated-genetrees/1X-100-500 estimated-genetrees/1X-200-500 estimated-genetrees/1X-500-500 estimated-genetrees/1X-1000-500 estimated-genetrees/2X-1000-500"
 innerFolderNames["48-taxon-latest"]="estimated_genetrees/1X-1000-500"
 innerFolderNames["100-taxon"]="inner100"

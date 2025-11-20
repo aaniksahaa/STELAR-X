@@ -19,7 +19,7 @@
 
 ./run-with-monitor.sh all_gt_bs_rooted_37.tre out.tre
 
-./run-with-monitor.sh avian-gt-363-og-strcam.tre out.tre
+./run-with-monitor.sh avian-gt-363-og-strcam.tre out-avian-363.tre
 
 ./run-with-monitor.sh 1kp-og.tre out.tre
 

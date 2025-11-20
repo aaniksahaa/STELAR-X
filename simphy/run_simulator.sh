@@ -91,26 +91,26 @@ echo ""
 
 # Run SimPhy (adjust path to simphy_lnx64 if necessary)
 ./simphy_lnx64 \
-  -sb f:${sb} \
-  -ld f:0 \
-  -lb f:0 \
-  -lt f:0 \
-  -rs ${replicates} \
-  -rl f:${gene_trees} \
+  -sb f:${sb} \                   # Speciation rate
+  -ld f:0 \                       # Loss rate 0
+  -lb f:0 \                       # Duplication rate 0
+  -lt f:0 \                       # HGT rate 0
+  -rs ${replicates} \             # Number of replicates
+  -rl f:${gene_trees} \           # Number of gene trees
   -rg 1 \
   -o ${out_dir} \
-  -sp u:${spmin},${spmax} \
-  -su ln:-17.27461,0.6931472 \
-  -sg f:1 \
-  -sl f:${taxa_num} \
-  -st ln:16.2,1 \
+  -sp u:${spmin},${spmax} \       # Effective population size is uniform between spmin and spmax
+  -su ln:-17.27461,0.6931472 \    # Substitution rate is log-normal with mean -17.27461 and standard deviation 0.6931472
+  -sg f:1 \                       # Generation time is fixed at 1
+  -sl f:${taxa_num} \             # Number of taxa 
+  -st ln:16.2,1 \                 # Species tree height is log-normal with mean 16.2 and standard deviation 1
   -om 1 \
   -v 2 \
   -od 1 \
   -op 1 \
   -oc 1 \
   -on 1 \
-  -cs 42
+  -cs 42 \                        # Seed
 
 # Canonicalize directory names by removing leading zeros
 echo "Canonicalizing replicate directory names..."
