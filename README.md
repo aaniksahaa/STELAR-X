@@ -224,6 +224,13 @@ echo -e "${GREEN}CUDA compilation successful${NC}"
 
 ---
 
+# Implementation Notes:
+- We use the hash functions addition and bitwise XOR
+- We use $2^{64}$ as the modulus since it arises naturally from the wrap-around behavior of corresponding datatype, and thereby provides more efficiency
+- For the single-element hash function, we use a mixing function comprising multiplication and bit-shift operations
+
+---
+
 # Troubleshooting
 
 1. **CUDA errors** may indicate:
