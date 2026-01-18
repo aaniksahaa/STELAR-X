@@ -37,3 +37,8 @@ cat all_gt_angio.tre s_angio.tre > all_angio.tre
 
 ./run-with-monitor.sh all_gt_angio_con_leaked.tre out-angio-con-leaked-no-mixed.tre --no-mixed
 
+
+ASTER/bin/astral4 all_gt_bs_rooted_37.tre
+
+ASTER/bin/astral4 all_gt_bs_rooted_48.tre
+
