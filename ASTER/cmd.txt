@@ -1,0 +1,7 @@
+# for small number of taxa 
+bin/astral4 all_gt_bs_rooted_37.tre
+
+# for huge number of taxa 
+make astral_int128
+bin/astral4_int128 -o all_gt_bs_rooted_37.tre all_gt_bs_rooted_37.tre
+
