@@ -1,0 +1,2 @@
+algorithm,input_file,output_file,threads,mode,expansion_method,distance_method,running_time_s,max_cpu_mb,max_gpu_mb,exit_code
+stelar-x,all_gt_bs_rooted_200.tre,out-200.tre,auto,gpu,NONE,UPGMA,3.819,743.289,111.616,0

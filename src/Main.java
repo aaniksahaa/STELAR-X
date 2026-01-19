@@ -19,13 +19,15 @@ import tree.Tree;
 public class Main {
 
     /**
-     * Main method that handles command line arguments and orchestrates the analysis.
+     * Main method that handles command line arguments and orchestrates the
+     * analysis.
      */
     public static void main(String[] args) throws IOException {
 
         String inputFilePath = null;
         String outputFilePath = null;
-        String computationMode = null;
+        int numThreads = 0; // 0 means use all available
+        boolean cpuOnly = false; // GPU is default, --cpu disables it
         String expansionMethod = null;
         String distanceMethod = null;
         boolean verboseExpansion = false;
@@ -41,9 +43,20 @@ public class Main {
             } else if (args[i].equals("-o") && i + 1 < args.length) {
                 outputFilePath = args[i + 1];
                 i++; // Skip next argument as it's the file path
-            } else if (args[i].equals("-m") && i + 1 < args.length) {
-                computationMode = args[i + 1];
-                i++; // Skip next argument as it's the mode
+            } else if (args[i].equals("--threads") && i + 1 < args.length) {
+                try {
+                    numThreads = Integer.parseInt(args[i + 1]);
+                    if (numThreads < 1) {
+                        System.err.println("Error: Number of threads must be at least 1");
+                        System.exit(-1);
+                    }
+                    i++; // Skip next argument as it's the thread count
+                } catch (NumberFormatException e) {
+                    System.err.println("Error: Invalid thread count '" + args[i + 1] + "'");
+                    System.exit(-1);
+                }
+            } else if (args[i].equals("--cpu")) {
+                cpuOnly = true;
             } else if (args[i].equals("-e") && i + 1 < args.length) {
                 expansionMethod = args[i + 1];
                 i++; // Skip next argument as it's the expansion method
@@ -72,8 +85,10 @@ public class Main {
         if (inputFilePath == null || outputFilePath == null) {
             System.out.println("Usage: java Main -i <input_file> -o <output_file> [options]");
             System.out.println("Options:");
-            System.out.println("  -m <mode>     Computation mode: CPU_SINGLE, CPU_PARALLEL, GPU_PARALLEL");
-            System.out.println("  -e <method>   Expansion method: NONE, DISTANCE_ONLY, CONSENSUS_ONLY, DISTANCE_CONSENSUS, FULL");
+            System.out.println("  --threads <num>  Number of threads to use (default: all available)");
+            System.out.println("  --cpu            Use CPU only (GPU is default)");
+            System.out.println(
+                    "  -e <method>   Expansion method: NONE, DISTANCE_ONLY, CONSENSUS_ONLY, DISTANCE_CONSENSUS, FULL");
             System.out.println("  -d <method>   Distance method: UPGMA, NEIGHBOR_JOINING, BOTH");
             System.out.println("  -s <support>  Branch support: NONE, POSTERIOR, DETAILED, LENGTH, BOTH, PVALUE, ALL");
             System.out.println("  --lambda <val> Lambda parameter for branch support (default: 0.5)");
@@ -89,43 +104,37 @@ public class Main {
             System.exit(-1);
         }
 
-        // Set computation mode if specified
-        if (computationMode != null) {
-            try {
-                Config.COMPUTATION_MODE = Config.ComputationMode.valueOf(computationMode);
-            } catch (IllegalArgumentException e) {
-                System.err.println("Error: Invalid computation mode '" + computationMode + "'");
-                System.err.println("Valid modes: CPU_SINGLE, CPU_PARALLEL, GPU_PARALLEL");
-                System.exit(-1);
-            }
-        }
-        
+        // Set thread count and CPU-only mode
+        Config.NUM_THREADS = numThreads;
+        Config.USE_GPU = !cpuOnly; // GPU is default, --cpu disables it
+        Config.updateComputationMode();
+
         // Configure bipartition expansion
         if (disableExpansion) {
             utils.BipartitionExpansionConfig.EXPANSION_METHOD = utils.BipartitionExpansionConfig.ExpansionMethod.NONE;
         } else if (expansionMethod != null) {
             try {
-                utils.BipartitionExpansionConfig.EXPANSION_METHOD = 
-                    utils.BipartitionExpansionConfig.ExpansionMethod.valueOf(expansionMethod);
+                utils.BipartitionExpansionConfig.EXPANSION_METHOD = utils.BipartitionExpansionConfig.ExpansionMethod
+                        .valueOf(expansionMethod);
             } catch (IllegalArgumentException e) {
                 System.err.println("Error: Invalid expansion method '" + expansionMethod + "'");
                 System.err.println("Valid methods: NONE, DISTANCE_ONLY, CONSENSUS_ONLY, DISTANCE_CONSENSUS, FULL");
                 System.exit(-1);
             }
         }
-        
+
         // Set distance method if specified
         if (distanceMethod != null) {
             try {
-                utils.BipartitionExpansionConfig.DISTANCE_METHOD = 
-                    utils.BipartitionExpansionConfig.DistanceMethod.valueOf(distanceMethod);
+                utils.BipartitionExpansionConfig.DISTANCE_METHOD = utils.BipartitionExpansionConfig.DistanceMethod
+                        .valueOf(distanceMethod);
             } catch (IllegalArgumentException e) {
                 System.err.println("Error: Invalid distance method '" + distanceMethod + "'");
                 System.err.println("Valid methods: UPGMA, NEIGHBOR_JOINING, BOTH");
                 System.exit(-1);
             }
         }
-        
+
         // Set verbose expansion if specified
         if (verboseExpansion) {
             utils.BipartitionExpansionConfig.VERBOSE_EXPANSION = true;
@@ -134,6 +143,9 @@ public class Main {
 
         System.out.println("Input file: " + inputFilePath);
         System.out.println("Output file: " + outputFilePath);
+        System.out.println(
+                "Threads: " + (numThreads == 0 ? "auto (" + Config.getEffectiveThreadCount() + ")" : numThreads));
+        System.out.println("Mode: " + (cpuOnly ? "CPU only" : "GPU (with CPU fallback)"));
         System.out.println("Computation mode: " + Config.COMPUTATION_MODE);
         System.out.println("Expansion method: " + utils.BipartitionExpansionConfig.EXPANSION_METHOD);
         if (utils.BipartitionExpansionConfig.isDistanceExpansionEnabled()) {
@@ -164,7 +176,7 @@ public class Main {
         // Calculate branch support if requested
         if (branchSupport != null && !branchSupport.equals("NONE")) {
             System.out.println("\nCalculating branch support...");
-            
+
             core.BranchSupportCalculator.BranchAnnotationType annotationType;
             try {
                 switch (branchSupport.toUpperCase()) {
@@ -197,21 +209,20 @@ public class Main {
                 System.exit(-1);
                 return;
             }
-            
-            core.BranchSupportCalculator supportCalculator = 
-                new core.BranchSupportCalculator(geneTrees, resultTree, lambda, annotationType);
-            
+
+            core.BranchSupportCalculator supportCalculator = new core.BranchSupportCalculator(geneTrees, resultTree,
+                    lambda, annotationType);
+
             // Validate quartet frequencies for debugging (optional)
             if (verboseExpansion) {
                 supportCalculator.validateQuartetFrequencies();
             }
-            
+
             // Annotate branches
             supportCalculator.annotateBranches();
-            
+
             // Print statistics
-            core.BranchSupportCalculator.BranchSupportStatistics stats = 
-                supportCalculator.calculateStatistics();
+            core.BranchSupportCalculator.BranchSupportStatistics stats = supportCalculator.calculateStatistics();
             System.out.println("\n" + stats.toString());
         }
 
@@ -232,48 +243,48 @@ public class Main {
     /**
      * Processes gene trees using the GeneTrees class and returns analysis results.
      * 
-     * @param inputFilePath Path to the input file containing gene trees in Newick format
+     * @param inputFilePath Path to the input file containing gene trees in Newick
+     *                      format
      * @return Formatted string with analysis results
      * @throws FileNotFoundException if the input file cannot be read
      */
     private static String processGeneTrees(String inputFilePath) throws FileNotFoundException {
         System.out.println("Initializing GeneTrees...");
-        
+
         // Create GeneTrees object and read taxa names
         GeneTrees geneTrees = new GeneTrees(inputFilePath);
         var taxaMap = geneTrees.readTaxaNames();
 
-        
         System.out.println("Reading and parsing gene trees...");
-        
+
         // Read and process all gene trees
         geneTrees.readGeneTrees(null); // No distance matrix needed for basic analysis
-        
+
         // Debug output
         // debugOutput(geneTrees);
 
         System.out.println(geneTrees.geneTrees.get(0).isRooted);
-        
+
         // Test InferenceDP algorithm
         System.out.println("Testing InferenceDP algorithm...");
         List<RangeBipartition> candidates = new ArrayList<>(geneTrees.rangeBipartitions.keySet());
-        
+
         if (!candidates.isEmpty()) {
             InferenceDP dp = new InferenceDP(geneTrees, candidates);
             double maxScore = dp.solve();
-            
+
             System.out.println("DP Algorithm completed with maximum score: " + maxScore);
-            
+
             Tree reconstructedTree = dp.reconstructTree();
             if (reconstructedTree != null && reconstructedTree.root != null) {
                 System.out.println("Tree reconstruction successful");
                 return reconstructedTree.getNewickFormat();
             }
         }
-        
+
         return "";
     }
-    
+
     /**
      * Debug function that prints detailed analysis information to console
      */
@@ -283,21 +294,22 @@ public class Main {
         int taxaCount = geneTrees.realTaxaCount;
         // int uniquePartitions = geneTrees.triPartitions.size();
         int uniqueRangeBipartitions = geneTrees.rangeBipartitions.size();
-        
+
         System.out.println("Processing complete:");
         System.out.println("  - Gene trees processed: " + geneTreeCount);
         System.out.println("  - Taxa found: " + taxaCount);
-        // System.out.println("  - Unique tripartitions: " + uniquePartitions);
+        // System.out.println(" - Unique tripartitions: " + uniquePartitions);
         System.out.println("  - Unique RangeBipartitions: " + uniqueRangeBipartitions);
-        
+
         // Print taxa names
         System.out.print("Taxa names: ");
         for (int i = 0; i < geneTrees.taxonIdToLabel.length; i++) {
-            if (i > 0) System.out.print(", ");
+            if (i > 0)
+                System.out.print(", ");
             System.out.print(geneTrees.taxonIdToLabel[i]);
         }
         System.out.println();
-        
+
         // Print RangeBipartitions with counts
         System.out.println("RangeBipartitions:");
         for (var entry : geneTrees.rangeBipartitions.entrySet()) {
@@ -309,7 +321,7 @@ public class Main {
      * Writes analysis results to the specified output file.
      * 
      * @param outputFilePath Path to the output file
-     * @param content Content to write to the file
+     * @param content        Content to write to the file
      * @throws IOException if there's an error writing to the file
      */
     private static void writeResults(String outputFilePath, String content) throws IOException {

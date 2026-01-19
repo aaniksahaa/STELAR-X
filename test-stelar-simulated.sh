@@ -27,8 +27,14 @@ SPMIN="500000"
 SPMAX="1500000"
 
 USE_LEGACY_LAYOUT=false
-STELAR_OPTS="GPU_PARALLEL NONE"
 FRESH=false
+
+# STELAR run options (passed to run.sh)
+STELAR_THREADS=""     # Empty means use all available
+STELAR_CPU_ONLY=false  # GPU is default, --stelar-cpu disables it
+STELAR_EXPANSION="NONE"
+STELAR_DISTANCE="UPGMA"
+STELAR_VERBOSE=false
 
 # Monitoring options (DEFAULT: ON)
 TIME_MONITOR=true     # when true: run `time -v` if available and capture stderr to TIME_TMP
@@ -50,7 +56,13 @@ Optional:
   --simphy-dir       Path to simphy dir (overrides --base-dir)
   --simphy-data-dir  Custom directory for simphy data storage (overrides simphy-dir/data)
   --stelar-root      Path to STELAR-X root (overrides --base-dir)
-  --stelar-opts      Extra args for STELAR run (default: "$STELAR_OPTS")
+  --stelar-threads   Number of threads for STELAR (default: all available)
+  --stelar-cpu       Use CPU only for STELAR (GPU is default)
+  --stelar-expansion Expansion method: NONE, DISTANCE_ONLY, CONSENSUS_ONLY,
+                     DISTANCE_CONSENSUS, FULL (default: NONE)
+  --stelar-distance  Distance method: UPGMA, NEIGHBOR_JOINING, BOTH
+                     (default: UPGMA)
+  --stelar-verbose   Enable verbose STELAR output
   --sb               Substitution/birthrate parameter (default: ${SB})
   --spmin            Population size minimum (default: ${SPMIN})
   --spmax            Population size maximum (default: ${SPMAX})
@@ -73,7 +85,11 @@ while [[ $# -gt 0 ]]; do
     --simphy-dir) SIMPHY_DIR="$2"; SIMPHY_DIR_SET=true; shift 2 ;;
     --simphy-data-dir) SIMPHY_DATA_DIR="$2"; SIMPHY_DATA_DIR_SET=true; shift 2 ;;
     --stelar-root) STELAR_ROOT="$2"; STELAR_ROOT_SET=true; shift 2 ;;
-    --stelar-opts) STELAR_OPTS="$2"; shift 2 ;;
+    --stelar-threads) STELAR_THREADS="$2"; shift 2 ;;
+    --stelar-cpu) STELAR_CPU_ONLY=true; shift ;;
+    --stelar-expansion) STELAR_EXPANSION="$2"; shift 2 ;;
+    --stelar-distance) STELAR_DISTANCE="$2"; shift 2 ;;
+    --stelar-verbose) STELAR_VERBOSE=true; shift ;;
     --base-dir|-b) BASE_DIR="$2"; shift 2 ;;
     --sb) SB="$2"; shift 2 ;;
     --spmin) SPMIN="$2"; shift 2 ;;
@@ -228,16 +244,44 @@ else
   fi
 fi
 
+# Build STELAR command with flag-based arguments
+STELAR_ARGS="-i \"$ALL_GT_FILE\" -o \"$OUT_STELAR\""
+
+# Add thread count if specified
+if [[ -n "$STELAR_THREADS" ]]; then
+  STELAR_ARGS="$STELAR_ARGS --threads $STELAR_THREADS"
+fi
+
+# Add CPU-only flag if specified (GPU is default)
+if [[ "$STELAR_CPU_ONLY" = true ]]; then
+  STELAR_ARGS="$STELAR_ARGS --cpu"
+fi
+
+# Add expansion method
+if [[ "$STELAR_EXPANSION" != "NONE" ]]; then
+  STELAR_ARGS="$STELAR_ARGS -e \"$STELAR_EXPANSION\""
+fi
+
+# Add distance method
+if [[ "$STELAR_DISTANCE" != "UPGMA" ]]; then
+  STELAR_ARGS="$STELAR_ARGS -d \"$STELAR_DISTANCE\""
+fi
+
+# Add verbose flag
+if [[ "$STELAR_VERBOSE" = true ]]; then
+  STELAR_ARGS="$STELAR_ARGS -v"
+fi
+
 # Launch STELAR -- prefer using TIME_CMD if available, otherwise run directly
 STELAR_PID=""
 if [[ "${TIME_MONITOR:-false}" = true && -n "$TIME_CMD" ]]; then
   (
-    cd "$STELAR_ROOT" && "$TIME_CMD" -v ./run.sh "$ALL_GT_FILE" "$OUT_STELAR" $STELAR_OPTS < /dev/null
+    cd "$STELAR_ROOT" && eval "$TIME_CMD -v ./run.sh $STELAR_ARGS" < /dev/null
   ) 2> "$TIME_TMP" &
   STELAR_PID=$!
 else
   (
-    cd "$STELAR_ROOT" && ./run.sh "$ALL_GT_FILE" "$OUT_STELAR" $STELAR_OPTS < /dev/null
+    cd "$STELAR_ROOT" && eval "./run.sh $STELAR_ARGS" < /dev/null
   ) &
   STELAR_PID=$!
 fi
