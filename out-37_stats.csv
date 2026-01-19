@@ -1,2 +1,2 @@
 algorithm,input_file,output_file,running_time_s,max_cpu_mb,max_gpu_mb,exit_code
-aster,all_gt_bs_rooted_37.tre,out-37.tre,2.371,24.363,15.360,0
+aster,all_gt_bs_rooted_37.tre,out-37.tre,0.664,NA,15.360,0

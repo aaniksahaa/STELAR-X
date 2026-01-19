@@ -206,38 +206,30 @@ else
   fi
 fi
 
-# Launch ASTER
-ASTER_PID=""
+# Launch ASTER - run in foreground to show output, but capture time stderr
 echo -e "${YELLOW}Running ASTER...${NC}"
 echo -e "${YELLOW}Command: $ASTER_BIN ${ASTER_ARGS[*]}${NC}"
 echo
+echo "----------------------------------------"
 
 if [[ "${TIME_MONITOR:-false}" = true && -n "$TIME_CMD" ]]; then
-  (
-    eval "$TIME_CMD -v $ASTER_BIN ${ASTER_ARGS[*]}" < /dev/null
-  ) 2> "$TIME_TMP" &
-  ASTER_PID=$!
+  # Run with time, capturing time's stderr but showing ASTER's output
+  # time -v writes to stderr, ASTER writes to both stdout and stderr
+  # We use a subshell to separate time's stderr from ASTER's stderr
+  set +e
+  {
+    $TIME_CMD -v $ASTER_BIN "${ASTER_ARGS[@]}" 2>&1
+  } 2> "$TIME_TMP" | tee /dev/stderr
+  ASTER_EXIT_CODE=${PIPESTATUS[0]}
+  set -e
 else
-  (
-    eval "$ASTER_BIN ${ASTER_ARGS[*]}" < /dev/null
-  ) &
-  ASTER_PID=$!
+  set +e
+  $ASTER_BIN "${ASTER_ARGS[@]}"
+  ASTER_EXIT_CODE=$?
+  set -e
 fi
 
-# Verify ASTER started
-sleep 0.25
-if ! kill -0 "$ASTER_PID" >/dev/null 2>&1; then
-  echo -e "${RED}Error: ASTER process failed to start.${NC}"
-  head -n 50 "$TIME_TMP" 2>/dev/null || true
-  touch "$TEMP_DIR/.aster_done"
-  exit 5
-fi
-
-echo "ASTER started with PID ${ASTER_PID}"
-
-# Wait for ASTER
-wait "$ASTER_PID"
-ASTER_EXIT_CODE=$?
+echo "----------------------------------------"
 
 # Stop GPU monitor
 touch "$TEMP_DIR/.aster_done"
