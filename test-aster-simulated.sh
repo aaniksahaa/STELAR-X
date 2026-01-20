@@ -350,6 +350,19 @@ echo "$CSV_ROW" >> "$STAT_FILE"
 
 echo "Wrote stats to $STAT_FILE"
 
+# Send notification (ntfy)
+if [[ "$NO_NOTIFY" = false ]] && command -v curl >/dev/null 2>&1; then
+  curl -s -d "🎉 ASTER completed for ${TAXA_NUM} taxa and ${GENE_TREES} gene trees!
+
+⚙️ Config: sb=${SB} spmin=${SPMIN} spmax=${SPMAX} rep=${REPLICATE}
+
+📊 Results:
+RF: ${RF_RATE} | Time: ${RUNNING_TIME}s
+CPU: ${MAX_CPU_MB} MB | GPU: ${MAX_GPU_MB} MB
+
+📁 ${STAT_FILE}" https://ntfy.sh/anik-test || true
+fi
+
 # Nicely display stat-aster.csv summary
 if [[ -f "${STAT_FILE}" ]]; then
   echo

@@ -362,19 +362,18 @@ echo "Wrote stats to $STAT_FILE"
 
 
 
-# Notification disabled
+# Send notification (ntfy)
+if [[ "$NO_NOTIFY" = false ]] && command -v curl >/dev/null 2>&1; then
+  curl -s -d "🎉 STELAR completed for ${TAXA_NUM} taxa and ${GENE_TREES} gene trees!
 
-# # Send notification (ntfy)
-# if [[ "$NO_NOTIFY" = false ]] && command -v curl >/dev/null 2>&1; then
-#   curl -s -d "🎉 STELAR completed for ${TAXA_NUM} taxa and ${GENE_TREES} gene trees!
+⚙️ Config: sb=${SB} spmin=${SPMIN} spmax=${SPMAX} rep=${REPLICATE}
 
-# 📊 Results:
-# alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb
-# $CSV_ROW
+📊 Results:
+RF: ${RF_RATE} | Time: ${RUNNING_TIME}s
+CPU: ${MAX_CPU_MB} MB | GPU: ${MAX_GPU_MB} MB
 
-# 📁 Stats saved to: $STAT_FILE" ntfy.sh/anik-test || true
-# fi
-
+📁 ${STAT_FILE}" https://ntfy.sh/anik-test || true
+fi
 
 
 # Nicely display stat-stelar.csv summary (same as before)
