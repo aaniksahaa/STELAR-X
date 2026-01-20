@@ -206,21 +206,20 @@ else
   fi
 fi
 
-# Launch ASTER - run in foreground to show output, but capture time stderr
+# Launch ASTER - run in foreground to show output, capture time stats separately
 echo -e "${YELLOW}Running ASTER...${NC}"
 echo -e "${YELLOW}Command: $ASTER_BIN ${ASTER_ARGS[*]}${NC}"
 echo
 echo "----------------------------------------"
 
 if [[ "${TIME_MONITOR:-false}" = true && -n "$TIME_CMD" ]]; then
-  # Run with time, capturing time's stderr but showing ASTER's output
-  # time -v writes to stderr, ASTER writes to both stdout and stderr
-  # We use a subshell to separate time's stderr from ASTER's stderr
+  # Create a wrapper script to capture time's stderr separately
+  # time -v writes its stats to stderr of the time command itself
+  # We redirect time's stderr (which contains the stats) to a file
+  # while letting ASTER's stdout/stderr go to console
   set +e
-  {
-    $TIME_CMD -v $ASTER_BIN "${ASTER_ARGS[@]}" 2>&1
-  } 2> "$TIME_TMP" | tee /dev/stderr
-  ASTER_EXIT_CODE=${PIPESTATUS[0]}
+  $TIME_CMD -v -o "$TIME_TMP" $ASTER_BIN "${ASTER_ARGS[@]}"
+  ASTER_EXIT_CODE=$?
   set -e
 else
   set +e

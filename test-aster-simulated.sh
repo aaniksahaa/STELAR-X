@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# test-stelar-default-monitor.sh
-# Defaults to enabling both time and GPU monitoring, but falls back gracefully if
-# a suitable `time -v` binary isn't available.
+# test-aster-simulated.sh
+# Runs ASTER on simulated data with time and GPU monitoring
 # Usage examples:
-#   ./test-stelar-default-monitor.sh -t 1000 -g 500
-#   ./test-stelar-default-monitor.sh -t 100 -g 100 --fresh --debug
+#   ./test-aster-simulated.sh -t 1000 -g 500
+#   ./test-aster-simulated.sh -t 100 -g 100 --aster-opts="-t 32" --fresh --debug
 #
 set -euo pipefail
 
@@ -12,13 +11,12 @@ set -euo pipefail
 TAXA_NUM=""
 GENE_TREES=""
 REPLICATE="R1"
-# BASE_DIR="${HOME}/phylogeny"
 BASE_DIR=".."
 SIMPHY_DIR=""                # derived from BASE_DIR unless provided
 SIMPHY_DIR_SET=false
 SIMPHY_DATA_DIR=""           # custom simphy data directory (overrides SIMPHY_DIR/data)
 SIMPHY_DATA_DIR_SET=false
-STELAR_ROOT=""               # derived from BASE_DIR unless provided
+STELAR_ROOT=""               # derived from BASE_DIR unless provided (for ASTER binary location)
 STELAR_ROOT_SET=false
 
 # Defaults that match run_simulator.sh
@@ -29,18 +27,21 @@ SPMAX="1500000"
 USE_LEGACY_LAYOUT=false
 FRESH=false
 
-# STELAR run options (passed directly to run.sh)
-STELAR_OPTS=""
+# ASTER options (passed directly to ASTER binary)
+ASTER_OPTS=""
+
+# ASTER binary path (relative to STELAR_ROOT)
+ASTER_BIN="ASTER/bin/astral4"
 
 # Monitoring options (DEFAULT: ON)
-TIME_MONITOR=true     # when true: run `time -v` if available and capture stderr to TIME_TMP
-GPU_MONITOR=true      # when true: sample nvidia-smi while stelar runs
+TIME_MONITOR=true     # when true: run `time -v` if available and capture stderr
+GPU_MONITOR=true      # when true: sample nvidia-smi while aster runs
 NO_NOTIFY=false       # when true: skip ntfy.sh notifications
 DEBUG=0               # set DEBUG=1 to enable set -x
 
 print_help() {
   cat <<EOF
-test-stelar-default-monitor.sh
+test-aster-simulated.sh
 
 Required:
   --taxa_num, -t     Number of taxa (e.g. 1000)
@@ -52,12 +53,13 @@ Optional:
   --simphy-dir       Path to simphy dir (overrides --base-dir)
   --simphy-data-dir  Custom directory for simphy data storage (overrides simphy-dir/data)
   --stelar-root      Path to STELAR-X root (overrides --base-dir)
-  --stelar-opts      Raw options to pass to STELAR run.sh (e.g. --stelar-opts="--threads 8 --cpu")
+  --aster-opts       Raw options to pass to ASTER (e.g. --aster-opts="-t 32 -u 2")
+  --aster-bin        Path to ASTER binary relative to STELAR_ROOT (default: ASTER/bin/astral4)
   --sb               Substitution/birthrate parameter (default: ${SB})
   --spmin            Population size minimum (default: ${SPMIN})
   --spmax            Population size maximum (default: ${SPMAX})
   --use-legacy-layout  Use legacy simphy layout
-  --fresh            Force rerun even if stat-stelar.csv exists
+  --fresh            Force rerun even if stat-aster.csv exists
   --no-time-monitor  Disable time-monitoring (overrides default ON)
   --no-gpu-monitor   Disable GPU-monitoring (overrides default ON)
   --no-notify, -nn   Disable ntfy.sh notifications
@@ -75,8 +77,9 @@ while [[ $# -gt 0 ]]; do
     --simphy-dir) SIMPHY_DIR="$2"; SIMPHY_DIR_SET=true; shift 2 ;;
     --simphy-data-dir) SIMPHY_DATA_DIR="$2"; SIMPHY_DATA_DIR_SET=true; shift 2 ;;
     --stelar-root) STELAR_ROOT="$2"; STELAR_ROOT_SET=true; shift 2 ;;
-    --stelar-opts=*) STELAR_OPTS="${1#*=}"; shift ;;
-    --stelar-opts) STELAR_OPTS="$2"; shift 2 ;;
+    --aster-opts=*) ASTER_OPTS="${1#*=}"; shift ;;
+    --aster-opts) ASTER_OPTS="$2"; shift 2 ;;
+    --aster-bin) ASTER_BIN="$2"; shift 2 ;;
     --base-dir|-b) BASE_DIR="$2"; shift 2 ;;
     --sb) SB="$2"; shift 2 ;;
     --spmin) SPMIN="$2"; shift 2 ;;
@@ -101,11 +104,9 @@ fi
 # Derive SIMPHY_DIR/STELAR_ROOT from BASE_DIR if not explicitly set
 if [[ "$SIMPHY_DIR_SET" = false ]]; then
   SIMPHY_DIR="${BASE_DIR%/}/STELAR-X/simphy"
-  # SIMPHY_DIR="./simphy"
 fi
 if [[ "$STELAR_ROOT_SET" = false ]]; then
   STELAR_ROOT="${BASE_DIR%/}/STELAR-X"
-  # STELAR_ROOT="."
 fi
 
 PAIR="${TAXA_NUM}_${GENE_TREES}"
@@ -125,10 +126,13 @@ else
   fi
 fi
 
-STAT_FILE="${SIMPHY_RUN_DIR%/}/stat-stelar.csv"
+STAT_FILE="${SIMPHY_RUN_DIR%/}/stat-aster.csv"
 ALL_GT_FILE="${SIMPHY_RUN_DIR%/}/all_gt.tre"
 TRUE_SPECIES_TREE="${SIMPHY_RUN_DIR%/}/s_tree.trees"
-OUT_STELAR="${SIMPHY_RUN_DIR%/}/out-stelar.tre"
+OUT_ASTER="${SIMPHY_RUN_DIR%/}/out-aster.tre"
+
+# Full path to ASTER binary
+ASTER_BIN_PATH="${STELAR_ROOT%/}/${ASTER_BIN}"
 
 # Debug/tracing
 if [[ "${DEBUG:-0}" = "1" ]]; then
@@ -151,9 +155,10 @@ else
   echo "  simphy data dir: ${SIMPHY_DIR%/}/data (default)"
 fi
 echo "  simphy run dir: $SIMPHY_RUN_DIR"
-echo "  out stelar:     $OUT_STELAR"
+echo "  out aster:      $OUT_ASTER"
 echo "  stat file:      $STAT_FILE"
-echo "  stelar opts:    ${STELAR_OPTS:-<none>}"
+echo "  aster binary:   $ASTER_BIN_PATH"
+echo "  aster opts:     ${ASTER_OPTS:-<none>}"
 echo
 
 if [[ ! -f "$ALL_GT_FILE" ]]; then
@@ -161,13 +166,18 @@ if [[ ! -f "$ALL_GT_FILE" ]]; then
   exit 6
 fi
 
-echo "==> Running STELAR (output will be written to $OUT_STELAR)"
+if [[ ! -x "$ASTER_BIN_PATH" ]]; then
+  echo "Error: ASTER binary not found or not executable at $ASTER_BIN_PATH"
+  exit 7
+fi
+
+echo "==> Running ASTER (output will be written to $OUT_ASTER)"
 
 mkdir -p "${SIMPHY_RUN_DIR%/}"
 
 # create log paths inside run dir so they're easy to inspect remotely
-TIME_TMP="${SIMPHY_RUN_DIR%/}/.stelar_time_err.log"
-MON_TMP="${SIMPHY_RUN_DIR%/}/.stelar_gpu_mem.log"
+TIME_TMP="${SIMPHY_RUN_DIR%/}/.aster_time_err.log"
+MON_TMP="${SIMPHY_RUN_DIR%/}/.aster_gpu_mem.log"
 
 # Ensure old logs are removed
 rm -f "$TIME_TMP" "$MON_TMP" || true
@@ -217,7 +227,7 @@ if [[ "$GPU_MONITOR" = true && -x "$(command -v nvidia-smi)" ]]; then
           curmax=$gpu_val
         fi
       fi
-      if [[ -f "${SIMPHY_RUN_DIR%/}/.stelar_done" ]]; then
+      if [[ -f "${SIMPHY_RUN_DIR%/}/.aster_done" ]]; then
         break
       fi
       sleep 0.2
@@ -232,48 +242,28 @@ else
   fi
 fi
 
-# Build STELAR command with input/output plus any extra opts
-STELAR_ARGS="-i \"$ALL_GT_FILE\" -o \"$OUT_STELAR\""
-if [[ -n "$STELAR_OPTS" ]]; then
-  STELAR_ARGS="$STELAR_ARGS $STELAR_OPTS"
+# Build ASTER command with input/output plus any extra opts
+ASTER_CMD="\"$ASTER_BIN_PATH\" -i \"$ALL_GT_FILE\" -o \"$OUT_ASTER\""
+if [[ -n "$ASTER_OPTS" ]]; then
+  ASTER_CMD="$ASTER_CMD $ASTER_OPTS"
 fi
 
-# Launch STELAR -- prefer using TIME_CMD if available, otherwise run directly
-STELAR_PID=""
+# Launch ASTER -- run in foreground so output is visible
+# Use time -v -o to write time stats to file while showing ASTER output on terminal
+echo "----------------------------------------"
+set +e
 if [[ "${TIME_MONITOR:-false}" = true && -n "$TIME_CMD" ]]; then
-  (
-    cd "$STELAR_ROOT" && eval "$TIME_CMD -v ./run.sh $STELAR_ARGS" < /dev/null
-  ) 2> "$TIME_TMP" &
-  STELAR_PID=$!
+  eval "$TIME_CMD -v -o \"$TIME_TMP\" $ASTER_CMD"
+  ASTER_EXIT_CODE=$?
 else
-  (
-    cd "$STELAR_ROOT" && eval "./run.sh $STELAR_ARGS" < /dev/null
-  ) &
-  STELAR_PID=$!
+  eval "$ASTER_CMD"
+  ASTER_EXIT_CODE=$?
 fi
-
-# Give a short moment and verify the job didn't die immediately
-sleep 0.25
-if ! kill -0 "$STELAR_PID" >/dev/null 2>&1; then
-  echo "Error: STELAR process (pid ${STELAR_PID}) failed to start or died immediately."
-  echo "----- Captured time/generic stderr (first 200 lines) -----"
-  head -n 200 "$TIME_TMP" 2>/dev/null || true
-  echo "---------------------------------------------------------"
-  touch "${SIMPHY_RUN_DIR%/}/.stelar_done"
-  if [[ -n "${MON_PID:-}" ]]; then
-    wait "$MON_PID" 2>/dev/null || true
-  fi
-  exit 5
-fi
-
-echo "STELAR started with PID ${STELAR_PID} (logging to ${TIME_TMP} if time-monitor enabled)"
-
-# Wait for stelar to finish
-wait "$STELAR_PID"
-STELAR_EXIT_CODE=$?
+set -e
+echo "----------------------------------------"
 
 # Stop GPU monitor by placing sentinel file
-touch "${SIMPHY_RUN_DIR%/}/.stelar_done"
+touch "${SIMPHY_RUN_DIR%/}/.aster_done"
 
 END_NS=$(date +%s%N)
 ELAPSED_MS=$(( (END_NS - START_NS) / 1000000 ))
@@ -312,33 +302,33 @@ if [[ -f "$TIME_TMP" && -s "$TIME_TMP" ]]; then
   fi
 fi
 
-# If time-monitor wasn't used or cpu RSS not parsed, try a best-effort read of memory using ps for the stelar PID (peak not available):
+# If time-monitor wasn't used or cpu RSS not parsed, try a best-effort read of memory using ps for the aster PID (peak not available):
 if [[ "$TIME_MONITOR" = false && "$MAX_CPU_MB" == "NA" ]]; then
-  if ps -p "$STELAR_PID" >/dev/null 2>&1; then
-    MAX_CPU_MB=$(ps -o rss= -p "$STELAR_PID" 2>/dev/null | awk '{print ($1+0)/1024}')
+  if ps -p "$ASTER_PID" >/dev/null 2>&1; then
+    MAX_CPU_MB=$(ps -o rss= -p "$ASTER_PID" 2>/dev/null | awk '{print ($1+0)/1024}')
   else
     MAX_CPU_MB="NA"
   fi
 fi
 
 # cleanup small sentinel
-rm -f "${SIMPHY_RUN_DIR%/}/.stelar_done" 2>/dev/null || true
+rm -f "${SIMPHY_RUN_DIR%/}/.aster_done" 2>/dev/null || true
 
-echo "STELAR finished in ${RUNNING_TIME}s (exit code ${STELAR_EXIT_CODE})"
+echo "ASTER finished in ${RUNNING_TIME}s (exit code ${ASTER_EXIT_CODE})"
 echo "Max CPU RAM (MB): ${MAX_CPU_MB}"
 echo "Max GPU VRAM (MB): ${MAX_GPU_MB}"
 
 # RF calculation (if rf.py exists and true species tree present)
 RF_RATE="NA"
-if [[ -f "$OUT_STELAR" && -f "$TRUE_SPECIES_TREE" ]]; then
+if [[ -f "$OUT_ASTER" && -f "$TRUE_SPECIES_TREE" ]]; then
   echo
   echo "==> Calculating RF rate (using rf.py)"
-  rf_output=$(cd "$STELAR_ROOT" && python rf.py "$OUT_STELAR" "$TRUE_SPECIES_TREE" 2>&1) || rf_output="$rf_output"
+  rf_output=$(cd "$STELAR_ROOT" && python rf.py "$OUT_ASTER" "$TRUE_SPECIES_TREE" 2>&1) || rf_output="$rf_output"
   rf_candidate=$(echo "$rf_output" | grep -Eo '[0-9]+(\.[0-9]+)?' | head -n1 || true)
   if [[ -n "$rf_candidate" ]]; then
     RF_RATE="$rf_candidate"
     echo ""
-    echo "STELAR RF rate: ${RF_RATE}"
+    echo "ASTER RF rate: ${RF_RATE}"
     echo ""
   else
     RF_RATE="NA"
@@ -349,38 +339,21 @@ if [[ -f "$OUT_STELAR" && -f "$TRUE_SPECIES_TREE" ]]; then
   fi
 else
   echo
-  echo "STELAR output or true species tree missing; skipping STELAR RF."
+  echo "ASTER output or true species tree missing; skipping ASTER RF."
 fi
 
 # Write CSV (overwrite every run)
 mkdir -p "$(dirname "$STAT_FILE")"
 echo "alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb" > "$STAT_FILE"
-CSV_ROW="stelar,${TAXA_NUM},${GENE_TREES},${REPLICATE},${SB},${SPMIN},${SPMAX},${RF_RATE},${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB}"
+CSV_ROW="aster,${TAXA_NUM},${GENE_TREES},${REPLICATE},${SB},${SPMIN},${SPMAX},${RF_RATE},${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB}"
 echo "$CSV_ROW" >> "$STAT_FILE"
 
 echo "Wrote stats to $STAT_FILE"
 
-
-
-# Notification disabled
-
-# # Send notification (ntfy)
-# if [[ "$NO_NOTIFY" = false ]] && command -v curl >/dev/null 2>&1; then
-#   curl -s -d "🎉 STELAR completed for ${TAXA_NUM} taxa and ${GENE_TREES} gene trees!
-
-# 📊 Results:
-# alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb
-# $CSV_ROW
-
-# 📁 Stats saved to: $STAT_FILE" ntfy.sh/anik-test || true
-# fi
-
-
-
-# Nicely display stat-stelar.csv summary (same as before)
+# Nicely display stat-aster.csv summary
 if [[ -f "${STAT_FILE}" ]]; then
   echo
-  echo "=== STELAR run summary (from ${STAT_FILE}) ==="
+  echo "=== ASTER run summary (from ${STAT_FILE}) ==="
 
   # read header and first data row
   IFS= read -r header_line < <(head -n1 "$STAT_FILE")
@@ -415,4 +388,3 @@ fi
 
 echo "Done."
 exit 0
-
