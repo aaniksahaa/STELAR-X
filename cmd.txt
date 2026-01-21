@@ -1,4 +1,5 @@
 
+cd ASTER 
 make
 make astral_int128
 
