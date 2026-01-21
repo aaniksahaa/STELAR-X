@@ -24,4 +24,6 @@ __pycache__/
 
 ASTER/bin
 
+ASTER/bin/*
+
 
