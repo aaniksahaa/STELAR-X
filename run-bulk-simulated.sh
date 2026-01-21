@@ -15,6 +15,8 @@ set -euo pipefail
 BASE_DIR=""
 BASE_DIR_PROVIDED=false
 METHOD="stelar"  # default method: stelar or aster
+FRESH=false
+NUM_REPLICATES=1
 
 print_help() {
   cat <<EOF
@@ -24,7 +26,9 @@ Runs sim.sh and test-{stelar,aster}-simulated.sh for all combinations of paramet
 
 Options:
   --method, -m      Method to use: 'stelar' or 'aster' (default: stelar)
-  --base-dir, -b    Base directory (default: ${BASE_DIR})
+  --base-dir, -b    Base directory (optional, passed to sub-scripts if provided)
+  --num-replicates, -n  Number of replicates to run (default: 1)
+  --fresh           Pass --fresh to sim.sh and test scripts (recreate outputs)
   --help, -h        Show this message
 
 Examples:
@@ -38,6 +42,8 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --method|-m) METHOD="$2"; shift 2 ;;
     --base-dir|-b) BASE_DIR="$2"; BASE_DIR_PROVIDED=true; shift 2 ;;
+    --num-replicates|-n) NUM_REPLICATES="$2"; shift 2 ;;
+    --fresh) FRESH=true; shift ;;
     --help|-h) print_help; exit 0 ;;
     *) echo "Unknown option: $1"; print_help; exit 1 ;;
   esac
@@ -77,7 +83,7 @@ SPMAX_LIST=(200000)
 # SPMAX_LIST=(150000)
 
 # Number of replicates to run
-NUM_REPLICATES=5
+# NUM_REPLICATES=5  # Now set via --num-replicates flag (default: 1)
 
 # -------------------------------
 # execution
@@ -91,7 +97,17 @@ else
   BASE_DIR_ARG=""
   echo "Base dir: (not specified, scripts will use their defaults)"
 fi
+
+# Build fresh argument if provided
+if $FRESH; then
+  FRESH_ARG="--fresh"
+  echo "Fresh:    yes"
+else
+  FRESH_ARG=""
+  echo "Fresh:    no"
+fi
 echo "Method:   $METHOD"
+echo "Replicates: $NUM_REPLICATES"
 echo "Starting bulk runs..."
 
 for t in "${T_LIST[@]}"; do
@@ -102,16 +118,16 @@ for t in "${T_LIST[@]}"; do
 
           echo ">>> Running: t=$t g=$g sb=$sb spmin=$spmin spmax=$spmax (method=$METHOD)"
           
-          ./sim.sh -rs $NUM_REPLICATES $BASE_DIR_ARG -t "$t" -g "$g" --sb "$sb" --spmin "$spmin" --spmax "$spmax" --fresh
+          ./sim.sh -rs $NUM_REPLICATES $BASE_DIR_ARG -t "$t" -g "$g" --sb "$sb" --spmin "$spmin" --spmax "$spmax" $FRESH_ARG
           
           # Run replicates
           for ((i=1; i<=NUM_REPLICATES; i++)); do
             echo "  Running replicate R$i with $METHOD"
             
             if [[ "$METHOD" == "stelar" ]]; then
-              ./test-stelar-simulated.sh -r "R$i" $BASE_DIR_ARG -t "$t" -g "$g" --sb "$sb" --spmin "$spmin" --spmax "$spmax" --fresh
+              ./test-stelar-simulated.sh -r "R$i" $BASE_DIR_ARG -t "$t" -g "$g" --sb "$sb" --spmin "$spmin" --spmax "$spmax" $FRESH_ARG
             else
-              ./test-aster-simulated.sh -r "R$i" $BASE_DIR_ARG -t "$t" -g "$g" --sb "$sb" --spmin "$spmin" --spmax "$spmax" --aster-opts="-t 32" --fresh
+              ./test-aster-simulated.sh -r "R$i" $BASE_DIR_ARG -t "$t" -g "$g" --sb "$sb" --spmin "$spmin" --spmax "$spmax" --aster-opts="-t 32" $FRESH_ARG
             fi
           done
 
