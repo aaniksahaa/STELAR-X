@@ -1,6 +1,23 @@
 
 cd ASTER 
 make
+
+## if problem happens
+# confirm which ld is being used (currently it's conda's)
+which ld
+ld --version | head -n 1
+
+# temporarily prefer system toolchain over conda's
+export PATH=/usr/bin:$PATH
+
+# (optional but helpful) ensure gcc uses system binutils
+export LD=/usr/bin/ld
+
+cd ~/phylogeny/STELAR-MP/ASTER
+make clean 2>/dev/null || true
+make
+
+
 make astral_int128
 
 ASTER/bin/astral4 -i all_gt_bs_rooted_200.tre -o out.tre -t 8
