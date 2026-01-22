@@ -8,7 +8,7 @@
 # Usage:
 #   ./collect-stats-simulated.sh
 #   ./collect-stats-simulated.sh --base-dir /home/you/research --out /tmp/perf-combined.csv
-#   ./collect-stats-simulated.sh --simphy-dir /home/you/research/STELAR-MP/simphy
+#   ./collect-stats-simulated.sh --simphy-dir /home/you/research/STELAR-X/simphy
 
 set -euo pipefail
 
@@ -49,7 +49,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$SIMPHY_DIR" ]]; then
-  SIMPHY_DIR="${BASE_DIR%/}/STELAR-MP/simphy"
+  SIMPHY_DIR="${BASE_DIR%/}/STELAR-X/simphy"
 fi
 
 SIMPHY_DATA_DIR="${SIMPHY_DIR%/}/data"
