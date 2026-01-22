@@ -380,7 +380,10 @@ if [[ -f "$OUT_STELAR" && "$STELAR_EXIT_CODE" -eq 0 ]]; then
 RF: ${RF_RATE} | Time: ${RUNNING_TIME}s
 CPU: ${MAX_CPU_MB} MB | GPU: ${MAX_GPU_MB} MB
 
-📁 ${STAT_FILE}" https://ntfy.sh/anik-test || true
+📁 ${STAT_FILE}
+
+📋 CSV Row:
+${CSV_ROW}" https://ntfy.sh/anik-test || true
   fi
 else
   echo -e "\033[1;31m❌ Run failed or was interrupted (exit code: ${STELAR_EXIT_CODE}, output exists: $(test -f "$OUT_STELAR" && echo yes || echo no))\033[0m"
