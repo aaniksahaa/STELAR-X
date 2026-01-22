@@ -13,7 +13,7 @@
 set -euo pipefail
 
 # Algorithm configuration - modify this to select which algorithms to collect
-ALGORITHMS=("stelar" "astral" "tree-qmc" "wqfm-tree")
+ALGORITHMS=("stelar" "astral" "tree-qmc" "wqfm-tree" "aster")
 
 BASE_DIR="${HOME}/phylogeny"
 SIMPHY_DIR=""
