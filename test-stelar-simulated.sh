@@ -173,6 +173,9 @@ MON_TMP="${SIMPHY_RUN_DIR%/}/.stelar_gpu_mem.log"
 # Ensure old logs are removed
 rm -f "$TIME_TMP" "$MON_TMP" || true
 
+# Remove existing output file to ensure we can verify fresh output
+rm -f "$OUT_STELAR" || true
+
 # START timer
 START_NS=$(date +%s%N)
 
@@ -353,22 +356,23 @@ else
   echo "STELAR output or true species tree missing; skipping STELAR RF."
 fi
 
-# Write CSV (overwrite every run)
-mkdir -p "$(dirname "$STAT_FILE")"
-echo "alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb" > "$STAT_FILE"
-CSV_ROW="stelar,${TAXA_NUM},${GENE_TREES},${REPLICATE},${SB},${SPMIN},${SPMAX},${RF_RATE},${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB}"
-echo "$CSV_ROW" >> "$STAT_FILE"
+# Only write stats and lock file if output file exists AND exit code was 0
+if [[ -f "$OUT_STELAR" && "$STELAR_EXIT_CODE" -eq 0 ]]; then
+  # Write CSV (overwrite every run)
+  mkdir -p "$(dirname "$STAT_FILE")"
+  echo "alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb" > "$STAT_FILE"
+  CSV_ROW="stelar,${TAXA_NUM},${GENE_TREES},${REPLICATE},${SB},${SPMIN},${SPMAX},${RF_RATE},${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB}"
+  echo "$CSV_ROW" >> "$STAT_FILE"
 
-echo "Wrote stats to $STAT_FILE"
+  echo "Wrote stats to $STAT_FILE"
 
-# Create lock file to indicate successful completion
-touch "${LOCK_FILE}"
+  # Create lock file to indicate successful completion
+  touch "${LOCK_FILE}"
+  echo -e "\033[1;32m✅ Run completed successfully. Lock file created.\033[0m"
 
-
-
-# Send notification (ntfy)
-if [[ "$NO_NOTIFY" = false ]] && command -v curl >/dev/null 2>&1; then
-  curl -s -d "🎉 STELAR completed for ${TAXA_NUM} taxa and ${GENE_TREES} gene trees!
+  # Send notification (ntfy) - only on success
+  if [[ "$NO_NOTIFY" = false ]] && command -v curl >/dev/null 2>&1; then
+    curl -s -d "🎉 STELAR completed for ${TAXA_NUM} taxa and ${GENE_TREES} gene trees!
 
 ⚙️ Config: sb=${SB} spmin=${SPMIN} spmax=${SPMAX} rep=${REPLICATE}
 
@@ -377,6 +381,10 @@ RF: ${RF_RATE} | Time: ${RUNNING_TIME}s
 CPU: ${MAX_CPU_MB} MB | GPU: ${MAX_GPU_MB} MB
 
 📁 ${STAT_FILE}" https://ntfy.sh/anik-test || true
+  fi
+else
+  echo -e "\033[1;31m❌ Run failed or was interrupted (exit code: ${STELAR_EXIT_CODE}, output exists: $(test -f "$OUT_STELAR" && echo yes || echo no))\033[0m"
+  echo "Skipping stat/lock file creation."
 fi
 
 
