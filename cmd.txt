@@ -33,3 +33,5 @@ ASTER/bin/astral4_int128 -i all_gt_bs_rooted_37.tre -o out.tre
 ./run-aster-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out.tre -t 16
 
 ./run-bulk-simulated.sh -m stelar
+
+./run-bulk-simulated.sh -m aster 

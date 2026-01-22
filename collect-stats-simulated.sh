@@ -59,28 +59,43 @@ if [[ ! -d "$SIMPHY_DATA_DIR" ]]; then
   exit 2
 fi
 
-# find stat files for all configured algorithms
+# find stat files for all configured algorithms (only if lock file exists)
 declare -a all_stat_files
 total_files=0
+skipped_no_lock=0
 
 for alg in "${ALGORITHMS[@]}"; do
   mapfile -t alg_files < <(find "$SIMPHY_DATA_DIR" -type f -name "stat-${alg}.csv" -print 2>/dev/null | sort)
-  if [[ ${#alg_files[@]} -gt 0 ]]; then
-    echo "Found ${#alg_files[@]} stat-${alg}.csv files"
-    all_stat_files+=("${alg_files[@]}")
-    total_files=$((total_files + ${#alg_files[@]}))
+  alg_valid_count=0
+  for stat_file in "${alg_files[@]}"; do
+    dir=$(dirname "$stat_file")
+    lock_file="${dir%/}/.${alg}.lock"
+    if [[ -f "$lock_file" ]]; then
+      all_stat_files+=("$stat_file")
+      alg_valid_count=$((alg_valid_count + 1))
+      total_files=$((total_files + 1))
+    else
+      skipped_no_lock=$((skipped_no_lock + 1))
+    fi
+  done
+  if [[ $alg_valid_count -gt 0 ]]; then
+    echo "Found ${alg_valid_count} stat-${alg}.csv files with valid lock"
   else
-    echo "No stat-${alg}.csv files found"
+    echo "No stat-${alg}.csv files with valid lock found"
   fi
 done
 
+if [[ $skipped_no_lock -gt 0 ]]; then
+  echo "Skipped ${skipped_no_lock} stat files without lock (incomplete/corrupted runs)"
+fi
+
 if [[ ${#all_stat_files[@]} -eq 0 ]]; then
-  echo "No stat files found for any configured algorithms under $SIMPHY_DATA_DIR"
+  echo "No stat files with valid locks found for any configured algorithms under $SIMPHY_DATA_DIR"
   echo "Configured algorithms: ${ALGORITHMS[*]}"
   exit 0
 fi
 
-echo "Found total ${total_files} stat files across all algorithms. Merging..."
+echo "Found total ${total_files} valid stat files across all algorithms. Merging..."
 
 # helper: normalize a single line (remove CR and trim)
 norm_line() {
