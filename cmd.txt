@@ -35,3 +35,7 @@ ASTER/bin/astral4_int128 -i all_gt_bs_rooted_37.tre -o out.tre
 ./run-bulk-simulated.sh -m stelar
 
 ./run-bulk-simulated.sh -m aster 
+
+# must have datasets at base-dir/phylo-datasets 
+./run-bulk-standard.sh 
+

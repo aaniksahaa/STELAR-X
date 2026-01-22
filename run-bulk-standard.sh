@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Multi-Algorithm Dataset Runner Script (updated)
-# Supports STELAR, ASTRAL, TreeQMC, and wQFMtree algorithms
+# Supports STELAR, ASTER, ASTRAL, TreeQMC, wQFMtree, SuperTriplets, and TMC algorithms
 # Usage: ./run-bulk-standard.sh [--base-dir /path/to/base] [--dataset-dir /path/to/datasets] [--fresh]
 #   --base-dir, -b    Optional base directory (defaults to value below)
 #   --dataset-dir, -d Optional dataset directory (defaults to BASE_DIR/datasets)
@@ -11,30 +11,48 @@ set -uo pipefail
 # =============================================================================
 # DEFAULTS (edit these if you want different defaults)
 # =============================================================================
-BASE_DIR="/home/aaniksahaa/research"  # default; can be overridden with --base-dir or -b
+BASE_DIR="$HOME/research"  # default; can be overridden with --base-dir or -b
 DATASET_DIR=""                        # dataset directory; will be set to BASE_DIR/datasets if not specified
-STELAR_ROOT=""                        # derived from BASE_DIR if not set explicitly
+STELAR_X_ROOT=""                      # STELAR-X root (this project); derived from script location
+ASTER_ROOT=""                         # ASTER root; derived from STELAR_X_ROOT if not set
 ASTRAL_ROOT=""                        # derived from BASE_DIR if not set explicitly
 TREEQMC_ROOT=""                       # derived from BASE_DIR if not set explicitly
 WQFMTREE_ROOT=""                      # derived from BASE_DIR if not set explicitly
+SUPERTRIPLETS_ROOT=""                 # SuperTriplets baseline; derived from STELAR_X_ROOT/baselines
+TMC_ROOT=""                           # TMC baseline; derived from STELAR_X_ROOT/baselines
 FRESH=false
 
 # Algorithm configuration
-ALGORITHMS=("stelar" "astral" "treeqmc" "wqfmtree")
-# ALGORITHMS=("wqfmtree")
+# Available: stelar, aster, astral, treeqmc, wqfmtree, supertriplets, tmc
+ALGORITHMS=("stelar" "aster" "astral" "treeqmc" "wqfmtree" "supertriplets" "tmc")
+# ALGORITHMS=("stelar")
+ALGORITHMS=("aster")
+# ALGORITHMS=("astral")
+# ALGORITHMS=("supertriplets")
+# ALGORITHMS=("tmc")
+
+ALGORITHMS=("aster" "supertriplets" "tmc")
+
+
 
 # Algorithm-specific options
-STELAR_OPTS="GPU_PARALLEL NONE"
+STELAR_OPTS=""  # STELAR-X uses --cpu flag if GPU not needed
+ASTER_OPTS="-t 16"  # ASTER thread count
 ASTRAL_OPTS=""  # ASTRAL doesn't need special options for basic runs
 TREEQMC_OPTS=""  # TreeQMC doesn't need special options for basic runs
 WQFMTREE_OPTS=""  # wQFMtree doesn't need special options for basic runs
+SUPERTRIPLETS_OPTS=""  # SuperTriplets options
+TMC_OPTS=""  # TMC options
 
 # Algorithm command mappings - these will be used to construct the actual commands
 declare -A ALG_COMMANDS
 ALG_COMMANDS["stelar"]="stelar_command"
+ALG_COMMANDS["aster"]="aster_command"
 ALG_COMMANDS["astral"]="astral_command"
 ALG_COMMANDS["treeqmc"]="treeqmc_command"
 ALG_COMMANDS["wqfmtree"]="wqfmtree_command"
+ALG_COMMANDS["supertriplets"]="supertriplets_command"
+ALG_COMMANDS["tmc"]="tmc_command"
 
 # Colors
 GREEN='\033[0;32m'
@@ -53,10 +71,16 @@ folders=("37-taxon")
 declare -A innerFolderNames
 innerFolderNames["11-taxon"]="estimated_Xgenes_strongILS/estimated_5genes_strongILS estimated_Xgenes_strongILS/estimated_15genes_strongILS estimated_Xgenes_strongILS/estimated_25genes_strongILS estimated_Xgenes_strongILS/estimated_50genes_strongILS estimated_Xgenes_strongILS/estimated_100genes_strongILS"
 innerFolderNames["15-taxon"]="100gene-100bp/estimated-genetrees 100gene-1000bp/estimated-genetrees 100gene-true 1000gene-100bp/estimated-genetrees 1000gene-1000bp/estimated-genetrees 1000gene-true"
+
+
 innerFolderNames["37-taxon"]="estimated-genetrees/0.5X-200-500 estimated-genetrees/1X-200-500 estimated-genetrees/1X-200-1000 estimated-genetrees/1X-400-500 estimated-genetrees/1X-400-1000 estimated-genetrees/1X-800-500 estimated-genetrees/1X-800-1000 estimated-genetrees/2X-200-500"
 # innerFolderNames["37-taxon"]="estimated-genetrees/1X-200-500 estimated-genetrees/1X-200-1000 estimated-genetrees/1X-400-500 estimated-genetrees/1X-400-1000 estimated-genetrees/1X-800-500 estimated-genetrees/1X-800-1000 estimated-genetrees/2X-200-500"
 innerFolderNames["37-taxon"]="estimated-genetrees/0.5X-200-500"
 # innerFolderNames["37-taxon"]="true-genetrees/0.5X-200-true true-genetrees/1X-200-true true-genetrees/1X-400-true true-genetrees/1X-800-true true-genetrees/2X-200-true"
+
+innerFolderNames["37-taxon"]="estimated-genetrees/0.5X-200-500 estimated-genetrees/1X-200-500 estimated-genetrees/1X-200-1000 estimated-genetrees/1X-400-500 estimated-genetrees/1X-400-1000 estimated-genetrees/1X-800-500 estimated-genetrees/1X-800-1000 estimated-genetrees/2X-200-500 true-genetrees/0.5X-200-true true-genetrees/1X-200-true true-genetrees/1X-400-true true-genetrees/1X-800-true true-genetrees/2X-200-true"
+
+
 innerFolderNames["48-taxon"]="estimated-genetrees/1X-25-500 estimated-genetrees/1X-50-500 estimated-genetrees/1X-100-500 estimated-genetrees/1X-200-500 estimated-genetrees/1X-500-500 estimated-genetrees/1X-1000-500 estimated-genetrees/2X-1000-500"
 innerFolderNames["48-taxon-latest"]="estimated_genetrees/1X-1000-500"
 innerFolderNames["100-taxon"]="inner100"
@@ -89,12 +113,14 @@ print_header() {
     echo "==============================================="
     echo "BASE_DIR: $BASE_DIR"
     echo "DATASET_DIR: $DATASET_DIR"
-    echo "STELAR_ROOT: ${STELAR_ROOT:-(derived from BASE_DIR)}"
+    echo "STELAR_X_ROOT: ${STELAR_X_ROOT:-(auto-detected)}"
+    echo "ASTER_ROOT: ${ASTER_ROOT:-(derived from STELAR_X_ROOT)}"
     echo "ASTRAL_ROOT: ${ASTRAL_ROOT:-(derived from BASE_DIR)}"
     echo "TREEQMC_ROOT: ${TREEQMC_ROOT:-(derived from BASE_DIR)}"
     echo "WQFMTREE_ROOT: ${WQFMTREE_ROOT:-(derived from BASE_DIR)}"
+    echo "SUPERTRIPLETS_ROOT: ${SUPERTRIPLETS_ROOT:-(derived from STELAR_X_ROOT)}"
+    echo "TMC_ROOT: ${TMC_ROOT:-(derived from STELAR_X_ROOT)}"
     echo "Algorithms: ${ALGORITHMS[*]}"
-    echo "STELAR options: $STELAR_OPTS"
     echo "Fresh run: $FRESH"
     echo "Folders to process: ${folders[*]}"
     echo "==============================================="
@@ -123,12 +149,22 @@ validate_algorithm_binaries() {
     
     # Check if stelar is in algorithms array
     if [[ " ${ALGORITHMS[*]} " =~ " stelar " ]]; then
-        # If STELAR_ROOT/run.sh exists we'll use it; otherwise we expect target/stelar-mp-1.0-SNAPSHOT.jar in cwd of STELAR_ROOT
-        if [ ! -d "$STELAR_ROOT" ]; then
-            echo -e "${RED}Error: STELAR_ROOT '$STELAR_ROOT' does not exist. Please ensure STELAR-MP is at ${STELAR_ROOT} or set STELAR_ROOT variable inside the script.${NC}"
+        if [ ! -d "$STELAR_X_ROOT" ]; then
+            echo -e "${RED}Error: STELAR_X_ROOT '$STELAR_X_ROOT' does not exist.${NC}"
             errors_found=true
-        elif [ ! -x "${STELAR_ROOT}/run.sh" ] && [ ! -f "${STELAR_ROOT}/target/stelar-mp-1.0-SNAPSHOT.jar" ]; then
-            echo -e "${RED}Error: STELAR binaries not found in STELAR_ROOT ('run.sh' or 'target/stelar-mp-1.0-SNAPSHOT.jar' expected). Run build.sh or set STELAR_ROOT properly.${NC}"
+        elif [ ! -x "${STELAR_X_ROOT}/run.sh" ]; then
+            echo -e "${RED}Error: STELAR run.sh not found in STELAR_X_ROOT. Run build.sh first.${NC}"
+            errors_found=true
+        fi
+    fi
+    
+    # Check if aster is in algorithms array
+    if [[ " ${ALGORITHMS[*]} " =~ " aster " ]]; then
+        if [ ! -d "$ASTER_ROOT" ]; then
+            echo -e "${RED}Error: ASTER_ROOT '$ASTER_ROOT' does not exist.${NC}"
+            errors_found=true
+        elif [ ! -x "${ASTER_ROOT}/bin/astral4" ]; then
+            echo -e "${RED}Error: ASTER binary 'bin/astral4' not found in ASTER_ROOT. Run 'make' in ASTER directory.${NC}"
             errors_found=true
         fi
     fi
@@ -136,10 +172,10 @@ validate_algorithm_binaries() {
     # Check if astral is in algorithms array
     if [[ " ${ALGORITHMS[*]} " =~ " astral " ]]; then
         if [ ! -d "$ASTRAL_ROOT" ]; then
-            echo -e "${RED}Error: ASTRAL_ROOT '$ASTRAL_ROOT' does not exist. Please ensure ASTRAL is at ${ASTRAL_ROOT} or set ASTRAL_ROOT variable inside the script.${NC}"
+            echo -e "${RED}Error: ASTRAL_ROOT '$ASTRAL_ROOT' does not exist.${NC}"
             errors_found=true
         elif [ ! -x "${ASTRAL_ROOT}/run_astral.sh" ]; then
-            echo -e "${RED}Error: ASTRAL binary not found in ASTRAL_ROOT ('run_astral.sh' expected). Please ensure ASTRAL is properly installed.${NC}"
+            echo -e "${RED}Error: ASTRAL binary 'run_astral.sh' not found in ASTRAL_ROOT.${NC}"
             errors_found=true
         fi
     fi
@@ -147,10 +183,10 @@ validate_algorithm_binaries() {
     # Check if treeqmc is in algorithms array
     if [[ " ${ALGORITHMS[*]} " =~ " treeqmc " ]]; then
         if [ ! -d "$TREEQMC_ROOT" ]; then
-            echo -e "${RED}Error: TREEQMC_ROOT '$TREEQMC_ROOT' does not exist. Please ensure TREE-QMC is at ${TREEQMC_ROOT} or set TREEQMC_ROOT variable inside the script.${NC}"
+            echo -e "${RED}Error: TREEQMC_ROOT '$TREEQMC_ROOT' does not exist.${NC}"
             errors_found=true
         elif [ ! -x "${TREEQMC_ROOT}/tree-qmc" ]; then
-            echo -e "${RED}Error: TreeQMC binary not found in TREEQMC_ROOT ('tree-qmc' expected). Please ensure TreeQMC is properly installed.${NC}"
+            echo -e "${RED}Error: TreeQMC binary 'tree-qmc' not found in TREEQMC_ROOT.${NC}"
             errors_found=true
         fi
     fi
@@ -158,10 +194,32 @@ validate_algorithm_binaries() {
     # Check if wqfmtree is in algorithms array
     if [[ " ${ALGORITHMS[*]} " =~ " wqfmtree " ]]; then
         if [ ! -d "$WQFMTREE_ROOT" ]; then
-            echo -e "${RED}Error: WQFMTREE_ROOT '$WQFMTREE_ROOT' does not exist. Please ensure wQFM-TREE is at ${WQFMTREE_ROOT} or set WQFMTREE_ROOT variable inside the script.${NC}"
+            echo -e "${RED}Error: WQFMTREE_ROOT '$WQFMTREE_ROOT' does not exist.${NC}"
             errors_found=true
         elif [ ! -x "${WQFMTREE_ROOT}/run.sh" ]; then
-            echo -e "${RED}Error: wQFMtree binary not found in WQFMTREE_ROOT ('run.sh' expected). Please ensure wQFMtree is properly installed.${NC}"
+            echo -e "${RED}Error: wQFMtree 'run.sh' not found in WQFMTREE_ROOT.${NC}"
+            errors_found=true
+        fi
+    fi
+    
+    # Check if supertriplets is in algorithms array
+    if [[ " ${ALGORITHMS[*]} " =~ " supertriplets " ]]; then
+        if [ ! -d "$SUPERTRIPLETS_ROOT" ]; then
+            echo -e "${RED}Error: SUPERTRIPLETS_ROOT '$SUPERTRIPLETS_ROOT' does not exist.${NC}"
+            errors_found=true
+        elif [ ! -f "${SUPERTRIPLETS_ROOT}/SuperTriplets_v1.1.jar" ]; then
+            echo -e "${RED}Error: SuperTriplets JAR not found in SUPERTRIPLETS_ROOT.${NC}"
+            errors_found=true
+        fi
+    fi
+    
+    # Check if tmc is in algorithms array
+    if [[ " ${ALGORITHMS[*]} " =~ " tmc " ]]; then
+        if [ ! -d "$TMC_ROOT" ]; then
+            echo -e "${RED}Error: TMC_ROOT '$TMC_ROOT' does not exist.${NC}"
+            errors_found=true
+        elif [ ! -x "${TMC_ROOT}/treeFromTriplets" ]; then
+            echo -e "${RED}Error: TMC binary 'treeFromTriplets' not found in TMC_ROOT.${NC}"
             errors_found=true
         fi
     fi
@@ -206,16 +264,23 @@ run_algorithm_and_write_stats() {
     (
       case "$ALGORITHM" in
         "stelar")
-          cd "$STELAR_ROOT"
-          if [ -x "./run.sh" ]; then
-            /usr/bin/time -v ./run.sh "$ALL_GT_FILE" "$OUT_FILE" $STELAR_OPTS
-          else
-            # fallback to java invocation (Main class) if run.sh missing
-            /usr/bin/time -v java -Djava.library.path="$(pwd)/cuda" -Djna.debug_load=false -Djna.platform.library.path="$(pwd)/cuda" -cp target/stelar-mp-1.0-SNAPSHOT.jar Main -i "$ALL_GT_FILE" -o "$OUT_FILE" -m "$STELAR_OPTS"
-          fi
+          cd "$STELAR_X_ROOT"
+          # Ensure output directory exists
+          mkdir -p "$(dirname "$OUT_FILE")"
+          # STELAR-X uses -i and -o flags (new interface)
+          /usr/bin/time -v ./run.sh -i "$ALL_GT_FILE" -o "$OUT_FILE" $STELAR_OPTS
+          ;;
+        "aster")
+          cd "$ASTER_ROOT"
+          # Ensure output directory exists
+          mkdir -p "$(dirname "$OUT_FILE")"
+          # ASTER uses astral4 binary with -i and -o flags
+          /usr/bin/time -v ./bin/astral4 -i "$ALL_GT_FILE" -o "$OUT_FILE" $ASTER_OPTS
           ;;
         "astral")
           cd "$ASTRAL_ROOT"
+          # Ensure output directory exists
+          mkdir -p "$(dirname "$OUT_FILE")"
           /usr/bin/time -v ./run_astral.sh -i "$ALL_GT_FILE" -o "$OUT_FILE" $ASTRAL_OPTS
           ;;
         "treeqmc")
@@ -234,13 +299,8 @@ run_algorithm_and_write_stats() {
           # Ensure output directory exists
           mkdir -p "$(dirname "$OUT_FILE")"
           
-          
-          # previously was done this, but there is path length long issue
-          # /usr/bin/time -v ./run.sh "$ALL_GT_FILE" "$OUT_FILE" $WQFMTREE_OPTS
-          
-          
+          # Use tmp directory to avoid path length issues
           rm -rf tmp/*
-          
           mkdir -p tmp
           cp "$ALL_GT_FILE" "tmp/all_gt.tre"
           /usr/bin/time -v ./run.sh "tmp/all_gt.tre" "tmp/out.tre" $WQFMTREE_OPTS
@@ -249,7 +309,20 @@ run_algorithm_and_write_stats() {
           cat "tmp/out.tre"
           
           cp "tmp/out.tre" "$OUT_FILE"
-
+          ;;
+        "supertriplets")
+          cd "$STELAR_X_ROOT"
+          # Ensure output directory exists
+          mkdir -p "$(dirname "$OUT_FILE")"
+          # Use the wrapper script with --script-dir pointing to baselines/SuperTriplets
+          /usr/bin/time -v ./run_supertriplets.sh --script-dir "$SUPERTRIPLETS_ROOT" -i "$ALL_GT_FILE" -o "$OUT_FILE" $SUPERTRIPLETS_OPTS
+          ;;
+        "tmc")
+          cd "$STELAR_X_ROOT"
+          # Ensure output directory exists
+          mkdir -p "$(dirname "$OUT_FILE")"
+          # Use the wrapper script with --script-dir pointing to baselines/TMC
+          /usr/bin/time -v ./run_tmc.sh --script-dir "$TMC_ROOT" -i "$ALL_GT_FILE" -o "$OUT_FILE" $TMC_OPTS
           ;;
         *)
           echo "Unknown algorithm: $ALGORITHM"
@@ -334,10 +407,10 @@ run_algorithm_and_write_stats() {
     # RF calculation
     local RF_RATE="NA"
     if [[ -f "$OUT_FILE" ]]; then
-      # Prefer rf.py inside STELAR_ROOT if present
-      if [[ -f "${STELAR_ROOT%/}/rf.py" && -x "$(command -v python3)" ]]; then
-        echo "      Calculating RF using ${STELAR_ROOT%/}/rf.py"
-        rf_output=$(python3 "${STELAR_ROOT%/}/rf.py" "$OUT_FILE" "$TRUE_SPECIES_TREE" 2>&1) || rf_output="$rf_output"
+      # Prefer rf.py inside STELAR_X_ROOT if present
+      if [[ -f "${STELAR_X_ROOT%/}/rf.py" && -x "$(command -v python3)" ]]; then
+        echo "      Calculating RF using ${STELAR_X_ROOT%/}/rf.py"
+        rf_output=$(python3 "${STELAR_X_ROOT%/}/rf.py" "$OUT_FILE" "$TRUE_SPECIES_TREE" 2>&1) || rf_output="$rf_output"
         # try to find a number in output
         rf_candidate=$(echo "$rf_output" | grep -Eo '[0-9]+(\.[0-9]+)?' | head -n1 || true)
         if [[ -n "$rf_candidate" ]]; then
@@ -395,8 +468,8 @@ while [[ $# -gt 0 ]]; do
       DATASET_DIR="$2"
       shift 2
       ;;
-    --stelar-root)
-      STELAR_ROOT="$2"
+    --stelar-x-root)
+      STELAR_X_ROOT="$2"
       shift 2
       ;;
     --fresh)
@@ -405,22 +478,25 @@ while [[ $# -gt 0 ]]; do
       ;;
     --help|-h)
       cat <<EOF
-Usage: $0 [--base-dir /path/to/base] [--dataset-dir /path/to/datasets] [--stelar-root /path/to/stelar] [--fresh]
+Usage: $0 [--base-dir /path/to/base] [--dataset-dir /path/to/datasets] [--fresh]
 
-Multi-algorithm dataset runner supporting STELAR, ASTRAL, TreeQMC, and wQFMtree.
+Multi-algorithm dataset runner supporting STELAR, ASTER, ASTRAL, TreeQMC, wQFMtree, SuperTriplets, and TMC.
 
---base-dir, -b     Base directory containing RF/ (overrides default)
---dataset-dir, -d  Dataset directory (overrides default BASE_DIR/datasets)
---stelar-root      STELAR root directory (overrides default derived from base dir)
---fresh            Force rerun even if stat-<alg>.csv exists
---help, -h         Show this help
+--base-dir, -b      Base directory containing RF/ and external tools (overrides default)
+--dataset-dir, -d   Dataset directory (overrides default BASE_DIR/datasets)
+--stelar-x-root     STELAR-X root directory (overrides auto-detection from script location)
+--fresh             Force rerun even if stat-<alg>.csv exists
+--help, -h          Show this help
 
-Algorithms run: ${ALGORITHMS[*]}
-Algorithm root directories (auto-derived from base dir):
-  STELAR: \${BASE_DIR}/STELAR-MP
-  ASTRAL: \${BASE_DIR}/ASTRAL
-  TreeQMC: \${BASE_DIR}/TREE-QMC
-  wQFMtree: \${BASE_DIR}/wQFM-TREE/wQFM-TREE
+Algorithms available: stelar, aster, astral, treeqmc, wqfmtree, supertriplets, tmc
+Algorithm root directories:
+  STELAR-X:       Auto-detected from script location
+  ASTER:          \${STELAR_X_ROOT}/ASTER
+  ASTRAL:         \${BASE_DIR}/ASTRAL
+  TreeQMC:        \${BASE_DIR}/TREE-QMC
+  wQFMtree:       \${BASE_DIR}/wQFM-TREE/wQFM-TREE
+  SuperTriplets:  \${STELAR_X_ROOT}/baselines/SuperTriplets
+  TMC:            \${STELAR_X_ROOT}/baselines/TMC
 EOF
       exit 0
       ;;
@@ -431,14 +507,19 @@ EOF
   esac
 done
 
+# derive STELAR_X_ROOT from script location if not set
+if [[ -z "${STELAR_X_ROOT}" ]]; then
+  STELAR_X_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+
 # derive DATASET_DIR from BASE_DIR if not set
 if [[ -z "${DATASET_DIR}" ]]; then
   DATASET_DIR="${BASE_DIR%/}/phylo-datasets"
 fi
 
-# derive STELAR_ROOT from BASE_DIR if not set
-if [[ -z "${STELAR_ROOT}" ]]; then
-  STELAR_ROOT="${BASE_DIR%/}/STELAR-MP"
+# derive ASTER_ROOT from STELAR_X_ROOT if not set
+if [[ -z "${ASTER_ROOT}" ]]; then
+  ASTER_ROOT="${STELAR_X_ROOT%/}/ASTER"
 fi
 
 # derive ASTRAL_ROOT from BASE_DIR if not set
@@ -454,6 +535,16 @@ fi
 # derive WQFMTREE_ROOT from BASE_DIR if not set
 if [[ -z "${WQFMTREE_ROOT}" ]]; then
   WQFMTREE_ROOT="${BASE_DIR%/}/wQFM-TREE/wQFM-TREE"
+fi
+
+# derive SUPERTRIPLETS_ROOT from STELAR_X_ROOT if not set
+if [[ -z "${SUPERTRIPLETS_ROOT}" ]]; then
+  SUPERTRIPLETS_ROOT="${STELAR_X_ROOT%/}/baselines/SuperTriplets"
+fi
+
+# derive TMC_ROOT from STELAR_X_ROOT if not set
+if [[ -z "${TMC_ROOT}" ]]; then
+  TMC_ROOT="${STELAR_X_ROOT%/}/baselines/TMC"
 fi
 
 print_header
@@ -529,4 +620,5 @@ for folder in "${folders[@]}"; do
 done
 
 echo -e "${GREEN}Dataset processing complete!${NC}"
-echo "Check output directories for each algorithm ('stelar_outputs', 'astral_outputs', 'treeqmc_outputs', 'wqfmtree_outputs') for 'output-<alg>.tre' and 'stat-<alg>.csv' files."
+echo "Check output directories for 'output-<alg>.tre' and 'stat-<alg>.csv' files."
+echo "Output directories: stelar_outputs, aster_outputs, astral_outputs, treeqmc_outputs, wqfmtree_outputs, supertriplets_outputs, tmc_outputs"

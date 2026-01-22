@@ -1,0 +1,54 @@
+# Basic usage (uses default output files)
+./treeFromTriplets -fit example1.tree
+
+# Specify output tree file with names
+./treeFromTriplets -fit example1.tree -frt output.tree
+
+# Specify both output tree files (with names and with numbers)
+./treeFromTriplets -fit example1.tree -frt output.tree -frtN output_numbers.tree
+
+# Specify output tree file and log file
+./treeFromTriplets -fit example1.tree -frt output.tree -flg output.log
+
+# Full example with all output options
+./treeFromTriplets -fit example1.tree -frt output.tree -frtN output_numbers.tree -flg output.log
+
+# With different input files
+./treeFromTriplets -fit example2.tree -frt result2.tree
+./treeFromTriplets -fit example3.tree -frt result3.tree -flg result3.log
+
+# Limit number of triplets with -nd
+./treeFromTriplets -fit example1.tree -frt output.tree -nd 1000
+
+
+
+./treeFromTriplets -fit all_gt_bs_rooted_37.tre -frt out-37-tmc.tre
+
+./treeFromTriplets -fit all_gt_bs_rooted_48.tre -frt out-48-tmc.tre
+
+./treeFromTriplets -fit all_gt_bs_rooted_100.tre -frt out-100-tmc.tre
+
+./treeFromTriplets -fit all_gt_bs_rooted_200.tre -frt out-200-tmc.tre
+
+
+# Basic usage
+./run_tmc.sh -i all_gt_bs_rooted_37.tre -o out-37-tmc.tre
+
+# With custom script directory
+./run_tmc.sh --script-dir /path/to/dir -i input.tre -o output.tre
+
+# With optional log file
+./run_tmc.sh -i input.tre -o output.tre --log reconstruction.log
+
+# With triplet limit
+./run_tmc.sh -i input.tre -o output.tre --nd 1000
+
+# Show help
+./run_tmc.sh --help
+
+
+
+./run_tmc.sh --script-dir ./baselines/TMC -i all_gt_bs_rooted_37.tre -o out-37-tmc.tre
+
+
+

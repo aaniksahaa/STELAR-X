@@ -1,0 +1,44 @@
+# basic
+java -jar SuperTriplets_v1.1.jar inputForest.nwk outputSupertree.nwk
+
+# if you need more memory (common for many taxa)
+java -jar -Xmx600m SuperTriplets_v1.1.jar inputForest.nwk outputSupertree.nwk
+
+
+java -jar SuperTriplets_v1.1.jar all_gt_bs_rooted_37.tre out-37-spt.tre
+
+java -jar SuperTriplets_v1.1.jar all_gt_bs_rooted_200.tre out-200-spt.tre
+
+java -jar SuperTriplets_v1.1.jar all_gt_bs_rooted_37.tre out-37-spt.tre
+
+
+# Remove branch support values (default)
+python clean_tree.py out-37-spt.tre out-37-spt-clean.tre
+
+# Keep branch support values
+python clean_tree.py out-37-spt.tre out-37-spt-with-support.tre --branch-support
+
+# Without branch support (cleaned tree)
+./run_supertriplets.sh --jar-filepath SuperTriplets_v1.1.jar -i all_gt_bs_rooted_37.tre -o out-37.tre
+
+# With branch support values kept
+./run_supertriplets.sh --jar-filepath /path/to/SuperTriplets_v1.1.jar -i input.tre -o output.tre --branch-support
+
+# Use default script directory (where run_supertriplets.sh is located)
+./run_supertriplets.sh -i all_gt_bs_rooted_37.tre -o out-37.tre
+
+# Specify a custom script directory
+./run_supertriplets.sh --script-dir /custom/path -i input.tre -o output.tre
+
+# Keep branch support values
+./run_supertriplets.sh -i input.tre -o output.tre --branch-support
+
+
+
+./run_supertriplets.sh --script-dir Supertriplets -i input.tre -o output.tre
+
+
+
+./run_supertriplets.sh --script-dir ./baselines/SuperTriplets -i all_gt_bs_rooted_37.tre -o out-37-spt.tre
+
+
