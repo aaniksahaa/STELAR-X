@@ -130,6 +130,7 @@ STAT_FILE="${SIMPHY_RUN_DIR%/}/stat-aster.csv"
 ALL_GT_FILE="${SIMPHY_RUN_DIR%/}/all_gt.tre"
 TRUE_SPECIES_TREE="${SIMPHY_RUN_DIR%/}/s_tree.trees"
 OUT_ASTER="${SIMPHY_RUN_DIR%/}/out-aster.tre"
+LOCK_FILE="${SIMPHY_RUN_DIR%/}/.aster.lock"
 
 # Full path to ASTER binary
 ASTER_BIN_PATH="${STELAR_ROOT%/}/${ASTER_BIN}"
@@ -139,9 +140,9 @@ if [[ "${DEBUG:-0}" = "1" ]]; then
   set -x
 fi
 
-# checkpoint: if stat file exists and --fresh not provided, skip everything
-if [[ "$FRESH" = false && -f "${STAT_FILE}" ]]; then
-  echo "SKIPPING: ${STAT_FILE} already exists. Use --fresh to force rerun."
+# checkpoint: if lock file exists and --fresh not provided, skip everything
+if [[ "$FRESH" = false && -f "${LOCK_FILE}" ]]; then
+  echo "SKIPPING: ${LOCK_FILE} already exists. Use --fresh to force rerun."
   exit 0
 fi
 
@@ -349,6 +350,9 @@ CSV_ROW="aster,${TAXA_NUM},${GENE_TREES},${REPLICATE},${SB},${SPMIN},${SPMAX},${
 echo "$CSV_ROW" >> "$STAT_FILE"
 
 echo "Wrote stats to $STAT_FILE"
+
+# Create lock file to indicate successful completion
+touch "${LOCK_FILE}"
 
 # Send notification (ntfy)
 if [[ "$NO_NOTIFY" = false ]] && command -v curl >/dev/null 2>&1; then

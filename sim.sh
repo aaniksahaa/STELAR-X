@@ -84,11 +84,11 @@ fi
 # Construct expected output paths early (will be updated after simulation)
 OUT_DIR_TEMP="${SIMPHY_DIR%/}/data/t_${TAXA_NUM}_g_${GENE_TREES}_sb_${SB}_spmin_${SPMIN}_spmax_${SPMAX}"
 REPL_DIR_TEMP="${OUT_DIR_TEMP%/}/${REPLICATE}"
-CSV_FILE="${REPL_DIR_TEMP%/}/stat-sim.csv"
+LOCK_FILE="${REPL_DIR_TEMP%/}/.sim.lock"
 
 # Checkpoint mechanism
-if [[ "$FRESH" = false && -f "${CSV_FILE}" ]]; then
-  echo "SKIPPING: ${CSV_FILE} already exists. Use --fresh to rerun."
+if [[ "$FRESH" = false && -f "${LOCK_FILE}" ]]; then
+  echo "SKIPPING: ${LOCK_FILE} already exists. Use --fresh to rerun."
   exit 0
 fi
 
@@ -288,6 +288,9 @@ fi
 #   echo "Skipping analysis: replicate directory or all_gt.tre missing."
 # fi
 
+
+# Create lock file to indicate successful completion
+touch "${OUT_DIR}/${REPLICATE}/.sim.lock"
 
 echo -e "\033[1;32m🎉 COMPLETED: Simulation finished successfully!\033[0m"
 echo -e "\033[1;36m📁 Output directory: ${OUT_DIR}\033[0m"
