@@ -31,7 +31,10 @@ FRESH=false
 ASTER_OPTS=""
 
 # ASTER binary path (relative to STELAR_ROOT)
-ASTER_BIN="ASTER/bin/astral4"
+# We will determine the default binary based on TAXA_NUM later if not explicitly set
+ASTER_BIN_DEFAULT="ASTER/bin/astral4"
+ASTER_BIN_INT128="ASTER/bin/astral4_int128"
+ASTER_BIN=""
 
 # Monitoring options (DEFAULT: ON)
 TIME_MONITOR=true     # when true: run `time -v` if available and capture stderr
@@ -132,6 +135,16 @@ TRUE_SPECIES_TREE="${SIMPHY_RUN_DIR%/}/s_tree.trees"
 OUT_ASTER="${SIMPHY_RUN_DIR%/}/out-aster.tre"
 LOCK_FILE="${SIMPHY_RUN_DIR%/}/.aster.lock"
 
+# Determine which binary to use if not provided
+if [[ -z "$ASTER_BIN" ]]; then
+  if [[ "$TAXA_NUM" -ge 5000 ]]; then
+    echo -e "\033[1;32m==> Taxa number ($TAXA_NUM) >= 5000. Switching to 128-bit ASTER binary (astral4_int128).\033[0m"
+    ASTER_BIN="$ASTER_BIN_INT128"
+  else
+    ASTER_BIN="$ASTER_BIN_DEFAULT"
+  fi
+fi
+
 # Full path to ASTER binary
 ASTER_BIN_PATH="${STELAR_ROOT%/}/${ASTER_BIN}"
 
@@ -169,6 +182,8 @@ fi
 
 if [[ ! -x "$ASTER_BIN_PATH" ]]; then
   echo "Error: ASTER binary not found or not executable at $ASTER_BIN_PATH"
+  echo "If you need the int128 version (for taxa >= 5000), please compile it manually:"
+  echo "  cd ASTER && make astral_int128"
   exit 7
 fi
 

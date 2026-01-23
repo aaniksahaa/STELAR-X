@@ -67,6 +67,10 @@ NC='\033[0m'
 # folders=("200-taxon")
 # folders=("37-taxon" "48-taxon" "100-taxon" "200-taxon")
 folders=("37-taxon")
+# folders=("48-taxon")
+# folders=("100-taxon")
+# folders=("200-taxon")
+
 
 declare -A innerFolderNames
 innerFolderNames["11-taxon"]="estimated_Xgenes_strongILS/estimated_5genes_strongILS estimated_Xgenes_strongILS/estimated_15genes_strongILS estimated_Xgenes_strongILS/estimated_25genes_strongILS estimated_Xgenes_strongILS/estimated_50genes_strongILS estimated_Xgenes_strongILS/estimated_100genes_strongILS"
@@ -275,7 +279,8 @@ run_algorithm_and_write_stats() {
           # Ensure output directory exists
           mkdir -p "$(dirname "$OUT_FILE")"
           # ASTER uses astral4 binary with -i and -o flags
-          /usr/bin/time -v ./bin/astral4 -i "$ALL_GT_FILE" -o "$OUT_FILE" $ASTER_OPTS
+          # Redirect ASTER's stderr to stdout (console) while /usr/bin/time stderr goes to TIME_TMP
+          /usr/bin/time -v sh -c './bin/astral4 -i "'"$ALL_GT_FILE"'" -o "'"$OUT_FILE"'" '"$ASTER_OPTS"' 2>&1'
           ;;
         "astral")
           cd "$ASTRAL_ROOT"
