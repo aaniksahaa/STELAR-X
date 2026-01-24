@@ -21,35 +21,66 @@ from typing import Optional, List
 
 import dendropy
 
-def read_trees_from_file_robust(path: str) -> List[dendropy.Tree]:
+def iter_trees_from_file_robust(path: str):
     """
-    Read a Newick file that may contain multiple trees separated by semicolons.
-    This function reads the file as text, splits on ';', and attempts to parse each
-    non-empty chunk as a single Newick tree. Returns a list of parsed dendropy.Tree objects.
+    Generator that reads a Newick file containing multiple trees separated by semicolons.
+    Yields (tree_index, dendropy.Tree) tuples one at a time to minimize memory usage.
+    
+    This reads the file in a streaming fashion, parsing and yielding one tree at a time
+    instead of loading all trees into memory.
     """
-    txt = open(path, "r", encoding="utf-8").read()
-    # Split on semicolon. Keep everything before each semicolon as a tree chunk.
-    chunks = [c.strip() for c in txt.split(';')]
-    trees = []
-    for i, chunk in enumerate(chunks):
-        if not chunk:
-            continue
-        tree_str = chunk + ';'  # ensure terminating semicolon
+    tree_index = 0
+    buffer = ""
+    
+    with open(path, "r", encoding="utf-8") as fh:
+        while True:
+            chunk = fh.read(8192)  # Read 8KB at a time
+            if not chunk:
+                break
+            buffer += chunk
+            
+            # Process complete trees (ending with ';')
+            while ';' in buffer:
+                semicolon_pos = buffer.index(';')
+                tree_str = buffer[:semicolon_pos].strip()
+                buffer = buffer[semicolon_pos + 1:]
+                
+                if not tree_str:
+                    continue
+                    
+                tree_str = tree_str + ';'  # ensure terminating semicolon
+                tree_index += 1
+                
+                try:
+                    # parse single tree from string
+                    t = dendropy.Tree.get(data=tree_str, schema="newick", preserve_underscores=True)
+                    yield (tree_index, t)
+                except Exception as e:
+                    # Try one more attempt with relaxed whitespace (some weird inputs have stray BOMs or control chars)
+                    try:
+                        cleaned = ''.join(ch for ch in tree_str if ord(ch) >= 9)
+                        t = dendropy.Tree.get(data=cleaned, schema="newick", preserve_underscores=True)
+                        yield (tree_index, t)
+                    except Exception as e2:
+                        print(f"Warning: failed to parse tree #{tree_index} in file '{path}': {e2}", file=sys.stderr)
+                        # skip this tree but continue
+                        continue
+    
+    # Handle any remaining content in buffer (shouldn't normally happen with valid files)
+    remaining = buffer.strip()
+    if remaining:
+        tree_str = remaining if remaining.endswith(';') else remaining + ';'
+        tree_index += 1
         try:
-            # parse single tree from string
             t = dendropy.Tree.get(data=tree_str, schema="newick", preserve_underscores=True)
-            trees.append(t)
+            yield (tree_index, t)
         except Exception as e:
-            # Try one more attempt with relaxed whitespace (some weird inputs have stray BOMs or control chars)
             try:
                 cleaned = ''.join(ch for ch in tree_str if ord(ch) >= 9)
                 t = dendropy.Tree.get(data=cleaned, schema="newick", preserve_underscores=True)
-                trees.append(t)
+                yield (tree_index, t)
             except Exception as e2:
-                print(f"Warning: failed to parse tree #{i+1} in file '{path}': {e2}", file=sys.stderr)
-                # skip this chunk but continue
-                continue
-    return trees
+                print(f"Warning: failed to parse remaining tree #{tree_index} in file '{path}': {e2}", file=sys.stderr)
 
 def resolve_polytomies_dendropy(tree: dendropy.Tree, mode: str = "random", new_edge_length: Optional[float] = None, rnd: Optional[random.Random] = None):
     if mode not in ("random", "firstpair"):
@@ -317,62 +348,68 @@ def root_tree_randomly(tree: dendropy.Tree, rnd: Optional[random.Random] = None)
             print(f"Warning: Failed to root tree at midpoint: {e2}", file=sys.stderr)
             return False
 
-def process_trees(trees: List[dendropy.Tree], args, rnd: Optional[random.Random] = None):
-    cleaned_strings = []
-    for idx, tree in enumerate(trees, start=1):
-        print(f"\n--- Tree #{idx} (starting) ---")
-        tips_before, freq_before = degree_freq_and_tips(tree)
-        print(f"Tips before: {tips_before}")
-        print("Degree freq before (deg -> count):", dict(sorted(freq_before.items())))
+def process_single_tree(tree: dendropy.Tree, idx: int, args, rnd: Optional[random.Random] = None) -> str:
+    """
+    Process a single tree and return its cleaned Newick string.
+    This function processes one tree at a time to minimize memory usage.
+    """
+    print(f"\n--- Tree #{idx} (starting) ---")
+    tips_before, freq_before = degree_freq_and_tips(tree)
+    print(f"Tips before: {tips_before}")
+    print("Degree freq before (deg -> count):", dict(sorted(freq_before.items())))
 
-        # Root the tree with outgroup if specified, otherwise root randomly
-        rooting_success = False
-        if args.outgroup:
-            outgroup_names = [name.strip() for name in args.outgroup.split(',') if name.strip()]
-            if len(outgroup_names) == 1:
-                print(f"Rooting tree with single outgroup: {args.outgroup}")
-            else:
-                print(f"Rooting tree with multiple outgroups: {outgroup_names}")
-                print(f"Will find MRCA of these taxa and root accordingly")
-            
-            rooting_success = root_tree_with_outgroup(tree, args.outgroup)
-            if rooting_success:
-                if len(outgroup_names) == 1:
-                    print("Tree successfully rooted with single outgroup")
-                else:
-                    print("Tree successfully rooted using MRCA of multiple outgroups")
-            else:
-                print("Failed to root tree with outgroup(s), falling back to random rooting")
+    # Root the tree with outgroup if specified, otherwise root randomly
+    rooting_success = False
+    if args.outgroup:
+        outgroup_names = [name.strip() for name in args.outgroup.split(',') if name.strip()]
+        if len(outgroup_names) == 1:
+            print(f"Rooting tree with single outgroup: {args.outgroup}")
+        else:
+            print(f"Rooting tree with multiple outgroups: {outgroup_names}")
+            print(f"Will find MRCA of these taxa and root accordingly")
         
-        # If no outgroup specified or outgroup rooting failed, root randomly
-        if not rooting_success:
-            print("Rooting tree randomly...")
-            random_rooting_success = root_tree_randomly(tree, rnd=rnd)
-            if random_rooting_success:
-                print("Tree successfully rooted randomly")
+        rooting_success = root_tree_with_outgroup(tree, args.outgroup)
+        if rooting_success:
+            if len(outgroup_names) == 1:
+                print("Tree successfully rooted with single outgroup")
             else:
-                print("Failed to root tree randomly, proceeding with original tree structure")
+                print("Tree successfully rooted using MRCA of multiple outgroups")
+        else:
+            print("Failed to root tree with outgroup(s), falling back to random rooting")
+    
+    # If no outgroup specified or outgroup rooting failed, root randomly
+    if not rooting_success:
+        print("Rooting tree randomly...")
+        random_rooting_success = root_tree_randomly(tree, rnd=rnd)
+        if random_rooting_success:
+            print("Tree successfully rooted randomly")
+        else:
+            print("Failed to root tree randomly, proceeding with original tree structure")
 
-        print("Resolving polytomies...")
-        resolve_polytomies_dendropy(tree, mode=args.mode, new_edge_length=args.new_edge_length, rnd=rnd)
+    print("Resolving polytomies...")
+    resolve_polytomies_dendropy(tree, mode=args.mode, new_edge_length=args.new_edge_length, rnd=rnd)
 
-        tips_after, freq_after = degree_freq_and_tips(tree)
-        print(f"Tips after resolve: {tips_after}")
-        print("Degree freq after resolve (deg -> count):", dict(sorted(freq_after.items())))
+    tips_after, freq_after = degree_freq_and_tips(tree)
+    print(f"Tips after resolve: {tips_after}")
+    print("Degree freq after resolve (deg -> count):", dict(sorted(freq_after.items())))
 
-        print("Stripping branch lengths and internal labels..." if args.strip_internal_labels else "Stripping branch lengths (keeping internal labels)...")
-        strip_lengths_and_labels_dendropy(tree, strip_internal_labels=args.strip_internal_labels)
+    print("Stripping branch lengths and internal labels..." if args.strip_internal_labels else "Stripping branch lengths (keeping internal labels)...")
+    strip_lengths_and_labels_dendropy(tree, strip_internal_labels=args.strip_internal_labels)
 
-        tips_final, freq_final = degree_freq_and_tips(tree)
-        print(f"Tips final: {tips_final}")
-        print("Degree freq final (deg -> count):", dict(sorted(freq_final.items())))
+    tips_final, freq_final = degree_freq_and_tips(tree)
+    print(f"Tips final: {tips_final}")
+    print("Degree freq final (deg -> count):", dict(sorted(freq_final.items())))
 
-        s = tree.as_string(schema="newick", suppress_rooting=True).strip()
-        if not s.endswith(";"):
-            s = s + ";"
-        cleaned_strings.append(s)
-        print(f"--- Tree #{idx} processed ---")
-    return cleaned_strings
+    s = tree.as_string(schema="newick", suppress_rooting=True).strip()
+    if not s.endswith(";"):
+        s = s + ";"
+    
+    print(f"--- Tree #{idx} processed ---")
+    
+    # Explicitly delete the tree object to free memory immediately
+    del tree
+    
+    return s
 
 def main():
     p = argparse.ArgumentParser(description="Resolve polytomies and clean Newick using DendroPy.")
@@ -396,30 +433,34 @@ def main():
             rnd = random.Random()
             print("Random mode with no fixed seed (non-deterministic)")
 
-    all_cleaned = []
     total = 0
-    for inp in args.input:
-        print(f"\nReading file: {inp}")
-        try:
-            trees = read_trees_from_file_robust(inp)
-        except Exception as e:
-            print(f"Error reading '{inp}': {e}", file=sys.stderr)
-            continue
-        print(f"Found {len(trees)} tree(s) in {inp}.")
-        total += len(trees)
-        cleaned = process_trees(trees, args, rnd=rnd)
-        all_cleaned.extend(cleaned)
+    
+    # Open output file and write trees as they are processed (streaming)
+    with open(args.output, "w", encoding="utf-8") as out_fh:
+        for inp in args.input:
+            print(f"\nReading file: {inp}")
+            try:
+                # Use generator to process trees one at a time
+                for tree_idx, tree in iter_trees_from_file_robust(inp):
+                    # Process single tree and write immediately
+                    cleaned_str = process_single_tree(tree, tree_idx, args, rnd=rnd)
+                    out_fh.write(cleaned_str + "\n")
+                    out_fh.flush()  # Ensure data is written to disk
+                    total += 1
+                    
+                    # Progress indicator for large files
+                    if total % 1000 == 0:
+                        print(f"\n[Progress] Processed {total} trees so far...")
+                        
+            except Exception as e:
+                print(f"Error reading '{inp}': {e}", file=sys.stderr)
+                continue
 
     if total == 0:
         print("No trees processed. Exiting.", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\nWriting {len(all_cleaned)} cleaned tree(s) to: {args.output}")
-    with open(args.output, "w", encoding="utf-8") as fh:
-        for i, s in enumerate(all_cleaned, start=1):
-            fh.write(s + "\n")
-            # if i != len(all_cleaned):
-            #     fh.write("\n")
+    print(f"\nSuccessfully wrote {total} cleaned tree(s) to: {args.output}")
     print("Done.")
 
 if __name__ == "__main__":
