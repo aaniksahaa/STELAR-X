@@ -40,6 +40,19 @@ ASTER/bin/astral4_int128 -i all_gt_bs_rooted_37.tre -o out-37.tre
 ./run-bulk-standard.sh 
 
 
+Avian 363:
+===========
+
+cd data 
+
+wget https://erda.ku.dk/archives/341f72708302f1d0c461ad616e783b86/B10K/data_upload/01_alignments_and_gene_trees/intergenic_regions/63430.gene.trees.gz
+
+gunzip 63430.gene.trees.gz
+
+python cleaner.py data/63430.gene.trees data/63k-r-rand.tre
+
+python cleaner.py data/63430.gene.trees data/63k-r-og-strcam.tre --outgroup "Struthio_camelus"
+
 ./run-with-monitor.sh -i data/63k-r-rand.tre -o data/sp-63k-r-rand.tre
 
 ./run-with-monitor.sh -i data/63k-r-og-strcam.tre -o data/sp-63k-r-og-strcam.tre
