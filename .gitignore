@@ -26,4 +26,10 @@ ASTER/bin
 
 ASTER/bin/*
 
+data/ 
+
+data/* 
+
+
+
 
