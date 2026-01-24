@@ -39,3 +39,15 @@ ASTER/bin/astral4_int128 -i all_gt_bs_rooted_37.tre -o out-37.tre
 # must have datasets at base-dir/phylo-datasets 
 ./run-bulk-standard.sh 
 
+
+./run-with-monitor.sh -i data/63k-r-rand.tre -o data/sp-63k-r-rand.tre
+
+./run-with-monitor.sh -i data/63k-r-og-strcam.tre -o data/sp-63k-r-og-strcam.tre
+
+
+
+
+
+
+
+
