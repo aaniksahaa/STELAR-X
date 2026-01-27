@@ -11,6 +11,8 @@ set -euo pipefail
 DEFAULT_OUTPUT_FILE="out.tre"
 DEFAULT_EXPANSION_METHOD="NONE"
 DEFAULT_DISTANCE_METHOD="UPGMA"
+DEFAULT_XMS="4g"
+DEFAULT_XMX="128g"
 
 # Initialize variables with defaults
 INPUT_FILE=""
@@ -20,6 +22,10 @@ CPU_ONLY=false  # GPU is default, --cpu disables it
 EXPANSION_METHOD="$DEFAULT_EXPANSION_METHOD"
 DISTANCE_METHOD="$DEFAULT_DISTANCE_METHOD"
 VERBOSE_EXPANSION=false
+XMS="${STELAR_XMS:-$DEFAULT_XMS}"
+XMX="${STELAR_XMX:-$DEFAULT_XMX}"
+JAVA_MEM_OPTS="-Xms${XMS} -Xmx${XMX}"
+JAVA_MEM_OVERRIDE=false
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -43,6 +49,11 @@ Options:
     -o, --output FILE       Output species tree file (default: out.tre)
     --threads NUM           Number of threads to use (default: all available)
     --cpu                   Use CPU only (GPU acceleration is enabled by default)
+    --xms SIZE              Java Xms (default: ${DEFAULT_XMS} or env STELAR_XMS)
+    --xmx SIZE              Java Xmx (default: ${DEFAULT_XMX} or env STELAR_XMX)
+    --Xms SIZE              Same as --xms
+    --Xmx SIZE              Same as --xmx
+    --java-mem OPTS         Java memory opts (override all; legacy)
 
 Expansion Options:
     -e, --expansion METHOD  Bipartition expansion method (default: NONE)
@@ -124,6 +135,31 @@ while [[ $# -gt 0 ]]; do
         --cpu)
             CPU_ONLY=true
             shift
+            ;;
+        --java-mem)
+            if [[ -z "${2:-}" ]]; then
+                echo -e "${RED}Error: --java-mem requires an argument${NC}" >&2
+                exit 1
+            fi
+            JAVA_MEM_OPTS="$2"
+            JAVA_MEM_OVERRIDE=true
+            shift 2
+            ;;
+        --xms|--Xms)
+            if [[ -z "${2:-}" ]]; then
+                echo -e "${RED}Error: --xms requires an argument${NC}" >&2
+                exit 1
+            fi
+            XMS="$2"
+            shift 2
+            ;;
+        --xmx|--Xmx)
+            if [[ -z "${2:-}" ]]; then
+                echo -e "${RED}Error: --xmx requires an argument${NC}" >&2
+                exit 1
+            fi
+            XMX="$2"
+            shift 2
             ;;
         -e|--expansion)
             if [[ -z "${2:-}" ]]; then
@@ -207,6 +243,12 @@ echo "Mode:             $(if [[ "$CPU_ONLY" == true ]]; then echo "CPU only"; el
 echo "Expansion method: $EXPANSION_METHOD"
 echo "Distance method:  $DISTANCE_METHOD"
 echo "Verbose:          $VERBOSE_EXPANSION"
+if [[ "$JAVA_MEM_OVERRIDE" = true ]]; then
+    echo "Java mem opts:    $JAVA_MEM_OPTS (override)"
+else
+    JAVA_MEM_OPTS="-Xms${XMS} -Xmx${XMX}"
+    echo "Java mem opts:    $JAVA_MEM_OPTS"
+fi
 echo
 
 # Check if input file exists
@@ -270,7 +312,7 @@ echo -e "${YELLOW}Running STELAR-X...${NC}"
 echo -e "${YELLOW}Command: java ... Main $JAVA_ARGS${NC}"
 echo
 
-eval "java -Xms4g -Xmx128g -Djava.library.path=\"$(pwd)/cuda\" \
+eval "java ${JAVA_MEM_OPTS} -Djava.library.path=\"$(pwd)/cuda\" \
      -Djna.debug_load=true \
      -Djna.debug_load.jna=true \
      -Djna.platform.library.path=\"$(pwd)/cuda\" \

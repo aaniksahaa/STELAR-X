@@ -1,9 +1,11 @@
 import dendropy
 import argparse
+import os
 import sys
 import matplotlib.pyplot as plt
 import random
 from collections import Counter
+from concurrent.futures import ProcessPoolExecutor
 
 # increase recursion limit (be conservative but high enough)
 sys.setrecursionlimit(10_000_000)
@@ -53,6 +55,50 @@ def inspect_tree(tree, tree_index=None):
         'depth': depth,
         'root_furcation': root_furcation
     }
+
+
+def iter_tree_strings_from_file_robust(path: str):
+    tree_index = 0
+    buffer = ""
+    with open(path, "r", encoding="utf-8") as fh:
+        while True:
+            chunk = fh.read(8192)
+            if not chunk:
+                break
+            buffer += chunk
+            while ';' in buffer:
+                semicolon_pos = buffer.index(';')
+                tree_str = buffer[:semicolon_pos].strip()
+                buffer = buffer[semicolon_pos + 1:]
+                if not tree_str:
+                    continue
+                tree_index += 1
+                yield (tree_index, tree_str + ';')
+    remaining = buffer.strip()
+    if remaining:
+        tree_index += 1
+        yield (tree_index, remaining + (';' if not remaining.endswith(';') else ''))
+
+
+def _worker_inspect(args):
+    tree_str, idx = args
+    from io import StringIO
+    old_out, old_err = sys.stdout, sys.stderr
+    buf = StringIO()
+    sys.stdout = buf
+    sys.stderr = buf
+    try:
+        tree = dendropy.Tree.get(data=tree_str, schema="newick")
+        stats = inspect_tree(tree, idx - 1)
+        num_leaves = stats.get("num_leaves", len(tree.leaf_nodes()))
+    except Exception as e:
+        stats = None
+        num_leaves = None
+        print(f"Error processing tree {idx}: {e}")
+    finally:
+        sys.stdout = old_out
+        sys.stderr = old_err
+    return idx, stats, num_leaves, buf.getvalue()
 
 def plot_taxa_distribution(taxa_counts, filename, ax=None):
     """Plot histogram of taxa counts across trees."""
@@ -135,6 +181,8 @@ def main():
                        help='Show histogram of taxa counts across all trees (requires --all)')
     parser.add_argument('--plot-children', action='store_true',
                        help='Show child frequency plot for a random tree (requires --all)')
+    parser.add_argument('--num-workers', type=int, default=None,
+                        help='Number of parallel worker processes when using --all (default: cpu count)')
     
     args = parser.parse_args()
 
@@ -146,37 +194,50 @@ def main():
     #     print("Error: Plotting options require --all flag")
     #     return
     
-    # Read the tree file
-    with open(args.tree_file, 'r') as f:
-        content = f.read().strip()
-    
-    # Split by semicolons early
-    tree_strings = [t.strip() for t in content.split(';') if t.strip()]
-    
     # Get base filename for plot saving
     base_filename = args.tree_file.rsplit('.', 1)[0]
     
     if args.all:
+        num_workers = args.num_workers if args.num_workers is not None else (os.cpu_count() or 1)
+        if num_workers < 1:
+            num_workers = 1
         # Process all trees
-        print(f"Found {len(tree_strings)} trees in the file.\n")
+        # Count trees and stream them
+        tree_iter = iter_tree_strings_from_file_robust(args.tree_file)
+        tree_list = list(tree_iter)
+        print(f"Found {len(tree_list)} trees in the file.\n")
 
         mn = float('inf')
         mx = 0
         taxa_counts = []
         tree_stats = []
-        
-        for i, tree_string in enumerate(tree_strings):
-            try:
-                tree = dendropy.Tree.get(data=tree_string + ';', schema="newick")
-                stats = inspect_tree(tree, i)
-                tree_stats.append((i, stats))
-                
-                num_leaves = len(tree.leaf_nodes())
-                taxa_counts.append(num_leaves)
-                mx = max(mx, num_leaves)
-                mn = min(mn, num_leaves)
-            except Exception as e:
-                print(f"Error processing tree {i + 1}: {e}")
+        if num_workers == 1:
+            for i, (idx, tree_string) in enumerate(tree_list):
+                try:
+                    tree = dendropy.Tree.get(data=tree_string, schema="newick")
+                    stats = inspect_tree(tree, i)
+                    tree_stats.append((i, stats))
+                    num_leaves = len(tree.leaf_nodes())
+                    taxa_counts.append(num_leaves)
+                    mx = max(mx, num_leaves)
+                    mn = min(mn, num_leaves)
+                except Exception as e:
+                    print(f"Error processing tree {i + 1}: {e}")
+        else:
+            work_iter = ((tree_str, idx) for idx, tree_str in tree_list)
+            with ProcessPoolExecutor(max_workers=num_workers) as ex:
+                for idx, stats, num_leaves, log in ex.map(_worker_inspect, work_iter, chunksize=1):
+                    if log:
+                        if not log.endswith("\n"):
+                            log = log + "\n"
+                        sys.stdout.write(log)
+                        sys.stdout.flush()
+                    if stats is None or num_leaves is None:
+                        continue
+                    tree_stats.append((idx - 1, stats))
+                    taxa_counts.append(num_leaves)
+                    mx = max(mx, num_leaves)
+                    mn = min(mn, num_leaves)
         
         print(f"Max number of leaves: {mx}")
         print(f"Min number of leaves: {mn}")
@@ -199,9 +260,10 @@ def main():
             
     else:
         # Process only the first tree
-        if tree_strings:
+        tree_list = list(iter_tree_strings_from_file_robust(args.tree_file))
+        if tree_list:
             try:
-                tree = dendropy.Tree.get(data=tree_strings[0] + ';', schema="newick")
+                tree = dendropy.Tree.get(data=tree_list[0][1], schema="newick")
                 inspect_tree(tree)
             except Exception as e:
                 print(f"Error processing tree: {e}")
