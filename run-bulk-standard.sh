@@ -32,6 +32,8 @@ ALGORITHMS=("aster")
 # ALGORITHMS=("tmc")
 
 ALGORITHMS=("aster" "supertriplets" "tmc")
+ALGORITHMS=("aster" "supertriplets")
+ALGORITHMS=("tmc")
 
 
 
@@ -65,8 +67,8 @@ NC='\033[0m'
 # Dataset configuration (kept exactly as you provided)
 # =============================================================================
 # folders=("200-taxon")
-# folders=("37-taxon" "48-taxon" "100-taxon" "200-taxon")
-folders=("37-taxon")
+folders=("37-taxon" "100-taxon" "200-taxon" "500-taxon")
+# folders=("37-taxon")
 # folders=("48-taxon")
 # folders=("100-taxon")
 # folders=("200-taxon")

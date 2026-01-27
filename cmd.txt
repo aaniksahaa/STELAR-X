@@ -20,7 +20,7 @@ make
 
 make astral_int128
 
-ASTER/bin/astral4 -i all_gt_bs_rooted_200.tre -o out.tre -t 8
+ASTER/bin/astral4 -C -i all_gt_bs_rooted_200.tre -o out.tre -t 8
 
 ASTER/bin/astral4_int128 -i all_gt_bs_rooted_37.tre -o out-37.tre
 
@@ -30,7 +30,7 @@ ASTER/bin/astral4_int128 -i all_gt_bs_rooted_37.tre -o out-37.tre
 
 ./run-with-monitor.sh -i all_gt_bs_rooted_200.tre -o out-200.tre
 
-./run-aster-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out.tre -t 16
+./run-aster-with-monitor.sh -i all_gt_bs_rooted_200.tre -o out.tre -t 16 -C
 
 ./run-bulk-simulated.sh -m stelar
 
@@ -38,6 +38,27 @@ ASTER/bin/astral4_int128 -i all_gt_bs_rooted_37.tre -o out-37.tre
 
 # must have datasets at base-dir/phylo-datasets 
 ./run-bulk-standard.sh 
+
+
+Astral 10K:
+============
+
+python cleaner.py data/a10k/R1/estimatedgenetrees.tre data/a10k/R1/est-r.tre
+./run-with-monitor.sh -i data/a10k/R1/est-r.tre -o data/a10k/R1/stelar-est-out.tre
+
+python rf.py data/a10k/R1/stelar-est-out.tre data/a10k/R1/s_tree.trees
+
+python cleaner.py data/a10k/R1/estimatedgenetrees.tre data/a10k/R1/est-r-og-0.tre --outgroup "0"
+
+./run-with-monitor.sh -i data/a10k/R1/est-r-og-0.tre -o data/a10k/R1/stelar-est-og-0-out.tre
+
+python rf.py data/a10k/R1/stelar-est-og-0-out.tre data/a10k/R1/s_tree.trees
+
+
+in branch ext: 
+./run-with-monitor.sh data/a10k/R1/est-r-og-0.tre data/a10k/R1/stelar-est-og-0-out-mixed.tre
+
+python rf.py data/a10k/R1/stelar-est-og-0-out-mixed.tre data/a10k/R1/s_tree.trees
 
 
 Avian 363:
