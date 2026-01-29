@@ -62,6 +62,10 @@ ASTRAL_XMS=8g ASTRAL_XMX=64g ./baselines/ASTRAL/run_astral.sh -i all_gt_bs_roote
 
 ./run-a10k.sh -m stelar --data-dir /home/aaniksahaa/Desktop/a10k/10k-astral-dataset --tree-type estimated
 
+./run-a10k.sh -m stelar --data-dir /home/aaniksahaa/Desktop/a10k/10k-astral-dataset --tree-type estimated -sr 2 -er 2
+
+./run-a10k.sh -m astral --data-dir /home/aaniksahaa/Desktop/a10k/10k-astral-dataset --tree-type estimated -sr 2 -er 2
+
 
 ## A10K dataset runner (10k-astral-dataset layout)
 ./run-a10k.sh -m stelar --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated --stelar-opts "--threads 16"
@@ -76,6 +80,11 @@ ASTRAL_XMS=8g ASTRAL_XMX=64g ./baselines/ASTRAL/run_astral.sh -i all_gt_bs_roote
 ./run-a10k.sh -m stelar --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated --replicates "1-5" --stelar-opts "--threads 16"
 ./run-a10k.sh -m aster --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated --replicates "R1,R3,R5" --aster-opts "-t 32"
 ./run-a10k.sh -m astral --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type true --replicates "2-4" --astral-opts "-t 8" --astral-Xms 8g --astral-Xmx 64g
+
+## A10K runner with --start-rep/--end-rep (examples)
+./run-a10k.sh -m stelar --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated --start-rep 4 --end-rep 15 --stelar-opts "--threads 16"
+./run-a10k.sh -m aster --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated -sr 1 -er 20 --aster-opts "-t 32"
+./run-a10k.sh -m astral --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type true -sr 7 -er 9 --astral-opts "-t 8" --astral-Xms 8g --astral-Xmx 64g
 
 ## Simulated baseline tests with memory params
 ./test-stelar-simulated.sh -t 1000 -g 500 --stelar-opts "--xms 8g --xmx 64g"

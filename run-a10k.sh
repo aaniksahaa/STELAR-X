@@ -18,6 +18,8 @@ STELAR_ROOT_SET=false
 BASELINES_DIR=""
 BASELINES_DIR_SET=false
 REPLICATES_SPEC=""
+START_REP=""
+END_REP=""
 FRESH=false
 
 # Method options
@@ -49,6 +51,8 @@ Required:
 Optional:
   --tree-type          estimated | true (default: estimated)
   --replicates         Replicates to run (e.g., "1-20" or "R1,R2,R3"; default: all R* under 10k-simphy)
+  --start-rep, -sr     Start replicate number (1-20). Requires --end-rep.
+  --end-rep, -er       End replicate number (1-20). Requires --start-rep.
   --fresh              Force rerun even if stat file exists
   --base-dir, -b       Base dir (assumes STELAR-X at BASE_DIR/STELAR-X)
   --stelar-root        Path to STELAR-X root (overrides --base-dir)
@@ -80,6 +84,8 @@ while [[ $# -gt 0 ]]; do
     --tree-type) TREE_TYPE="$2"; shift 2 ;;
     --data-dir) DATA_DIR="$2"; shift 2 ;;
     --replicates) REPLICATES_SPEC="$2"; shift 2 ;;
+    --start-rep|-sr) START_REP="$2"; shift 2 ;;
+    --end-rep|-er) END_REP="$2"; shift 2 ;;
     --fresh) FRESH=true; shift ;;
     --base-dir|-b) BASE_DIR="$2"; BASE_DIR_SET=true; shift 2 ;;
     --stelar-root) STELAR_ROOT="$2"; STELAR_ROOT_SET=true; shift 2 ;;
@@ -132,6 +138,29 @@ if [[ "$TREE_TYPE" != "estimated" && "$TREE_TYPE" != "true" ]]; then
   exit 4
 fi
 
+if [[ -n "$START_REP" || -n "$END_REP" ]]; then
+  if [[ -z "$START_REP" || -z "$END_REP" ]]; then
+    echo "Error: --start-rep and --end-rep must be provided together."
+    exit 4
+  fi
+  if [[ -n "$REPLICATES_SPEC" ]]; then
+    echo "Error: --replicates cannot be combined with --start-rep/--end-rep."
+    exit 4
+  fi
+  if [[ ! "$START_REP" =~ ^[0-9]+$ || ! "$END_REP" =~ ^[0-9]+$ ]]; then
+    echo "Error: --start-rep and --end-rep must be integers."
+    exit 4
+  fi
+  if (( START_REP < 1 || END_REP < 1 || START_REP > 20 || END_REP > 20 )); then
+    echo "Error: replicate range must be within 1-20."
+    exit 4
+  fi
+  if (( START_REP > END_REP )); then
+    echo "Error: --start-rep cannot be greater than --end-rep."
+    exit 4
+  fi
+fi
+
 if [[ "$STELAR_ROOT_SET" = false ]]; then
   if [[ "$BASE_DIR_SET" = true ]]; then
     STELAR_ROOT="${BASE_DIR%/}/STELAR-X"
@@ -158,7 +187,12 @@ if [[ ! -d "$SIMPHY_DIR" ]]; then
   exit 5
 fi
 
-if [[ -n "$REPLICATES_SPEC" ]]; then
+if [[ -n "$START_REP" && -n "$END_REP" ]]; then
+  REPL_LIST=()
+  for i in $(seq "$START_REP" "$END_REP"); do
+    REPL_LIST+=("R${i}")
+  done
+elif [[ -n "$REPLICATES_SPEC" ]]; then
   REPL_LIST=()
   if [[ "$REPLICATES_SPEC" =~ ^[0-9]+-[0-9]+$ ]]; then
     start="${REPLICATES_SPEC%-*}"
@@ -181,7 +215,7 @@ else
   REPL_LIST=()
   while IFS= read -r -d '' d; do
     REPL_LIST+=("$(basename "$d")")
-  done < <(find "$SIMPHY_DIR" -maxdepth 1 -type d -name 'R*' -print0 | sort -z)
+  done < <(find "$SIMPHY_DIR" -maxdepth 1 -type d -name 'R*' -print0 | sort -z -V)
 fi
 
 if [[ ${#REPL_LIST[@]} -eq 0 ]]; then
@@ -190,6 +224,13 @@ if [[ ${#REPL_LIST[@]} -eq 0 ]]; then
 fi
 
 for REPL in "${REPL_LIST[@]}"; do
+  if [[ "$REPL" =~ ^R([0-9]+)$ ]]; then
+    rep_num="${BASH_REMATCH[1]}"
+    if (( rep_num > 20 )); then
+      echo "Error: replicate ${REPL} is out of range (max 20)."
+      exit 6
+    fi
+  fi
   REPL_DIR="${SIMPHY_DIR%/}/${REPL}"
   if [[ ! -d "$REPL_DIR" ]]; then
     echo "Skipping missing replicate dir: $REPL_DIR"
@@ -289,13 +330,49 @@ for REPL in "${REPL_LIST[@]}"; do
     continue
   fi
 
-  RUNNING_TIME=$(awk -F, 'NR==2{print $4}' "$STATS_FROM_BASELINE")
-  MAX_CPU_MB=$(awk -F, 'NR==2{print $5}' "$STATS_FROM_BASELINE")
-  MAX_GPU_MB=$(awk -F, 'NR==2{print $6}' "$STATS_FROM_BASELINE")
-  EXIT_CODE=$(awk -F, 'NR==2{print $7}' "$STATS_FROM_BASELINE")
+  HEADER_LINE="$(head -n1 "$STATS_FROM_BASELINE" || true)"
+  DATA_LINE="$(sed -n '2p' "$STATS_FROM_BASELINE" || true)"
 
+  csv_get_field() {
+    local file="$1"
+    shift
+    local header data
+    header="$(head -n1 "$file" || true)"
+    data="$(sed -n '2p' "$file" || true)"
+    if [[ -z "$header" || -z "$data" ]]; then
+      echo ""
+      return 0
+    fi
+    IFS=',' read -r -a headers <<< "$header"
+    IFS=',' read -r -a values <<< "$data"
+    for key in "$@"; do
+      for i in "${!headers[@]}"; do
+        if [[ "${headers[$i]}" == "$key" ]]; then
+          echo "${values[$i]:-}"
+          return 0
+        fi
+      done
+    done
+    echo ""
+  }
+
+  RUNNING_TIME="$(csv_get_field "$STATS_FROM_BASELINE" "running_time_s" "running-time-s")"
+  MAX_CPU_MB="$(csv_get_field "$STATS_FROM_BASELINE" "max_cpu_mb" "max-cpu-mb")"
+  MAX_GPU_MB="$(csv_get_field "$STATS_FROM_BASELINE" "max_gpu_mb" "max-gpu-mb")"
+  EXIT_CODE="$(csv_get_field "$STATS_FROM_BASELINE" "exit_code" "exit-code")"
+
+  if [[ -z "$EXIT_CODE" ]]; then
+    echo "Run failed for ${REPL}: could not read exit_code from stats. Skipping RF/stat."
+    echo "Stats file:  $STATS_FROM_BASELINE"
+    echo "Header line: ${HEADER_LINE:-<empty>}"
+    echo "Data line:   ${DATA_LINE:-<empty>}"
+    continue
+  fi
   if [[ "$EXIT_CODE" != "0" ]]; then
     echo "Run failed for ${REPL} (stats exit: ${EXIT_CODE}). Skipping RF/stat."
+    echo "Stats file:  $STATS_FROM_BASELINE"
+    echo "Header line: ${HEADER_LINE:-<empty>}"
+    echo "Data line:   ${DATA_LINE:-<empty>}"
     continue
   fi
 
@@ -308,12 +385,22 @@ for REPL in "${REPL_LIST[@]}"; do
     fi
   fi
 
-  echo "alg,replicate,tree_type,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb,exit-code" > "$STAT_FILE"
-  echo "${METHOD},${REPL},${TREE_TYPE},${RF_RATE},${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB},${EXIT_CODE}" >> "$STAT_FILE"
+  CSV_ROW="a10k,${METHOD},${REPL},${TREE_TYPE},${RF_RATE},${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB},${EXIT_CODE}"
+  echo "dataset,alg,replicate,tree_type,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb,exit-code" > "$STAT_FILE"
+  echo "$CSV_ROW" >> "$STAT_FILE"
   echo "Wrote stats to $STAT_FILE"
 
   if [[ "$NO_NOTIFY" != true && -n "$NTFY_CHANNEL_NAME" && -x "$(command -v curl)" ]]; then
-    NTFY_MSG="✅ ${METHOD} ${REPL} (${TREE_TYPE})\n\nRF: ${RF_RATE}\nTime: ${RUNNING_TIME}s\nCPU: ${MAX_CPU_MB} MB | GPU: ${MAX_GPU_MB} MB\n\n${STAT_FILE}"
+    NTFY_MSG="✅ ${METHOD} ${REPL} (${TREE_TYPE}) completed
+
+📊 Results:
+RF: ${RF_RATE} | Time: ${RUNNING_TIME}s
+CPU: ${MAX_CPU_MB} MB | GPU: ${MAX_GPU_MB} MB | Exit: ${EXIT_CODE}
+
+📁 ${STAT_FILE}
+
+📋 CSV Row:
+${CSV_ROW}"
     curl -s -d "$NTFY_MSG" "https://ntfy.sh/${NTFY_CHANNEL_NAME}" >/dev/null 2>&1 || true
   fi
 done
