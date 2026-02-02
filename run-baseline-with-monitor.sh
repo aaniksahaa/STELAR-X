@@ -50,7 +50,7 @@ Usage:
   \$0 -m <method> -i <input_file> -o <output_file> [options]
 
 Required:
-  -m, --method METHOD     Baseline method: aster, astral, treeqmc, wqfmtree, supertriplets, tmc
+  -m, --method METHOD     Baseline method: aster, astral, treeqmc, wqfmtree, supertriplets, stp-nni, tmc
   -i, --input FILE        Path to gene trees file
   -o, --output FILE       Path to output species tree file
 
@@ -133,7 +133,7 @@ fi
 
 # Normalize method name
 case "$METHOD" in
-  aster|astral|treeqmc|tree-qmc|wqfmtree|wqfm-tree|supertriplets|tmc) ;;
+  aster|astral|treeqmc|tree-qmc|wqfmtree|wqfm-tree|supertriplets|stp-nni|tmc) ;;
   *)
     echo -e "${RED}Error: Unknown method '$METHOD'.${NC}" >&2
     exit 3
@@ -376,6 +376,45 @@ case "$METHOD" in
     echo -e "${YELLOW}Command: $STELAR_ROOT/run_supertriplets.sh --script-dir $SUPERTRIPLETS_ROOT -i \"$INPUT_FILE\" -o \"$OUTPUT_FILE\" ${SUPERTRIPLETS_OPTS}${NC}"
     run_with_time "$STELAR_ROOT/run_supertriplets.sh" --script-dir "$SUPERTRIPLETS_ROOT" -i "$INPUT_FILE" -o "$OUTPUT_FILE" "${SUPERTRIPLETS_OPTS_ARR[@]}"
     BASELINE_EXIT_CODE=$?
+    ;;
+  stp-nni)
+    # stp-nni: Run SuperTriplets but use the NNI output (critNNI tree) instead of SNNI
+    SUPERTRIPLETS_ROOT="${BASELINES_DIR%/}/SuperTriplets"
+    if [[ ! -x "${STELAR_ROOT%/}/run_supertriplets.sh" ]]; then
+      echo -e "${RED}Error: run_supertriplets.sh not found in $STELAR_ROOT${NC}" >&2
+      exit 9
+    fi
+
+    SUPERTRIPLETS_OPTS_ARR=()
+    if [[ -n "$SUPERTRIPLETS_OPTS" ]]; then
+      # shellcheck disable=SC2206
+      SUPERTRIPLETS_OPTS_ARR=( $SUPERTRIPLETS_OPTS )
+    fi
+
+    # Run SuperTriplets with a temp output - the .nni file will be generated alongside it
+    TEMP_STP_OUTPUT=$(mktemp --suffix=.tre)
+
+    echo -e "${YELLOW}Running SuperTriplets (using NNI output)...${NC}"
+    echo -e "${YELLOW}Command: $STELAR_ROOT/run_supertriplets.sh --script-dir $SUPERTRIPLETS_ROOT -i \"$INPUT_FILE\" -o \"$TEMP_STP_OUTPUT\" ${SUPERTRIPLETS_OPTS}${NC}"
+    run_with_time "$STELAR_ROOT/run_supertriplets.sh" --script-dir "$SUPERTRIPLETS_ROOT" -i "$INPUT_FILE" -o "$TEMP_STP_OUTPUT" "${SUPERTRIPLETS_OPTS_ARR[@]}"
+    BASELINE_EXIT_CODE=$?
+
+    # Copy the NNI output to the actual output file
+    NNI_FILE="${TEMP_STP_OUTPUT}.nni"
+    if [[ -f "$NNI_FILE" ]]; then
+      cp "$NNI_FILE" "$OUTPUT_FILE"
+      echo -e "${GREEN}Copied NNI tree to $OUTPUT_FILE${NC}"
+    else
+      echo -e "${RED}Warning: NNI output file not found at $NNI_FILE${NC}" >&2
+      # Fall back to SNNI if NNI not available
+      if [[ -f "$TEMP_STP_OUTPUT" ]]; then
+        cp "$TEMP_STP_OUTPUT" "$OUTPUT_FILE"
+        echo -e "${YELLOW}Falling back to SNNI output${NC}"
+      fi
+    fi
+
+    # Cleanup temp files
+    rm -f "$TEMP_STP_OUTPUT" "$NNI_FILE" 2>/dev/null || true
     ;;
   tmc)
     TMC_ROOT="${BASELINES_DIR%/}/TMC"

@@ -52,7 +52,7 @@ print_help() {
 test-baseline-simulated.sh
 
 Required:
-  --method, -m      Method: aster, astral, treeqmc, wqfmtree, supertriplets, tmc
+  --method, -m      Method: aster, astral, treeqmc, wqfmtree, supertriplets, stp-nni, tmc
   --taxa_num, -t    Number of taxa (e.g. 1000)
   --gene_trees, -g  Number of gene trees (e.g. 500)
 
@@ -136,7 +136,7 @@ fi
 
 # Normalize method name
 case "$METHOD" in
-  aster|astral|treeqmc|tree-qmc|wqfmtree|wqfm-tree|supertriplets|tmc) ;;
+  aster|astral|treeqmc|tree-qmc|wqfmtree|wqfm-tree|supertriplets|stp-nni|tmc) ;;
   *)
     echo "Error: unknown method '$METHOD'"
     exit 3

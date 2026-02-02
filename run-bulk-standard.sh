@@ -23,8 +23,8 @@ TMC_ROOT=""                           # TMC baseline; derived from STELAR_X_ROOT
 FRESH=false
 
 # Algorithm configuration
-# Available: stelar, aster, astral, treeqmc, wqfmtree, supertriplets, tmc
-ALGORITHMS=("stelar" "aster" "astral" "treeqmc" "wqfmtree" "supertriplets" "tmc")
+# Available: stelar, aster, astral, treeqmc, wqfmtree, supertriplets, stp-nni, tmc
+ALGORITHMS=("stelar" "aster" "astral" "treeqmc" "wqfmtree" "supertriplets" "stp-nni" "tmc")
 # ALGORITHMS=("stelar")
 ALGORITHMS=("aster")
 # ALGORITHMS=("astral")
@@ -219,6 +219,17 @@ validate_algorithm_binaries() {
         fi
     fi
     
+    # Check if stp-nni is in algorithms array (same requirements as supertriplets)
+    if [[ " ${ALGORITHMS[*]} " =~ " stp-nni " ]]; then
+        if [ ! -d "$SUPERTRIPLETS_ROOT" ]; then
+            echo -e "${RED}Error: SUPERTRIPLETS_ROOT '$SUPERTRIPLETS_ROOT' does not exist.${NC}"
+            errors_found=true
+        elif [ ! -f "${SUPERTRIPLETS_ROOT}/SuperTriplets_v1.1.jar" ]; then
+            echo -e "${RED}Error: SuperTriplets JAR not found in SUPERTRIPLETS_ROOT.${NC}"
+            errors_found=true
+        fi
+    fi
+    
     # Check if tmc is in algorithms array
     if [[ " ${ALGORITHMS[*]} " =~ " tmc " ]]; then
         if [ ! -d "$TMC_ROOT" ]; then
@@ -323,6 +334,27 @@ run_algorithm_and_write_stats() {
           mkdir -p "$(dirname "$OUT_FILE")"
           # Use the wrapper script with --script-dir pointing to baselines/SuperTriplets
           /usr/bin/time -v ./run_supertriplets.sh --script-dir "$SUPERTRIPLETS_ROOT" -i "$ALL_GT_FILE" -o "$OUT_FILE" $SUPERTRIPLETS_OPTS
+          ;;
+        "stp-nni")
+          cd "$STELAR_X_ROOT"
+          # Ensure output directory exists
+          mkdir -p "$(dirname "$OUT_FILE")"
+          # stp-nni: Run SuperTriplets but use the NNI output (critNNI tree) instead of SNNI
+          # Run with a temp output, then copy the .nni file
+          TEMP_STP_OUTPUT=$(mktemp --suffix=.tre)
+          /usr/bin/time -v ./run_supertriplets.sh --script-dir "$SUPERTRIPLETS_ROOT" -i "$ALL_GT_FILE" -o "$TEMP_STP_OUTPUT" $SUPERTRIPLETS_OPTS
+          # Copy the NNI output to the actual output file
+          NNI_FILE="${TEMP_STP_OUTPUT}.nni"
+          if [[ -f "$NNI_FILE" ]]; then
+            cp "$NNI_FILE" "$OUT_FILE"
+            echo "Copied NNI tree to $OUT_FILE"
+          else
+            echo "Warning: NNI output file not found, falling back to SNNI"
+            if [[ -f "$TEMP_STP_OUTPUT" ]]; then
+              cp "$TEMP_STP_OUTPUT" "$OUT_FILE"
+            fi
+          fi
+          rm -f "$TEMP_STP_OUTPUT" "$NNI_FILE" 2>/dev/null || true
           ;;
         "tmc")
           cd "$STELAR_X_ROOT"
@@ -628,4 +660,4 @@ done
 
 echo -e "${GREEN}Dataset processing complete!${NC}"
 echo "Check output directories for 'output-<alg>.tre' and 'stat-<alg>.csv' files."
-echo "Output directories: stelar_outputs, aster_outputs, astral_outputs, treeqmc_outputs, wqfmtree_outputs, supertriplets_outputs, tmc_outputs"
+echo "Output directories: stelar_outputs, aster_outputs, astral_outputs, treeqmc_outputs, wqfmtree_outputs, supertriplets_outputs, stp-nni_outputs, tmc_outputs"

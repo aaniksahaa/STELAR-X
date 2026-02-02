@@ -37,7 +37,7 @@ run-bulk-simulated.sh
 Runs sim.sh and test-stelar-simulated.sh or test-baseline-simulated.sh for all combinations of parameter lists.
 
 Options:
-  --method, -m      Method to use: stelar, aster, astral, treeqmc, wqfmtree, supertriplets, tmc (default: stelar)
+  --method, -m      Method to use: stelar, aster, astral, treeqmc, wqfmtree, supertriplets, stp-nni, tmc (default: stelar)
   --base-dir, -b    Base directory (optional, passed to sub-scripts if provided)
   --num-replicates, -n  Number of replicates to run (default: 1)
   --fresh           Pass --fresh to sim.sh and test scripts (recreate outputs)
@@ -90,9 +90,9 @@ done
 
 # Validate method
 case "$METHOD" in
-  stelar|aster|astral|treeqmc|tree-qmc|wqfmtree|wqfm-tree|supertriplets|tmc) ;;
+  stelar|aster|astral|treeqmc|tree-qmc|wqfmtree|wqfm-tree|supertriplets|stp-nni|tmc) ;;
   *)
-  echo "Error: --method must be one of: stelar, aster, astral, treeqmc, wqfmtree, supertriplets, tmc. Got: $METHOD"
+  echo "Error: --method must be one of: stelar, aster, astral, treeqmc, wqfmtree, supertriplets, stp-nni, tmc. Got: $METHOD"
   exit 1
   ;;
 esac
@@ -131,11 +131,11 @@ SB_LIST=(0.000001)
 SPMIN_LIST=(100000)
 SPMAX_LIST=(200000)
 
-T_LIST=(10)
-G_LIST=(10)
-SB_LIST=(0.000001)
-SPMIN_LIST=(100000)
-SPMAX_LIST=(200000)
+# T_LIST=(10)
+# G_LIST=(10)
+# SB_LIST=(0.000001)
+# SPMIN_LIST=(100000)
+# SPMAX_LIST=(200000)
 
 T_LIST=(100 200 500)
 G_LIST=(1000)

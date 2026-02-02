@@ -50,16 +50,28 @@ fi
 
 # Temp file for SuperTriplets output
 TEMP_OUTPUT=$(mktemp)
+TEMP_STDOUT=$(mktemp)
 
-# Run SuperTriplets
+# Run SuperTriplets and capture stdout
 echo "Running SuperTriplets..."
-java -jar -Xmx16g "$JAR_FILE" "$INPUT" "$TEMP_OUTPUT"
+java -jar -Xmx16g "$JAR_FILE" "$INPUT" "$TEMP_OUTPUT" | tee "$TEMP_STDOUT"
 
-# Clean the tree
-echo "Cleaning tree..."
+# Extract the NNI tree (critNNI line) and save to .nni file
+NNI_OUTPUT="${OUTPUT}.nni"
+NNI_TREE=$(grep "^critNNI@" "$TEMP_STDOUT" | sed 's/^critNNI@[^@]*@//')
+if [[ -n "$NNI_TREE" ]]; then
+    echo "$NNI_TREE" > "$TEMP_OUTPUT.nni"
+    echo "Cleaning NNI tree..."
+    python "$PY_FILE" "$TEMP_OUTPUT.nni" "$NNI_OUTPUT" $BRANCH_SUPPORT
+    rm -f "$TEMP_OUTPUT.nni"
+    echo "NNI tree saved to: $NNI_OUTPUT"
+fi
+
+# Clean the tree (SNNI tree from output file)
+echo "Cleaning SNNI tree..."
 python "$PY_FILE" "$TEMP_OUTPUT" "$OUTPUT" $BRANCH_SUPPORT
 
-# Remove temp file
-rm -f "$TEMP_OUTPUT"
+# Remove temp files
+rm -f "$TEMP_OUTPUT" "$TEMP_STDOUT"
 
 echo "Done: $OUTPUT"
