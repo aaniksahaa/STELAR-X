@@ -9,6 +9,7 @@ import com.sun.jna.Memory;
 import preprocessing.GeneTrees;
 import tree.*;
 import utils.Config;
+import utils.Config.ScoringMode;
 import utils.Threading;
 import core.WeightCalculator.WeightCalcLib;
 
@@ -23,6 +24,10 @@ import core.WeightCalculator.WeightCalcLib;
  * Memory usage: O(nk) instead of O(n²k) compared to traditional BitSet approach.
  * 
  * Supports all computation modes: CPU_SINGLE, CPU_PARALLEL, GPU_PARALLEL
+ * 
+ * Supports two scoring modes:
+ * - TRIPLET: STELAR-X style triplet matching score (default)
+ * - QUARTET: ASTRAL-style quartet matching score
  */
 public class MemoryOptimizedWeightCalculator {
     
@@ -31,6 +36,10 @@ public class MemoryOptimizedWeightCalculator {
     private final MemoryEfficientBipartitionManager bipartitionManager;
     private final Map<Object, List<RangeBipartition>> hashToBipartitions;
     
+    // For quartet scoring (ASTRAL-style)
+    private MissingTaxaManager missingTaxaManager;
+    private QuartetScoreCalculator quartetCalculator;
+    
     // Statistics for performance monitoring
     private long totalScoreCalculations = 0;
     private long totalIntersectionCalculations = 0;
@@ -38,6 +47,7 @@ public class MemoryOptimizedWeightCalculator {
     
     public MemoryOptimizedWeightCalculator(GeneTrees geneTrees) {
         System.out.println("==== INITIALIZING MEMORY-OPTIMIZED WEIGHT CALCULATOR ====");
+        System.out.println("Scoring mode: " + Config.SCORING_MODE);
         
         this.geneTrees = geneTrees;
         
@@ -54,7 +64,17 @@ public class MemoryOptimizedWeightCalculator {
         
         this.hashToBipartitions = bipartitionManager.getHashToBipartitions();
         
-        System.out.println("Memory-optimized weight calculator initialized");
+        // Initialize quartet scoring components if in QUARTET mode
+        if (Config.SCORING_MODE == ScoringMode.QUARTET) {
+            System.out.println("\nInitializing quartet scoring components (ASTRAL-style)...");
+            this.missingTaxaManager = new MissingTaxaManager(
+                geneTrees.geneTrees, geneTrees.realTaxaCount);
+            this.quartetCalculator = new QuartetScoreCalculator(
+                inverseIndexManager, missingTaxaManager, geneTrees.realTaxaCount);
+            System.out.println("Quartet scoring ready: F(a,b,c) = a*b*c*(a+b+c-3)/2");
+        }
+        
+        System.out.println("\nMemory-optimized weight calculator initialized");
         System.out.println("Range bipartition groups: " + hashToBipartitions.size());
         System.out.println("Total range bipartitions: " + 
                          hashToBipartitions.values().stream().mapToInt(List::size).sum());
@@ -66,9 +86,19 @@ public class MemoryOptimizedWeightCalculator {
      */
     public Map<RangeBipartition, Double> calculateWeights(List<RangeBipartition> candidates) {
         System.out.println("==== MEMORY-OPTIMIZED WEIGHT CALCULATION STARTED ====");
+        System.out.println("Scoring mode: " + Config.SCORING_MODE);
         System.out.println("Computation mode: " + Config.COMPUTATION_MODE);
         System.out.println("Number of candidates: " + candidates.size());
         System.out.println("Gene tree bipartition groups: " + hashToBipartitions.size());
+        
+        if (Config.SCORING_MODE == ScoringMode.QUARTET) {
+            System.out.println("Using ASTRAL-style quartet scoring: F(a,b,c) = a*b*c*(a+b+c-3)/2");
+            System.out.println("  - Tripartition comparison: (A|B|C) vs (X|Y|Z)");
+            System.out.println("  - Optimized: 4 intersections + row/column derivation");
+        } else {
+            System.out.println("Using STELAR-X triplet scoring: score = p1*p2*(p1+p2-2)/2");
+            System.out.println("  - Bipartition comparison: (A|B) vs (X|Y)");
+        }
         
         long startTime = System.currentTimeMillis();
         
@@ -213,9 +243,17 @@ public class MemoryOptimizedWeightCalculator {
      * - InverseIndexManager automatically handles -1 sentinel values
      * - Only counts intersections for taxa present in both trees
      * 
-     * Implements the same scoring formula as original calculateScore method.
+     * Supports two scoring modes:
+     * - TRIPLET: Original STELAR-X triplet matching score
+     * - QUARTET: ASTRAL-style quartet matching score with 3x3 grid
      */
     private double calculateRangeScore(RangeBipartition range1, RangeBipartition range2) {
+        if (Config.SCORING_MODE == ScoringMode.QUARTET) {
+            // ASTRAL-style quartet scoring
+            return quartetCalculator.calculateQuartetScore(range1, range2);
+        }
+        
+        // Original STELAR-X triplet scoring
         // Calculate four intersection sizes: AA, AB, BA, BB
         // InverseIndexManager handles sentinel values automatically
         int aa = inverseIndexManager.getRangeIntersectionSize(
@@ -283,11 +321,19 @@ public class MemoryOptimizedWeightCalculator {
      * Same intersection logic as calculateRangeScore, but uses separate tree indices
      * for left and right sides of the mixed bipartition.
      * 
+     * Supports both TRIPLET and QUARTET scoring modes.
+     * 
      * @param mixed The mixed bipartition (sides may be from different trees)
      * @param geneTree The gene tree bipartition
      * @return The score contribution
      */
     private double calculateMixedScore(MixedBipartition mixed, RangeBipartition geneTree) {
+        if (Config.SCORING_MODE == ScoringMode.QUARTET) {
+            // ASTRAL-style quartet scoring for mixed bipartitions
+            return quartetCalculator.calculateQuartetScore(mixed, geneTree);
+        }
+        
+        // Original STELAR-X triplet scoring
         // Calculate four intersection sizes: AA, AB, BA, BB
         // Key difference: use leftTreeIndex for left side, rightTreeIndex for right side
         int aa = inverseIndexManager.getRangeIntersectionSize(
@@ -653,6 +699,7 @@ public class MemoryOptimizedWeightCalculator {
     /**
      * Pure range-based GPU calculation using compact bipartitions.
      * This completely eliminates BitSet usage and uses the compact GPU kernel.
+     * Supports both TRIPLET (STELAR-X) and QUARTET (ASTRAL) scoring modes.
      */
     private Map<RangeBipartition, Double> calculateWeightsHybridGPU(
             List<RangeBipartition> candidates,
@@ -660,6 +707,7 @@ public class MemoryOptimizedWeightCalculator {
             List<Integer> frequencies) {
         
         System.out.println("==== STARTING PURE RANGE-BASED GPU CALCULATION ====");
+        System.out.println("Scoring mode: " + Config.SCORING_MODE);
         System.out.println("Range candidates: " + candidates.size());
         System.out.println("Compact gene tree ranges: " + geneTreeRanges.size());
         
@@ -713,26 +761,61 @@ public class MemoryOptimizedWeightCalculator {
             Memory inverseIndexMemory = flattenInverseIndex();
             Memory orderingMemory = flattenOrderings();
             
-            // Launch compact GPU kernel
-            System.out.println("Launching pure range-based GPU kernel with inverse index arrays...");
-            System.out.println("IMPORTANT: GPU kernel must handle -1 sentinel values in inverse index");
-            System.out.println("  - inverseIndex[tree][taxon] == -1 means taxon not present in tree");
-            System.out.println("  - Only count intersections for taxa present in both trees");
-            
-            WeightCalcLib.INSTANCE.launchCompactWeightCalculation(
-                candidateArray,
-                geneTreeArray,
-                frequencyArray,
-                weights,
-                inverseIndexMemory,
-                orderingMemory,
-                numCandidates,
-                numGeneTreeBips,
-                numTrees,
-                numTaxa
-            );
-            
-            System.out.println("==== PURE RANGE-BASED GPU KERNEL COMPLETED ====");
+            // Choose kernel based on scoring mode
+            if (Config.SCORING_MODE == ScoringMode.QUARTET) {
+                // QUARTET mode: use ASTRAL-style quartet scoring kernel
+                System.out.println("Launching QUARTET scoring GPU kernel (ASTRAL-style)...");
+                System.out.println("  - Tripartition comparison: (A|B|C) vs (X|Y|Z)");
+                System.out.println("  - F(a,b,c) = a*b*c*(a+b+c-3)/2 scoring formula");
+                
+                // Prepare missing taxa data for GPU
+                Memory presentCountMemory = flattenPresentCounts();
+                Memory missingTaxaFlatMemory = flattenMissingTaxa();
+                Memory missingOffsetsMemory = flattenMissingOffsets();
+                Memory missingCountsMemory = flattenMissingCounts();
+                int totalMissingTaxa = getTotalMissingTaxaCount();
+                
+                WeightCalcLib.INSTANCE.launchQuartetWeightCalculation(
+                    candidateArray,
+                    geneTreeArray,
+                    frequencyArray,
+                    weights,
+                    inverseIndexMemory,
+                    orderingMemory,
+                    presentCountMemory,
+                    missingTaxaFlatMemory,
+                    missingOffsetsMemory,
+                    missingCountsMemory,
+                    numCandidates,
+                    numGeneTreeBips,
+                    numTrees,
+                    numTaxa,
+                    totalMissingTaxa
+                );
+                
+                System.out.println("==== QUARTET GPU KERNEL COMPLETED ====");
+            } else {
+                // TRIPLET mode (default): use STELAR-X triplet scoring kernel
+                System.out.println("Launching TRIPLET scoring GPU kernel (STELAR-X style)...");
+                System.out.println("IMPORTANT: GPU kernel must handle -1 sentinel values in inverse index");
+                System.out.println("  - inverseIndex[tree][taxon] == -1 means taxon not present in tree");
+                System.out.println("  - Only count intersections for taxa present in both trees");
+                
+                WeightCalcLib.INSTANCE.launchCompactWeightCalculation(
+                    candidateArray,
+                    geneTreeArray,
+                    frequencyArray,
+                    weights,
+                    inverseIndexMemory,
+                    orderingMemory,
+                    numCandidates,
+                    numGeneTreeBips,
+                    numTrees,
+                    numTaxa
+                );
+                
+                System.out.println("==== TRIPLET GPU KERNEL COMPLETED ====");
+            }
             
             // Convert results back to Java Map
             Map<RangeBipartition, Double> result = new HashMap<>();
@@ -748,6 +831,119 @@ public class MemoryOptimizedWeightCalculator {
             System.out.println("Falling back to CPU calculation...");
             return calculateWeightsMultiThread(candidates);
         }
+    }
+    
+    // ============================================================================
+    // GPU Memory Flattening Helpers for Quartet Scoring
+    // ============================================================================
+    
+    /**
+     * Flatten present counts (|Sg| for each tree) for GPU transfer.
+     */
+    @SuppressWarnings("resource")
+    private Memory flattenPresentCounts() {
+        if (missingTaxaManager == null) {
+            throw new IllegalStateException("MissingTaxaManager not initialized - quartet mode requires it");
+        }
+        
+        int numTrees = inverseIndexManager.getNumTrees();
+        Memory memory = new Memory((long) numTrees * 4); // 4 bytes per int
+        
+        for (int tree = 0; tree < numTrees; tree++) {
+            memory.setInt((long) tree * 4, missingTaxaManager.getPresentCount(tree));
+        }
+        
+        return memory;
+    }
+    
+    /**
+     * Flatten missing taxa lists into a single contiguous array for GPU transfer.
+     * Format: [tree0_missing_taxa..., tree1_missing_taxa..., ...]
+     */
+    @SuppressWarnings("resource")
+    private Memory flattenMissingTaxa() {
+        if (missingTaxaManager == null) {
+            throw new IllegalStateException("MissingTaxaManager not initialized - quartet mode requires it");
+        }
+        
+        int numTrees = inverseIndexManager.getNumTrees();
+        int totalMissing = getTotalMissingTaxaCount();
+        
+        // Handle edge case: no missing taxa (all trees have all taxa)
+        if (totalMissing == 0) {
+            Memory memory = new Memory(4); // Allocate minimal memory
+            memory.setInt(0, -1); // Sentinel value
+            return memory;
+        }
+        
+        Memory memory = new Memory((long) totalMissing * 4); // 4 bytes per int
+        
+        int offset = 0;
+        for (int tree = 0; tree < numTrees; tree++) {
+            int[] missing = missingTaxaManager.getMissingTaxa(tree);
+            for (int taxon : missing) {
+                memory.setInt((long) offset * 4, taxon);
+                offset++;
+            }
+        }
+        
+        return memory;
+    }
+    
+    /**
+     * Flatten missing taxa offsets (start index in flat array for each tree).
+     */
+    @SuppressWarnings("resource")
+    private Memory flattenMissingOffsets() {
+        if (missingTaxaManager == null) {
+            throw new IllegalStateException("MissingTaxaManager not initialized - quartet mode requires it");
+        }
+        
+        int numTrees = inverseIndexManager.getNumTrees();
+        Memory memory = new Memory((long) numTrees * 4); // 4 bytes per int
+        
+        int offset = 0;
+        for (int tree = 0; tree < numTrees; tree++) {
+            memory.setInt((long) tree * 4, offset);
+            offset += missingTaxaManager.getMissingCount(tree);
+        }
+        
+        return memory;
+    }
+    
+    /**
+     * Flatten missing taxa counts (number of missing taxa per tree).
+     */
+    @SuppressWarnings("resource")
+    private Memory flattenMissingCounts() {
+        if (missingTaxaManager == null) {
+            throw new IllegalStateException("MissingTaxaManager not initialized - quartet mode requires it");
+        }
+        
+        int numTrees = inverseIndexManager.getNumTrees();
+        Memory memory = new Memory((long) numTrees * 4); // 4 bytes per int
+        
+        for (int tree = 0; tree < numTrees; tree++) {
+            memory.setInt((long) tree * 4, missingTaxaManager.getMissingCount(tree));
+        }
+        
+        return memory;
+    }
+    
+    /**
+     * Get total count of missing taxa across all trees.
+     */
+    private int getTotalMissingTaxaCount() {
+        if (missingTaxaManager == null) {
+            return 0;
+        }
+        
+        int total = 0;
+        int numTrees = inverseIndexManager.getNumTrees();
+        for (int tree = 0; tree < numTrees; tree++) {
+            total += missingTaxaManager.getMissingCount(tree);
+        }
+        return total;
     }
     
     

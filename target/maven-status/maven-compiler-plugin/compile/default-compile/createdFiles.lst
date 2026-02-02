@@ -7,6 +7,7 @@ core/MemoryOptimizedInferenceDP.class
 tree/TreeNode.class
 utils/BipartitionExpansionConfig$ExpansionMethod.class
 tree/Tree.class
+core/MissingTaxaManager.class
 tree/TreePrinter.class
 core/WeightCalculator.class
 tree/RangeBipartition$XORHashFunction.class
@@ -16,6 +17,7 @@ core/ClusterHashManager$ClusterRange.class
 utils/Threading.class
 utils/BipartitionExpansionConfig.class
 tree/SideClusterHash.class
+utils/Config$ScoringMode.class
 core/WeightCalculator$WeightCalcLib$CompactBipartition.class
 core/CandidateExtender.class
 core/PosteriorCalculator.class
@@ -39,6 +41,7 @@ tree/RangeBipartition.class
 CompareTrees.class
 core/QuartetFrequencyCounter$Quadripartition.class
 core/BranchSupportCalculator$BranchAnnotationType.class
+core/QuartetScoreCalculator.class
 utils/Config$ComputationMode.class
 utils/Config.class
 tree/RangeBipartition$HashFunction.class

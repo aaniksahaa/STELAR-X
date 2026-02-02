@@ -135,3 +135,104 @@ python cleaner.py data/63430.gene.trees data/63k-r-og-strcam.tre --outgroup "Str
 ./run-with-monitor.sh -i data/63k-r-rand.tre -o data/sp-63k-r-rand.tre
 
 ./run-with-monitor.sh -i data/63k-r-og-strcam.tre -o data/sp-63k-r-og-strcam.tre
+
+
+################################################################################
+#                     QUARTET SCORING (ASTRAL-style)                            #
+################################################################################
+#
+# STELAR-X now supports two scoring modes:
+#   --triplet    STELAR-X style triplet matching score (DEFAULT)
+#   --quartet    ASTRAL-style quartet matching score using F(a,b,c) formula
+#
+# The --quartet flag can be passed directly to run.sh or via run-with-monitor.sh
+# using the standard argument pass-through mechanism.
+#
+
+# ============================================================================
+# Using run.sh directly:
+# ============================================================================
+
+# Triplet scoring (default - no flag needed, or explicitly use --triplet)
+./run.sh -i all_gt_bs_rooted_37.tre -o out-37-triplet.tre
+./run.sh -i all_gt_bs_rooted_37.tre -o out-37-triplet.tre --triplet
+
+# Quartet scoring (ASTRAL-style)
+./run.sh -i all_gt_bs_rooted_37.tre -o out-37-quartet.tre --quartet
+
+# Quartet with GPU mode
+./run.sh -i all_gt_bs_rooted_37.tre -o out-37-quartet.tre --quartet --gpu
+
+# Quartet with CPU parallel
+./run.sh -i all_gt_bs_rooted_37.tre -o out-37-quartet.tre --quartet --cpu-parallel
+
+# ============================================================================
+# Using run-with-monitor.sh (passes args through to run.sh automatically):
+# ============================================================================
+
+# Triplet scoring (default)
+./run-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out-37-triplet.tre
+
+# Quartet scoring - just add --quartet flag (NOW WORKS DIRECTLY!)
+./run-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out-37-quartet.tre --quartet
+
+# Quartet scoring with GPU mode
+./run-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out-37-quartet.tre --quartet --gpu
+
+# Quartet scoring with expansion (mixed bipartitions)
+./run-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out-37-quartet.tre --quartet --expansion
+
+# Quartet scoring with CPU parallel and verbose
+./run-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out-37-quartet.tre --quartet --cpu-parallel -v
+
+# Alternative: use --stelar-opts for more complex options
+./run-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out-37-quartet.tre --stelar-opts "--quartet --expansion"
+
+# ============================================================================
+# Score calculation mode (comparing species tree to gene trees):
+# ============================================================================
+
+# Triplet score for existing species tree
+java -jar target/stelar-x-1.0.0-SNAPSHOT.jar -i all_gt_bs_rooted_37.tre -c out-37.tre --triplet --cpu
+
+# Quartet score for existing species tree (ASTRAL-style)
+java -jar target/stelar-x-1.0.0-SNAPSHOT.jar -i all_gt_bs_rooted_37.tre -c out-37.tre --quartet --cpu
+
+# Alternative syntax using --scoring flag
+java -jar target/stelar-x-1.0.0-SNAPSHOT.jar -i all_gt_bs_rooted_37.tre -c out-37.tre --scoring QUARTET --cpu
+java -jar target/stelar-x-1.0.0-SNAPSHOT.jar -i all_gt_bs_rooted_37.tre -c out-37.tre --scoring TRIPLET --cpu
+
+# ============================================================================
+# Bulk runs with quartet scoring (A10K dataset):
+# ============================================================================
+
+# Using --stelar-opts to pass quartet flag
+./run-a10k.sh -m stelar --data-dir /path/to/10k-astral-dataset --tree-type estimated --stelar-opts "--quartet"
+./run-a10k.sh -m stelar --data-dir /path/to/10k-astral-dataset --tree-type estimated --stelar-opts "--quartet --gpu"
+
+# ============================================================================
+# Expected output labels:
+# ============================================================================
+#
+# With --triplet (default):
+#   TRIPLET_SCORE: <value>
+#   NORMALIZED_TRIPLET_SCORE: <value>
+#
+# With --quartet:
+#   QUARTET_SCORE: <value>
+#   NORMALIZED_QUARTET_SCORE: <value>
+#
+# ============================================================================
+# Technical details:
+# ============================================================================
+#
+# TRIPLET scoring formula (STELAR-X):
+#   score = p1 * p2 * (p1 + p2 - 2) / 2
+#   where p1, p2 are intersection sizes
+#
+# QUARTET scoring formula (ASTRAL):
+#   F(a,b,c) = a * b * c * (a + b + c - 3) / 2
+#   Uses 3x3 intersection grid with 6-term QI computation
+#   Optimized: only 4 intersections computed, rest derived from row/column sums
+#
+################################################################################

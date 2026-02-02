@@ -7,10 +7,12 @@
 /home/aaniksahaa/research/STELAR-X/src/tree/SideCluster.java
 /home/aaniksahaa/research/STELAR-X/src/tree/MemoryEfficientBipartitionManager.java
 /home/aaniksahaa/research/STELAR-X/src/taxon/Taxon.java
+/home/aaniksahaa/research/STELAR-X/src/core/MissingTaxaManager.java
 /home/aaniksahaa/research/STELAR-X/src/tree/TreeNode.java
 /home/aaniksahaa/research/STELAR-X/src/tree/MixedBipartition.java
 /home/aaniksahaa/research/STELAR-X/src/tree/ConsoleColors.java
 /home/aaniksahaa/research/STELAR-X/src/core/InferenceDP.java
+/home/aaniksahaa/research/STELAR-X/src/core/QuartetScoreCalculator.java
 /home/aaniksahaa/research/STELAR-X/src/utils/Helper.java
 /home/aaniksahaa/research/STELAR-X/src/core/PosteriorCalculator.java
 /home/aaniksahaa/research/STELAR-X/src/core/MemoryOptimizedInferenceDP.java

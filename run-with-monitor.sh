@@ -64,8 +64,8 @@ while [[ $# -gt 0 ]]; do
     --no-notify|-nn) NO_NOTIFY=true; shift ;;
     --debug) DEBUG=1; shift ;;
     --help|-h) print_help; exit 0 ;;
-    --cpu|--cpu-parallel|--gpu|--gpu-parallel|--expansion|-e) STELAR_ARGS+=("$1"); shift ;;
-    -m|--mode|-s|--support|--branch-support|--lambda)
+    --cpu|--cpu-parallel|--gpu|--gpu-parallel|--expansion|-e|--triplet|--quartet) STELAR_ARGS+=("$1"); shift ;;
+    -m|--mode|-s|--support|--branch-support|--lambda|--scoring)
       STELAR_ARGS+=("$1" "$2"); shift 2 ;;
     -v|--verbose) STELAR_ARGS+=("$1"); shift ;;
     --) shift; STELAR_ARGS+=("$@"); break ;;

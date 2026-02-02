@@ -11,12 +11,17 @@ import tree.RangeBipartition;
 import tree.Tree;
 import tree.TreeNode;
 import utils.Config;
+import utils.Config.ScoringMode;
 import utils.Threading;
 import core.WeightCalculator.WeightCalcLib;
 import core.WeightCalculator.WeightCalcLib.CompactBipartition;
 
 /**
- * Efficient triplet score calculator for species tree vs gene trees.
+ * Efficient score calculator for species tree vs gene trees.
+ * 
+ * Supports two scoring modes:
+ * - TRIPLET: STELAR-X style triplet matching score (default)
+ * - QUARTET: ASTRAL-style quartet matching score using F(a,b,c) = a*b*c*(a+b+c-3)/2
  * 
  * Uses the same range-based bipartition representation as gene trees.
  * The species tree is treated as an additional tree in the inverse index,
@@ -39,10 +44,19 @@ public class SpeciesTreeScorer {
     // Species tree bipartitions as RangeBipartitions
     private List<RangeBipartition> speciesBipartitions;
     
+    // Missing taxa manager for quartet scoring
+    private MissingTaxaManager missingTaxaManager;
+    
     public SpeciesTreeScorer(GeneTrees geneTrees) {
         this.geneTrees = geneTrees;
         this.numGeneTrees = geneTrees.geneTrees.size();
         this.numTaxa = geneTrees.realTaxaCount;
+        
+        // Initialize missing taxa manager for quartet scoring if needed
+        if (Config.SCORING_MODE == ScoringMode.QUARTET) {
+            System.out.println("Initializing quartet scoring for species tree scorer...");
+            this.missingTaxaManager = new MissingTaxaManager(geneTrees.geneTrees, numTaxa);
+        }
     }
     
     /**
@@ -439,9 +453,20 @@ public class SpeciesTreeScorer {
     
     /**
      * Calculate score between two RangeBipartitions using inverse index.
-     * Same formula as MemoryOptimizedWeightCalculator.
+     * Supports both TRIPLET and QUARTET scoring modes.
      */
     private double calculateRangeScore(RangeBipartition bip1, RangeBipartition bip2) {
+        if (Config.SCORING_MODE == ScoringMode.QUARTET) {
+            return calculateQuartetScore(bip1, bip2);
+        } else {
+            return calculateTripletScore(bip1, bip2);
+        }
+    }
+    
+    /**
+     * Calculate triplet score (STELAR-X style).
+     */
+    private double calculateTripletScore(RangeBipartition bip1, RangeBipartition bip2) {
         // Calculate four intersection sizes
         int aa = getRangeIntersectionSize(
             bip1.geneTreeIndex, bip1.leftStart, bip1.leftEnd,
@@ -471,6 +496,98 @@ public class SpeciesTreeScorer {
         }
         
         return score1 + score2;
+    }
+    
+    /**
+     * Calculate quartet score (ASTRAL style).
+     * 
+     * For tripartition T = (A|B|C) from species tree vs gene tree node partition M = (X|Y|Z):
+     * 1. Compute 3x3 intersection grid n[i][j] = |side_i of T ∩ side_j of M|
+     * 2. F(a,b,c) = a * b * c * (a + b + c - 3) / 2
+     * 3. QI(T,M) = sum of 6 F terms
+     * 
+     * Species tree bipartition (A|B) has C = S - A - B (all taxa).
+     * Gene tree bipartition (X|Y) has Z = Sg - X - Y (restricted to gene tree's taxa).
+     */
+    private double calculateQuartetScore(RangeBipartition speciesBip, RangeBipartition geneBip) {
+        int geneTreeIdx = geneBip.geneTreeIndex;
+        int sgSize = missingTaxaManager.getPresentCount(geneTreeIdx);
+        
+        // Gene tree bipartition side sizes
+        int xSize = geneBip.leftSize();
+        int ySize = geneBip.rightSize();
+        int zSize = Math.max(0, sgSize - xSize - ySize);
+        
+        // Species bipartition side sizes restricted to Sg
+        // For species tree, we use the full size but need restricted versions
+        int aSize = speciesBip.leftSize();
+        int bSize = speciesBip.rightSize();
+        
+        // Count missing taxa from each side of species tree that are not in gene tree
+        int aMissing = countMissingInRange(speciesBip.geneTreeIndex, speciesBip.leftStart, speciesBip.leftEnd, geneTreeIdx);
+        int bMissing = countMissingInRange(speciesBip.geneTreeIndex, speciesBip.rightStart, speciesBip.rightEnd, geneTreeIdx);
+        
+        // Restricted row sums
+        int a = aSize - aMissing;  // |A ∩ Sg|
+        int b = bSize - bMissing;  // |B ∩ Sg|
+        int c = Math.max(0, sgSize - a - b);  // |C ∩ Sg| = |Sg| - |A ∩ Sg| - |B ∩ Sg|
+        
+        // Compute 4 intersections
+        int ax = getRangeIntersectionSize(
+            speciesBip.geneTreeIndex, speciesBip.leftStart, speciesBip.leftEnd,
+            geneTreeIdx, geneBip.leftStart, geneBip.leftEnd);
+        int ay = getRangeIntersectionSize(
+            speciesBip.geneTreeIndex, speciesBip.leftStart, speciesBip.leftEnd,
+            geneTreeIdx, geneBip.rightStart, geneBip.rightEnd);
+        int bx = getRangeIntersectionSize(
+            speciesBip.geneTreeIndex, speciesBip.rightStart, speciesBip.rightEnd,
+            geneTreeIdx, geneBip.leftStart, geneBip.leftEnd);
+        int by = getRangeIntersectionSize(
+            speciesBip.geneTreeIndex, speciesBip.rightStart, speciesBip.rightEnd,
+            geneTreeIdx, geneBip.rightStart, geneBip.rightEnd);
+        
+        // Derive remaining cells
+        int az = Math.max(0, a - ax - ay);
+        int bz = Math.max(0, b - bx - by);
+        int cx = Math.max(0, xSize - ax - bx);
+        int cy = Math.max(0, ySize - ay - by);
+        int cz = Math.max(0, zSize - az - bz);
+        
+        // Compute QI score using 6 F terms
+        double qi = quartetF(ax, by, cz) + quartetF(ax, bz, cy)
+                  + quartetF(ay, bx, cz) + quartetF(ay, bz, cx)
+                  + quartetF(az, bx, cy) + quartetF(az, by, cx);
+        
+        return qi / 2.0;  // ASTRAL uses QI/2
+    }
+    
+    /**
+     * ASTRAL's F function: F(a,b,c) = a * b * c * (a + b + c - 3) / 2
+     */
+    private double quartetF(int a, int b, int c) {
+        if (a < 0 || b < 0 || c < 0) return 0;
+        long sum = (long) a + b + c;
+        if (sum < 3) return 0;
+        return ((long) a * b * c * (sum - 3)) / 2.0;
+    }
+    
+    /**
+     * Count taxa in a range that are missing from a target gene tree.
+     */
+    private int countMissingInRange(int sourceTree, int start, int end, int targetTree) {
+        if (missingTaxaManager == null) return 0;
+        
+        int[] missing = missingTaxaManager.getMissingTaxa(targetTree);
+        int count = 0;
+        
+        for (int taxon : missing) {
+            int pos = extendedInverseIndex[sourceTree][taxon];
+            if (pos >= 0 && pos >= start && pos < end) {
+                count++;
+            }
+        }
+        
+        return count;
     }
     
     /**

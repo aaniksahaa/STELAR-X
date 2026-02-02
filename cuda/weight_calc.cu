@@ -28,6 +28,74 @@ struct MixedCompactBipartition {
     int rightEnd;         // End index of right subtree range (exclusive)
 };
 
+// Structure for quartet scoring additional data
+// Contains per-tree presence counts for efficient restricted size calculation
+struct QuartetScoringData {
+    int* presentCount;     // presentCount[treeIndex] = |Sg| (number of taxa in gene tree g)
+    int* missingTaxaFlat;  // Flattened missing taxa list for all trees
+    int* missingOffsets;   // missingOffsets[treeIndex] = start offset in missingTaxaFlat
+    int* missingCounts;    // missingCounts[treeIndex] = number of missing taxa in tree g
+};
+
+// ASTRAL-style F function: F(a,b,c) = a * b * c * (a + b + c - 3) / 2
+__device__ double quartetF(int a, int b, int c) {
+    if (a < 0 || b < 0 || c < 0) {
+        return 0.0;
+    }
+    long sum = (long)a + b + c;
+    if (sum < 3) {
+        return 0.0;
+    }
+    // Use long arithmetic to avoid overflow
+    return ((double)a * b * c * (sum - 3)) / 2.0;
+}
+
+// Compute QI score from a 3x3 intersection grid
+// QI = sum of 6 terms: F(n00,n11,n22) + F(n00,n12,n21) + F(n01,n10,n22) + F(n01,n12,n20) + F(n02,n10,n21) + F(n02,n11,n20)
+__device__ double computeQuartetQI(int* grid) {
+    // grid is flattened [row * 3 + col]
+    double qi = quartetF(grid[0], grid[4], grid[8])   // F(n00, n11, n22)
+              + quartetF(grid[0], grid[5], grid[7])   // F(n00, n12, n21)
+              + quartetF(grid[1], grid[3], grid[8])   // F(n01, n10, n22)
+              + quartetF(grid[1], grid[5], grid[6])   // F(n01, n12, n20)
+              + quartetF(grid[2], grid[3], grid[7])   // F(n02, n10, n21)
+              + quartetF(grid[2], grid[4], grid[6]);  // F(n02, n11, n20)
+    
+    return qi / 2.0;  // ASTRAL uses QI/2 as the weight contribution
+}
+
+// Count missing taxa from a candidate range that are not in the target gene tree
+// Uses the missing taxa list for efficiency when missing count is small
+__device__ int countMissingInRange(
+    int sourceTree, int rangeStart, int rangeEnd,
+    int targetTree,
+    int* inverseIndex,
+    int* orderings,
+    int* missingTaxaFlat,
+    int* missingOffsets,
+    int* missingCounts,
+    int numTaxa
+) {
+    int count = 0;
+    int missingStart = missingOffsets[targetTree];
+    int missingEnd = missingStart + missingCounts[targetTree];
+    
+    // Iterate over missing taxa in target tree
+    for (int i = missingStart; i < missingEnd; i++) {
+        int missingTaxon = missingTaxaFlat[i];
+        
+        // Check if this taxon is in the source range
+        int posInSource = inverseIndex[sourceTree * numTaxa + missingTaxon];
+        
+        // If taxon exists in source tree AND is within range, count it
+        if (posInSource >= 0 && posInSource >= rangeStart && posInSource < rangeEnd) {
+            count++;
+        }
+    }
+    
+    return count;
+}
+
 // Legacy device function to calculate intersection cardinality using BitSets
 __device__ int intersectionCardinality(unsigned long long* bits1, unsigned long long* bits2, int bitsetSize) {
     int count = 0;
@@ -181,6 +249,167 @@ __device__ double calculateMixedCompactScore(
     }
     
     return score1 + score2;
+}
+
+// ============================================================================
+// QUARTET SCORING FUNCTIONS (ASTRAL-style)
+// ============================================================================
+
+// Device function to calculate ASTRAL-style quartet score using compact ranges
+// Uses tripartition (A|B|C) vs (X|Y|Z) with only 4 intersections + derivation
+__device__ double calculateCompactQuartetScore(
+    CompactBipartition candidate, CompactBipartition geneTree,
+    int* inverseIndex, int* orderings,
+    int* presentCount,      // presentCount[treeIndex] = |Sg|
+    int* missingTaxaFlat,   // Flattened missing taxa list
+    int* missingOffsets,    // Start offsets in missingTaxaFlat
+    int* missingCounts,     // Number of missing taxa per tree
+    int numTaxa
+) {
+    int geneTreeIdx = geneTree.geneTreeIndex;
+    int sgSize = presentCount[geneTreeIdx];
+    
+    // Get sizes of gene tree bipartition sides
+    int xSize = geneTree.leftEnd - geneTree.leftStart;
+    int ySize = geneTree.rightEnd - geneTree.rightStart;
+    int zSize = sgSize - xSize - ySize;
+    if (zSize < 0) zSize = 0;
+    
+    // Get restricted sizes of candidate sides: a = |A ∩ Sg|, b = |B ∩ Sg|
+    int aSize = (candidate.leftEnd - candidate.leftStart);
+    int bSize = (candidate.rightEnd - candidate.rightStart);
+    
+    // Count missing taxa in each candidate side
+    int aMissing = countMissingInRange(
+        candidate.geneTreeIndex, candidate.leftStart, candidate.leftEnd,
+        geneTreeIdx, inverseIndex, orderings,
+        missingTaxaFlat, missingOffsets, missingCounts, numTaxa);
+    int bMissing = countMissingInRange(
+        candidate.geneTreeIndex, candidate.rightStart, candidate.rightEnd,
+        geneTreeIdx, inverseIndex, orderings,
+        missingTaxaFlat, missingOffsets, missingCounts, numTaxa);
+    
+    int a = aSize - aMissing;  // |A ∩ Sg|
+    int b = bSize - bMissing;  // |B ∩ Sg|
+    int c = sgSize - a - b;    // |C ∩ Sg| = |Sg| - a - b
+    if (c < 0) c = 0;
+    
+    // Compute 4 intersections
+    int ax = compactRangeIntersection(
+        candidate.geneTreeIndex, candidate.leftStart, candidate.leftEnd,
+        geneTreeIdx, geneTree.leftStart, geneTree.leftEnd,
+        inverseIndex, orderings, numTaxa);
+    
+    int ay = compactRangeIntersection(
+        candidate.geneTreeIndex, candidate.leftStart, candidate.leftEnd,
+        geneTreeIdx, geneTree.rightStart, geneTree.rightEnd,
+        inverseIndex, orderings, numTaxa);
+    
+    int bx = compactRangeIntersection(
+        candidate.geneTreeIndex, candidate.rightStart, candidate.rightEnd,
+        geneTreeIdx, geneTree.leftStart, geneTree.leftEnd,
+        inverseIndex, orderings, numTaxa);
+    
+    int by = compactRangeIntersection(
+        candidate.geneTreeIndex, candidate.rightStart, candidate.rightEnd,
+        geneTreeIdx, geneTree.rightStart, geneTree.rightEnd,
+        inverseIndex, orderings, numTaxa);
+    
+    // Derive remaining cells using row and column sums
+    int az = a - ax - ay;
+    int bz = b - bx - by;
+    int cx = xSize - ax - bx;
+    int cy = ySize - ay - by;
+    int cz = zSize - az - bz;
+    
+    // Clamp negative values to 0 (can happen due to numerical issues)
+    if (az < 0) az = 0;
+    if (bz < 0) bz = 0;
+    if (cx < 0) cx = 0;
+    if (cy < 0) cy = 0;
+    if (cz < 0) cz = 0;
+    
+    // Build flattened 3x3 grid and compute QI
+    int grid[9] = {ax, ay, az, bx, by, bz, cx, cy, cz};
+    
+    return computeQuartetQI(grid);
+}
+
+// Device function to calculate quartet score for mixed bipartition
+__device__ double calculateMixedCompactQuartetScore(
+    MixedCompactBipartition mixed, CompactBipartition geneTree,
+    int* inverseIndex, int* orderings,
+    int* presentCount,
+    int* missingTaxaFlat,
+    int* missingOffsets,
+    int* missingCounts,
+    int numTaxa
+) {
+    int geneTreeIdx = geneTree.geneTreeIndex;
+    int sgSize = presentCount[geneTreeIdx];
+    
+    // Get sizes of gene tree bipartition sides
+    int xSize = geneTree.leftEnd - geneTree.leftStart;
+    int ySize = geneTree.rightEnd - geneTree.rightStart;
+    int zSize = sgSize - xSize - ySize;
+    if (zSize < 0) zSize = 0;
+    
+    // Get restricted sizes - use respective tree indices for each side
+    int aSize = mixed.leftEnd - mixed.leftStart;
+    int bSize = mixed.rightEnd - mixed.rightStart;
+    
+    int aMissing = countMissingInRange(
+        mixed.leftTreeIndex, mixed.leftStart, mixed.leftEnd,
+        geneTreeIdx, inverseIndex, orderings,
+        missingTaxaFlat, missingOffsets, missingCounts, numTaxa);
+    int bMissing = countMissingInRange(
+        mixed.rightTreeIndex, mixed.rightStart, mixed.rightEnd,
+        geneTreeIdx, inverseIndex, orderings,
+        missingTaxaFlat, missingOffsets, missingCounts, numTaxa);
+    
+    int a = aSize - aMissing;
+    int b = bSize - bMissing;
+    int c = sgSize - a - b;
+    if (c < 0) c = 0;
+    
+    // Compute 4 intersections using respective tree indices
+    int ax = compactRangeIntersection(
+        mixed.leftTreeIndex, mixed.leftStart, mixed.leftEnd,
+        geneTreeIdx, geneTree.leftStart, geneTree.leftEnd,
+        inverseIndex, orderings, numTaxa);
+    
+    int ay = compactRangeIntersection(
+        mixed.leftTreeIndex, mixed.leftStart, mixed.leftEnd,
+        geneTreeIdx, geneTree.rightStart, geneTree.rightEnd,
+        inverseIndex, orderings, numTaxa);
+    
+    int bx = compactRangeIntersection(
+        mixed.rightTreeIndex, mixed.rightStart, mixed.rightEnd,
+        geneTreeIdx, geneTree.leftStart, geneTree.leftEnd,
+        inverseIndex, orderings, numTaxa);
+    
+    int by = compactRangeIntersection(
+        mixed.rightTreeIndex, mixed.rightStart, mixed.rightEnd,
+        geneTreeIdx, geneTree.rightStart, geneTree.rightEnd,
+        inverseIndex, orderings, numTaxa);
+    
+    // Derive remaining cells
+    int az = a - ax - ay;
+    int bz = b - bx - by;
+    int cx = xSize - ax - bx;
+    int cy = ySize - ay - by;
+    int cz = zSize - az - bz;
+    
+    // Clamp negative values
+    if (az < 0) az = 0;
+    if (bz < 0) bz = 0;
+    if (cx < 0) cx = 0;
+    if (cy < 0) cy = 0;
+    if (cz < 0) cz = 0;
+    
+    int grid[9] = {ax, ay, az, bx, by, bz, cx, cy, cz};
+    
+    return computeQuartetQI(grid);
 }
 
 // Kernel to calculate weights for all candidate bipartitions
@@ -538,5 +767,300 @@ extern "C" {
         cudaFree(dOrderings);
         
         printf("==== MIXED BIPARTITION GPU KERNEL COMPLETED SUCCESSFULLY ====\n");
+    }
+    
+    // ============================================================================
+    // QUARTET SCORING GPU KERNELS (ASTRAL-style)
+    // ============================================================================
+    
+    // Kernel for quartet weight calculation using compact bipartitions
+    __global__ void calculateCompactQuartetWeightsKernel(
+        CompactBipartition* candidates,
+        CompactBipartition* geneTreeBips,
+        int* frequencies,
+        double* weights,
+        int* inverseIndex,
+        int* orderings,
+        int* presentCount,        // presentCount[treeIndex] = |Sg|
+        int* missingTaxaFlat,     // Flattened missing taxa list
+        int* missingOffsets,      // Start offsets in missingTaxaFlat
+        int* missingCounts,       // Number of missing taxa per tree
+        int numCandidates,
+        int numGeneTreeBips,
+        int numTaxa
+    ) {
+        int candidateIdx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (candidateIdx >= numCandidates) return;
+        
+        double totalScore = 0.0;
+        CompactBipartition candidate = candidates[candidateIdx];
+        
+        for (int i = 0; i < numGeneTreeBips; i++) {
+            double score = calculateCompactQuartetScore(
+                candidate, geneTreeBips[i],
+                inverseIndex, orderings,
+                presentCount, missingTaxaFlat, missingOffsets, missingCounts,
+                numTaxa);
+            totalScore += score * frequencies[i];
+        }
+        
+        weights[candidateIdx] = totalScore;
+    }
+    
+    // Kernel for quartet weight calculation with mixed bipartitions
+    __global__ void calculateMixedCompactQuartetWeightsKernel(
+        MixedCompactBipartition* mixedCandidates,
+        CompactBipartition* geneTreeBips,
+        int* frequencies,
+        double* weights,
+        int* inverseIndex,
+        int* orderings,
+        int* presentCount,
+        int* missingTaxaFlat,
+        int* missingOffsets,
+        int* missingCounts,
+        int numCandidates,
+        int numGeneTreeBips,
+        int numTaxa
+    ) {
+        int candidateIdx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (candidateIdx >= numCandidates) return;
+        
+        double totalScore = 0.0;
+        MixedCompactBipartition candidate = mixedCandidates[candidateIdx];
+        
+        for (int i = 0; i < numGeneTreeBips; i++) {
+            double score = calculateMixedCompactQuartetScore(
+                candidate, geneTreeBips[i],
+                inverseIndex, orderings,
+                presentCount, missingTaxaFlat, missingOffsets, missingCounts,
+                numTaxa);
+            totalScore += score * frequencies[i];
+        }
+        
+        weights[candidateIdx] = totalScore;
+    }
+    
+    // Host function to launch quartet weight calculation
+    void launchQuartetWeightCalculation(
+        CompactBipartition* hCandidates,
+        CompactBipartition* hGeneTreeBips,
+        int* hFrequencies,
+        double* hWeights,
+        int* hInverseIndex,
+        int* hOrderings,
+        int* hPresentCount,       // presentCount[treeIndex] = |Sg|
+        int* hMissingTaxaFlat,    // Flattened missing taxa list
+        int* hMissingOffsets,     // Start offsets in missingTaxaFlat
+        int* hMissingCounts,      // Number of missing taxa per tree
+        int numCandidates,
+        int numGeneTreeBips,
+        int numTrees,
+        int numTaxa,
+        int totalMissingTaxa      // Total number of entries in missingTaxaFlat
+    ) {
+        printf("==== LAUNCHING QUARTET SCORING GPU KERNEL ====\n");
+        printf("Candidates: %d, Gene tree bips: %d, Trees: %d, Taxa: %d\n",
+               numCandidates, numGeneTreeBips, numTrees, numTaxa);
+        printf("Total missing taxa entries: %d\n", totalMissingTaxa);
+        
+        // Device allocations
+        CompactBipartition *dCandidates, *dGeneTreeBips;
+        int *dFrequencies, *dInverseIndex, *dOrderings;
+        int *dPresentCount, *dMissingTaxaFlat, *dMissingOffsets, *dMissingCounts;
+        double *dWeights;
+        
+        // Calculate memory sizes
+        size_t candidateSize = numCandidates * sizeof(CompactBipartition);
+        size_t geneTreeSize = numGeneTreeBips * sizeof(CompactBipartition);
+        size_t frequencySize = numGeneTreeBips * sizeof(int);
+        size_t weightsSize = numCandidates * sizeof(double);
+        size_t inverseIndexSize = (size_t)numTrees * numTaxa * sizeof(int);
+        size_t orderingSize = (size_t)numTrees * numTaxa * sizeof(int);
+        size_t presentCountSize = numTrees * sizeof(int);
+        size_t missingTaxaFlatSize = totalMissingTaxa * sizeof(int);
+        size_t missingOffsetsSize = numTrees * sizeof(int);
+        size_t missingCountsSize = numTrees * sizeof(int);
+        
+        printf("Memory allocations:\n");
+        printf("  Candidates: %zu KB\n", candidateSize / 1024);
+        printf("  Gene trees: %zu KB\n", geneTreeSize / 1024);
+        printf("  Inverse index: %zu MB\n", inverseIndexSize / (1024 * 1024));
+        printf("  Missing taxa data: %zu KB\n", (presentCountSize + missingTaxaFlatSize + missingOffsetsSize + missingCountsSize) / 1024);
+        
+        // Allocate device memory
+        cudaMalloc(&dCandidates, candidateSize);
+        cudaMalloc(&dGeneTreeBips, geneTreeSize);
+        cudaMalloc(&dFrequencies, frequencySize);
+        cudaMalloc(&dWeights, weightsSize);
+        cudaMalloc(&dInverseIndex, inverseIndexSize);
+        cudaMalloc(&dOrderings, orderingSize);
+        cudaMalloc(&dPresentCount, presentCountSize);
+        cudaMalloc(&dMissingTaxaFlat, missingTaxaFlatSize > 0 ? missingTaxaFlatSize : sizeof(int));
+        cudaMalloc(&dMissingOffsets, missingOffsetsSize);
+        cudaMalloc(&dMissingCounts, missingCountsSize);
+        
+        // Copy data to device
+        printf("Copying data to GPU...\n");
+        cudaMemcpy(dCandidates, hCandidates, candidateSize, cudaMemcpyHostToDevice);
+        cudaMemcpy(dGeneTreeBips, hGeneTreeBips, geneTreeSize, cudaMemcpyHostToDevice);
+        cudaMemcpy(dFrequencies, hFrequencies, frequencySize, cudaMemcpyHostToDevice);
+        cudaMemcpy(dInverseIndex, hInverseIndex, inverseIndexSize, cudaMemcpyHostToDevice);
+        cudaMemcpy(dOrderings, hOrderings, orderingSize, cudaMemcpyHostToDevice);
+        cudaMemcpy(dPresentCount, hPresentCount, presentCountSize, cudaMemcpyHostToDevice);
+        if (totalMissingTaxa > 0) {
+            cudaMemcpy(dMissingTaxaFlat, hMissingTaxaFlat, missingTaxaFlatSize, cudaMemcpyHostToDevice);
+        }
+        cudaMemcpy(dMissingOffsets, hMissingOffsets, missingOffsetsSize, cudaMemcpyHostToDevice);
+        cudaMemcpy(dMissingCounts, hMissingCounts, missingCountsSize, cudaMemcpyHostToDevice);
+        
+        // Configure kernel launch parameters
+        int blockSize = 256;
+        int gridSize = (numCandidates + blockSize - 1) / blockSize;
+        
+        printf("Kernel configuration: %d blocks x %d threads\n", gridSize, blockSize);
+        
+        // Launch kernel
+        printf("Launching quartet weight calculation kernel...\n");
+        calculateCompactQuartetWeightsKernel<<<gridSize, blockSize>>>(
+            dCandidates, dGeneTreeBips, dFrequencies, dWeights,
+            dInverseIndex, dOrderings,
+            dPresentCount, dMissingTaxaFlat, dMissingOffsets, dMissingCounts,
+            numCandidates, numGeneTreeBips, numTaxa
+        );
+        
+        // Check for errors
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("CUDA kernel launch error: %s\n", cudaGetErrorString(err));
+            return;
+        }
+        
+        cudaDeviceSynchronize();
+        err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("CUDA kernel execution error: %s\n", cudaGetErrorString(err));
+            return;
+        }
+        
+        // Copy results back
+        cudaMemcpy(hWeights, dWeights, weightsSize, cudaMemcpyDeviceToHost);
+        
+        // Free device memory
+        cudaFree(dCandidates);
+        cudaFree(dGeneTreeBips);
+        cudaFree(dFrequencies);
+        cudaFree(dWeights);
+        cudaFree(dInverseIndex);
+        cudaFree(dOrderings);
+        cudaFree(dPresentCount);
+        cudaFree(dMissingTaxaFlat);
+        cudaFree(dMissingOffsets);
+        cudaFree(dMissingCounts);
+        
+        printf("==== QUARTET SCORING GPU KERNEL COMPLETED SUCCESSFULLY ====\n");
+    }
+    
+    // Host function to launch mixed quartet weight calculation
+    void launchMixedQuartetWeightCalculation(
+        MixedCompactBipartition* hMixedCandidates,
+        CompactBipartition* hGeneTreeBips,
+        int* hFrequencies,
+        double* hWeights,
+        int* hInverseIndex,
+        int* hOrderings,
+        int* hPresentCount,
+        int* hMissingTaxaFlat,
+        int* hMissingOffsets,
+        int* hMissingCounts,
+        int numCandidates,
+        int numGeneTreeBips,
+        int numTrees,
+        int numTaxa,
+        int totalMissingTaxa
+    ) {
+        printf("==== LAUNCHING MIXED QUARTET SCORING GPU KERNEL ====\n");
+        printf("Mixed candidates: %d, Gene tree bips: %d, Trees: %d, Taxa: %d\n",
+               numCandidates, numGeneTreeBips, numTrees, numTaxa);
+        
+        // Device allocations
+        MixedCompactBipartition *dMixedCandidates;
+        CompactBipartition *dGeneTreeBips;
+        int *dFrequencies, *dInverseIndex, *dOrderings;
+        int *dPresentCount, *dMissingTaxaFlat, *dMissingOffsets, *dMissingCounts;
+        double *dWeights;
+        
+        // Calculate memory sizes
+        size_t mixedCandidateSize = numCandidates * sizeof(MixedCompactBipartition);
+        size_t geneTreeSize = numGeneTreeBips * sizeof(CompactBipartition);
+        size_t frequencySize = numGeneTreeBips * sizeof(int);
+        size_t weightsSize = numCandidates * sizeof(double);
+        size_t inverseIndexSize = (size_t)numTrees * numTaxa * sizeof(int);
+        size_t orderingSize = (size_t)numTrees * numTaxa * sizeof(int);
+        size_t presentCountSize = numTrees * sizeof(int);
+        size_t missingTaxaFlatSize = totalMissingTaxa * sizeof(int);
+        size_t missingOffsetsSize = numTrees * sizeof(int);
+        size_t missingCountsSize = numTrees * sizeof(int);
+        
+        // Allocate device memory
+        cudaMalloc(&dMixedCandidates, mixedCandidateSize);
+        cudaMalloc(&dGeneTreeBips, geneTreeSize);
+        cudaMalloc(&dFrequencies, frequencySize);
+        cudaMalloc(&dWeights, weightsSize);
+        cudaMalloc(&dInverseIndex, inverseIndexSize);
+        cudaMalloc(&dOrderings, orderingSize);
+        cudaMalloc(&dPresentCount, presentCountSize);
+        cudaMalloc(&dMissingTaxaFlat, missingTaxaFlatSize > 0 ? missingTaxaFlatSize : sizeof(int));
+        cudaMalloc(&dMissingOffsets, missingOffsetsSize);
+        cudaMalloc(&dMissingCounts, missingCountsSize);
+        
+        // Copy data to device
+        printf("Copying data to GPU...\n");
+        cudaMemcpy(dMixedCandidates, hMixedCandidates, mixedCandidateSize, cudaMemcpyHostToDevice);
+        cudaMemcpy(dGeneTreeBips, hGeneTreeBips, geneTreeSize, cudaMemcpyHostToDevice);
+        cudaMemcpy(dFrequencies, hFrequencies, frequencySize, cudaMemcpyHostToDevice);
+        cudaMemcpy(dInverseIndex, hInverseIndex, inverseIndexSize, cudaMemcpyHostToDevice);
+        cudaMemcpy(dOrderings, hOrderings, orderingSize, cudaMemcpyHostToDevice);
+        cudaMemcpy(dPresentCount, hPresentCount, presentCountSize, cudaMemcpyHostToDevice);
+        if (totalMissingTaxa > 0) {
+            cudaMemcpy(dMissingTaxaFlat, hMissingTaxaFlat, missingTaxaFlatSize, cudaMemcpyHostToDevice);
+        }
+        cudaMemcpy(dMissingOffsets, hMissingOffsets, missingOffsetsSize, cudaMemcpyHostToDevice);
+        cudaMemcpy(dMissingCounts, hMissingCounts, missingCountsSize, cudaMemcpyHostToDevice);
+        
+        // Configure and launch kernel
+        int blockSize = 256;
+        int gridSize = (numCandidates + blockSize - 1) / blockSize;
+        
+        printf("Launching mixed quartet weight calculation kernel...\n");
+        calculateMixedCompactQuartetWeightsKernel<<<gridSize, blockSize>>>(
+            dMixedCandidates, dGeneTreeBips, dFrequencies, dWeights,
+            dInverseIndex, dOrderings,
+            dPresentCount, dMissingTaxaFlat, dMissingOffsets, dMissingCounts,
+            numCandidates, numGeneTreeBips, numTaxa
+        );
+        
+        // Check for errors and copy results
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("CUDA kernel error: %s\n", cudaGetErrorString(err));
+        }
+        cudaDeviceSynchronize();
+        
+        cudaMemcpy(hWeights, dWeights, weightsSize, cudaMemcpyDeviceToHost);
+        
+        // Free device memory
+        cudaFree(dMixedCandidates);
+        cudaFree(dGeneTreeBips);
+        cudaFree(dFrequencies);
+        cudaFree(dWeights);
+        cudaFree(dInverseIndex);
+        cudaFree(dOrderings);
+        cudaFree(dPresentCount);
+        cudaFree(dMissingTaxaFlat);
+        cudaFree(dMissingOffsets);
+        cudaFree(dMissingCounts);
+        
+        printf("==== MIXED QUARTET SCORING GPU KERNEL COMPLETED ====\n");
     }
 } 

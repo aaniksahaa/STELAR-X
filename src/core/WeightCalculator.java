@@ -120,6 +120,48 @@ public class WeightCalculator {
             int numTrees,
             int numTaxa
         );
+        
+        // ============================================================================
+        // QUARTET SCORING KERNELS (ASTRAL-style)
+        // ============================================================================
+        
+        // Quartet scoring kernel for compact bipartitions
+        void launchQuartetWeightCalculation(
+            CompactBipartition[] candidates,
+            CompactBipartition[] geneTreeBips,
+            int[] frequencies,
+            double[] weights,
+            Pointer inverseIndexPtr,
+            Pointer orderingPtr,
+            Pointer presentCountPtr,      // presentCount[treeIndex] = |Sg|
+            Pointer missingTaxaFlatPtr,   // Flattened missing taxa list
+            Pointer missingOffsetsPtr,    // Start offsets in missingTaxaFlat
+            Pointer missingCountsPtr,     // Number of missing taxa per tree
+            int numCandidates,
+            int numGeneTreeBips,
+            int numTrees,
+            int numTaxa,
+            int totalMissingTaxa          // Total number of entries in missingTaxaFlat
+        );
+        
+        // Quartet scoring kernel for mixed bipartitions
+        void launchMixedQuartetWeightCalculation(
+            MixedCompactBipartition[] mixedCandidates,
+            CompactBipartition[] geneTreeBips,
+            int[] frequencies,
+            double[] weights,
+            Pointer inverseIndexPtr,
+            Pointer orderingPtr,
+            Pointer presentCountPtr,
+            Pointer missingTaxaFlatPtr,
+            Pointer missingOffsetsPtr,
+            Pointer missingCountsPtr,
+            int numCandidates,
+            int numGeneTreeBips,
+            int numTrees,
+            int numTaxa,
+            int totalMissingTaxa
+        );
     }
     
     public WeightCalculator(GeneTrees geneTrees) {

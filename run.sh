@@ -37,10 +37,16 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     echo "  --expansion, -e     Enable mixed bipartitions (default: OFF)"
     echo "  -v, --verbose       Verbose expansion output"
     echo ""
+    echo "Scoring mode (choose one):"
+    echo "  --triplet           Use STELAR-X triplet matching score (default)"
+    echo "  --quartet           Use ASTRAL-style quartet matching score"
+    echo "  --scoring <mode>    Scoring mode: TRIPLET or QUARTET"
+    echo ""
     echo "Examples:"
     echo "  $0 --input in.tre --output out.tre"
     echo "  $0 --input in.tre --output out.tre --cpu-parallel"
     echo "  $0 --input in.tre --output out.tre --gpu --expansion"
+    echo "  $0 --input in.tre --output out.tre --quartet --gpu"
     exit 0
 fi
 
@@ -58,6 +64,7 @@ COMPUTATION_MODE="$DEFAULT_COMPUTATION_MODE"
 VERBOSE_EXPANSION="$DEFAULT_VERBOSE_EXPANSION"
 USE_MIXED="$DEFAULT_USE_MIXED"
 EXPANSION_ENABLED="false"
+SCORING_MODE=""  # Empty means default (TRIPLET)
 
 POSITIONAL=()
 while [[ $# -gt 0 ]]; do
@@ -70,6 +77,9 @@ while [[ $# -gt 0 ]]; do
         -m|--mode) COMPUTATION_MODE="$2"; shift 2 ;;
         --expansion|-e) EXPANSION_ENABLED="true"; shift ;;
         -v|--verbose) VERBOSE_EXPANSION="true"; shift ;;
+        --triplet) SCORING_MODE="TRIPLET"; shift ;;
+        --quartet) SCORING_MODE="QUARTET"; shift ;;
+        --scoring) SCORING_MODE="$2"; shift 2 ;;
         --) shift; POSITIONAL+=("$@"); break ;;
         *) POSITIONAL+=("$1"); shift ;;
     esac
@@ -159,6 +169,11 @@ fi
 # Add verbose flag if enabled
 if [ "$VERBOSE_EXPANSION" = "true" ]; then
     JAVA_ARGS="$JAVA_ARGS --verbose"
+fi
+
+# Add scoring mode if specified (--triplet, --quartet, or --scoring)
+if [ -n "$SCORING_MODE" ]; then
+    JAVA_ARGS="$JAVA_ARGS --scoring $SCORING_MODE"
 fi
 
 # Mixed bipartitions are implied by expansion; no explicit flag needed
