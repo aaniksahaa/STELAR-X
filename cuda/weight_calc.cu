@@ -37,7 +37,8 @@ struct QuartetScoringData {
     int* missingCounts;    // missingCounts[treeIndex] = number of missing taxa in tree g
 };
 
-// ASTRAL-style F function: F(a,b,c) = a * b * c * (a + b + c - 3) / 2
+// ASTRAL-style F function: F(a,b,c) = a * b * c * (a + b + c - 3)
+// Note: No division by 2 - matches ASTRAL's actual implementation
 __device__ double quartetF(int a, int b, int c) {
     if (a < 0 || b < 0 || c < 0) {
         return 0.0;
@@ -46,8 +47,8 @@ __device__ double quartetF(int a, int b, int c) {
     if (sum < 3) {
         return 0.0;
     }
-    // Use long arithmetic to avoid overflow
-    return ((double)a * b * c * (sum - 3)) / 2.0;
+    // Use long arithmetic to avoid overflow - NO division by 2
+    return (double)((long)a * b * c * (sum - 3));
 }
 
 // Compute QI score from a 3x3 intersection grid
@@ -61,7 +62,7 @@ __device__ double computeQuartetQI(int* grid) {
               + quartetF(grid[2], grid[3], grid[7])   // F(n02, n10, n21)
               + quartetF(grid[2], grid[4], grid[6]);  // F(n02, n11, n20)
     
-    return qi / 2.0;  // ASTRAL uses QI/2 as the weight contribution
+    return qi;  // No division - matches ASTRAL's formula
 }
 
 // Count missing taxa from a candidate range that are not in the target gene tree

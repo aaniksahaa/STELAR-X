@@ -1,2 +1,2 @@
 algorithm,input_file,output_file,running_time_s,max_cpu_mb,max_gpu_mb,optimal_triplet_score,normalized_triplet_score,exit_code
-stelar-x,all_gt_bs_rooted_48.tre,out-48.tre,2.530,432.074,107.520,5286213.0,0.611264,0
+stelar-x,all_gt_bs_rooted_48.tre,out-48.tre,2.338,320.453,107.520,NA,NA,0

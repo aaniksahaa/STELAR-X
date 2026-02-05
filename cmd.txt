@@ -28,7 +28,18 @@ ASTER/bin/astral4_int128 -i all_gt_bs_rooted_37.tre -o out-37.tre
 
 ./run-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out-37.tre
 
-./run-with-monitor.sh -i all_gt_bs_rooted_48.tre -o out-48.tre
+./run-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out-37.tre --quartet
+
+./run-with-monitor.sh -i all_gt_bs_rooted_48.tre -o out-48.tre --quartet
+
+./run-with-monitor.sh -i all_gt_bs_rooted_48.tre -o out-sta.tre
+
+
+
+./get_quartet_score_astral.sh -i all_gt_bs_rooted_48.tre -st out-sta.tre
+
+./get_quartet_score_astral.sh -i all_gt_bs_rooted_48.tre -st data/out-astral.tre
+
 
 ./run-with-monitor.sh -i all_gt_bs_rooted_200.tre -o out-200.tre
 
@@ -98,6 +109,11 @@ ASTRAL_XMS=8g ASTRAL_XMX=64g ./baselines/ASTRAL/run_astral.sh -i all_gt_bs_roote
 ./run-a10k.sh -m tmc --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated --tmc-opts "--nd 1000"
 
 
+./sim.sh -t 1000 -g 500
+./test-stelar-simulated.sh -t 1000 -g 500 --stelar-opts "--quartet"
+
+
+
 Astral 10K:
 ============
 
@@ -158,7 +174,13 @@ python cleaner.py data/63430.gene.trees data/63k-r-og-strcam.tre --outgroup "Str
 ./run.sh -i all_gt_bs_rooted_37.tre -o out-37-triplet.tre --triplet
 
 # Quartet scoring (ASTRAL-style)
-./run.sh -i all_gt_bs_rooted_37.tre -o out-37-quartet.tre --quartet
+./run.sh -i all_gt_bs_rooted_37.tre -o out-37-q.tre --quartet
+
+./get_quartet_score_astral.sh -i all_gt_bs_rooted_37.tre -st out-37-q.tre
+
+./run.sh -i all_gt_bs_rooted_48.tre -o out-48-q.tre --quartet
+
+./get_quartet_score_astral.sh -i all_gt_bs_rooted_48.tre -st out-48-q.tre
 
 # Quartet with GPU mode
 ./run.sh -i all_gt_bs_rooted_37.tre -o out-37-quartet.tre --quartet --gpu
@@ -172,6 +194,13 @@ python cleaner.py data/63430.gene.trees data/63k-r-og-strcam.tre --outgroup "Str
 
 # Triplet scoring (default)
 ./run-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out-37-triplet.tre
+
+./run-with-monitor.sh -i all_gt_bs_rooted_48.tre -o out-48-q.tre \
+    --stelar-opts "--quartet"
+
+python rf.py out-48-q.tre true-48.tre 
+
+
 
 # Quartet scoring - just add --quartet flag (NOW WORKS DIRECTLY!)
 ./run-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out-37-quartet.tre --quartet

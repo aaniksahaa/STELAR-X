@@ -558,17 +558,18 @@ public class SpeciesTreeScorer {
                   + quartetF(ay, bx, cz) + quartetF(ay, bz, cx)
                   + quartetF(az, bx, cy) + quartetF(az, by, cx);
         
-        return qi / 2.0;  // ASTRAL uses QI/2
+        return qi;  // No division - matches ASTRAL's formula
     }
     
     /**
-     * ASTRAL's F function: F(a,b,c) = a * b * c * (a + b + c - 3) / 2
+     * ASTRAL's F function: F(a,b,c) = a * b * c * (a + b + c - 3)
+     * Note: No division by 2 - matches ASTRAL's actual implementation.
      */
     private double quartetF(int a, int b, int c) {
         if (a < 0 || b < 0 || c < 0) return 0;
         long sum = (long) a + b + c;
         if (sum < 3) return 0;
-        return ((long) a * b * c * (sum - 3)) / 2.0;
+        return (double) ((long) a * b * c * (sum - 3));
     }
     
     /**

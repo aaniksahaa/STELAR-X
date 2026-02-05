@@ -53,9 +53,10 @@ public class QuartetScoreCalculator {
     }
     
     /**
-     * ASTRAL's F function: F(a,b,c) = a * b * c * (a + b + c - 3) / 2
+     * ASTRAL's F function: F(a,b,c) = a * b * c * (a + b + c - 3)
      * 
      * This counts the number of shared induced quartets.
+     * Note: No division by 2 - matches ASTRAL's actual implementation.
      */
     private double F(int a, int b, int c) {
         if (a < 0 || b < 0 || c < 0) {
@@ -71,7 +72,8 @@ public class QuartetScoreCalculator {
         }
         
         // Use long arithmetic to avoid overflow
-        return ((long) a * b * c * (sum - 3)) / 2.0;
+        // NO division by 2 - this matches ASTRAL's formula
+        return (double) ((long) a * b * c * (sum - 3));
     }
     
     /**
@@ -96,7 +98,7 @@ public class QuartetScoreCalculator {
                   + F(grid[0][2], grid[1][0], grid[2][1])
                   + F(grid[0][2], grid[1][1], grid[2][0]);
         
-        return qi / 2.0;  // ASTRAL uses QI/2 as the weight contribution
+        return qi;  // No division - matches ASTRAL's formula
     }
     
     /**

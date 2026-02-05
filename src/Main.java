@@ -239,8 +239,15 @@ public class Main {
             double duration = (endTime - startTime) / 1_000_000_000.0;
 
             String scoreType = Config.SCORING_MODE == Config.ScoringMode.QUARTET ? "QUARTET" : "TRIPLET";
+            
+            // ASTRAL divides the final quartet score by 4 when reporting
+            // (see ASTRAL's WQInference.getTotalCost: return (long) (all._max_score/4l))
+            double reportedScore = (Config.SCORING_MODE == Config.ScoringMode.QUARTET) 
+                                 ? score / 4.0 
+                                 : score;
+            
             System.out.println("\n========================================");
-            System.out.println(scoreType + "_SCORE: " + score);
+            System.out.println(scoreType + "_SCORE: " + reportedScore);
 
             // Calculate normalized score
             // For triplet: score / (k * (n choose 3))
@@ -253,7 +260,7 @@ public class Main {
                 if (n >= 4) {
                     double maxQuartetsPerTree = (n * (n - 1) * (n - 2) * (n - 3)) / 24.0;
                     double maxPossibleScore = k * maxQuartetsPerTree;
-                    double normalizedScore = score / maxPossibleScore;
+                    double normalizedScore = reportedScore / maxPossibleScore;
                     System.out.println("NORMALIZED_" + scoreType + "_SCORE: " + normalizedScore);
                 } else {
                     System.out.println("NORMALIZED_" + scoreType + "_SCORE: Undefined (n < 4)");
@@ -371,8 +378,15 @@ public class Main {
         double duration = (endTime - startTime) / 1_000_000_000.0; // Convert to seconds
 
         String scoreType = Config.SCORING_MODE == Config.ScoringMode.QUARTET ? "QUARTET" : "TRIPLET";
+        
+        // ASTRAL divides the final quartet score by 4 when reporting
+        // (see ASTRAL's WQInference.getTotalCost: return (long) (all._max_score/4l))
+        double reportedScore = (Config.SCORING_MODE == Config.ScoringMode.QUARTET) 
+                             ? score / 4.0 
+                             : score;
+        
         System.out.println("\n========================================");
-        System.out.println("OPTIMAL_" + scoreType + "_SCORE: " + score);
+        System.out.println("OPTIMAL_" + scoreType + "_SCORE: " + reportedScore);
         System.out.println("========================================");
         System.out.println("Time taken: " + duration + " seconds");
         System.out.println("Program completed successfully!");
