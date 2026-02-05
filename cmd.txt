@@ -30,7 +30,9 @@ ASTER/bin/astral4_int128 -i all_gt_bs_rooted_37.tre -o out-37.tre
 
 ./run-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out-37.tre --quartet
 
-./run-with-monitor.sh -i all_gt_bs_rooted_48.tre -o out-48.tre --quartet
+./run-with-monitor.sh -i all_gt_bs_rooted_48.tre -o out-48-st-q.tre --quartet
+
+python rf.py out-48-st-q.tre true-48.tre
 
 ./run-with-monitor.sh -i all_gt_bs_rooted_48.tre -o out-sta.tre
 
@@ -39,6 +41,10 @@ ASTER/bin/astral4_int128 -i all_gt_bs_rooted_37.tre -o out-37.tre
 ./get_quartet_score_astral.sh -i all_gt_bs_rooted_48.tre -st out-sta.tre
 
 ./get_quartet_score_astral.sh -i all_gt_bs_rooted_48.tre -st data/out-astral.tre
+
+./run-baseline-with-monitor.sh -m astral -i all_gt_bs_rooted_48.tre -o data/out-48-astral.tre
+
+python rf.py data/out-48-astral.tre true-48.tre
 
 
 ./run-with-monitor.sh -i all_gt_bs_rooted_200.tre -o out-200.tre
