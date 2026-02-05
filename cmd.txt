@@ -27,6 +27,13 @@ ASTER/bin/astral4_int128 -i all_gt_bs_rooted_37.tre -o out-37.tre
 ./run-with-monitor.sh -h
 
 ./run-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out-37.tre
+./run-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out-37-triplet.tre --stelar-opts "--opt triplet"
+./run-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out-37-quartet.tre --stelar-opts "--opt quartet"
+
+./run-with-monitor.sh -i all_gt_bs_rooted_48.tre -o out-48-quartet.tre --stelar-opts "--opt quartet"
+
+./run-baseline-with-monitor.sh -m astral -i all_gt_bs_rooted_48.tre -o data/out-astral-48.tre --astral-opts "-t 16"
+
 
 ./run-with-monitor.sh -i all_gt_bs_rooted_48.tre -o out-48.tre
 

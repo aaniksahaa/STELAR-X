@@ -100,10 +100,16 @@ public class WeightCalculator {
             double[] weights,
             Pointer inverseIndexPtr,    // Flattened [tree*numTaxa + taxon] = position
             Pointer orderingPtr,        // Flattened [tree*numTaxa + position] = taxon
+            Pointer treeSizesPtr,       // [tree] = taxa count for each tree
+            Pointer missingOffsetsPtr,  // [tree] = offset into missingTaxa array
+            Pointer missingCountsPtr,   // [tree] = count of missing taxa
+            Pointer missingTaxaPtr,     // Flattened missing taxa list
+            int missingTaxaCount,
             int numCandidates,
             int numGeneTreeBips,
             int numTrees,
-            int numTaxa
+            int numTaxa,
+            int scoreType               // 0=TRIPLET, 1=QUARTET
         );
         
         // Mixed bipartition kernel for cross-tree recombination

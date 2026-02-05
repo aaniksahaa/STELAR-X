@@ -38,7 +38,20 @@ public class Config {
     }
 
     /**
+     * Score type for optimization/scoring.
+     */
+    public enum ScoreType {
+        TRIPLET,
+        QUARTET
+    }
+
+    /**
      * Current computation mode setting
      */
     public static ComputationMode COMPUTATION_MODE = ComputationMode.CPU_PARALLEL;
+
+    /**
+     * Current score type setting (triplet or quartet optimization)
+     */
+    public static ScoreType SCORE_TYPE = ScoreType.TRIPLET;
 }

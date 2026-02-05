@@ -13,6 +13,8 @@
 #   --mode, -m          Computation mode: CPU_SINGLE, CPU_PARALLEL, GPU_PARALLEL (default: GPU_PARALLEL)
 #   --expansion, -e     Enable mixed bipartitions (default: OFF)
 #   --verbose, -v       Verbose expansion output (default: off)
+#   --score-type        Score type: TRIPLET or QUARTET (default: TRIPLET)
+#   --opt               Alias for --score-type
 #
 # Examples:
 #   ./run.sh --input in.tre --output out.tre
@@ -36,6 +38,8 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     echo "  -m, --mode <mode>   Computation mode: CPU_SINGLE, CPU_PARALLEL, GPU_PARALLEL"
     echo "  --expansion, -e     Enable mixed bipartitions (default: OFF)"
     echo "  -v, --verbose       Verbose expansion output"
+    echo "  --score-type <type> Score type: TRIPLET or QUARTET (default: TRIPLET)"
+    echo "  --opt <type>        Alias for --score-type"
     echo ""
     echo "Examples:"
     echo "  $0 --input in.tre --output out.tre"
@@ -50,6 +54,7 @@ DEFAULT_OUTPUT_FILE=""
 DEFAULT_COMPUTATION_MODE="GPU_PARALLEL"
 DEFAULT_VERBOSE_EXPANSION="false"
 DEFAULT_USE_MIXED="false"
+DEFAULT_SCORE_TYPE="TRIPLET"
 
 # Configurable values (flags override defaults)
 INPUT_FILE=""
@@ -58,6 +63,7 @@ COMPUTATION_MODE="$DEFAULT_COMPUTATION_MODE"
 VERBOSE_EXPANSION="$DEFAULT_VERBOSE_EXPANSION"
 USE_MIXED="$DEFAULT_USE_MIXED"
 EXPANSION_ENABLED="false"
+SCORE_TYPE="$DEFAULT_SCORE_TYPE"
 
 POSITIONAL=()
 while [[ $# -gt 0 ]]; do
@@ -70,6 +76,7 @@ while [[ $# -gt 0 ]]; do
         -m|--mode) COMPUTATION_MODE="$2"; shift 2 ;;
         --expansion|-e) EXPANSION_ENABLED="true"; shift ;;
         -v|--verbose) VERBOSE_EXPANSION="true"; shift ;;
+        --score-type|--opt) SCORE_TYPE="$(echo "$2" | tr '[:lower:]' '[:upper:]')"; shift 2 ;;
         --) shift; POSITIONAL+=("$@"); break ;;
         *) POSITIONAL+=("$1"); shift ;;
     esac
@@ -120,6 +127,7 @@ echo "Computation mode: $COMPUTATION_MODE"
 echo "Expansion method: NONE (fixed)"
 echo "Verbose expansion: $VERBOSE_EXPANSION"
 echo "Cross-tree recombination (via --expansion): $USE_MIXED"
+echo "Score type: $SCORE_TYPE"
 echo
 
 # Check if input file exists
@@ -149,7 +157,7 @@ echo "Library permissions: $(ls -l "$(pwd)/cuda/libweight_calc.so" 2>/dev/null |
 echo
 
 # Build command line arguments
-JAVA_ARGS="-i \"$INPUT_FILE\" -o \"$OUTPUT_FILE\" -m \"$COMPUTATION_MODE\""
+JAVA_ARGS="-i \"$INPUT_FILE\" -o \"$OUTPUT_FILE\" -m \"$COMPUTATION_MODE\" --score-type \"$SCORE_TYPE\""
 
 # Expansion is fixed to NONE; use --expansion only to enable mixed bipartitions
 if [ "$EXPANSION_ENABLED" = "true" ]; then

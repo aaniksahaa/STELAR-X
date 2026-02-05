@@ -30,6 +30,8 @@ public class MemoryOptimizedWeightCalculator {
     private final InverseIndexManager inverseIndexManager;
     private final MemoryEfficientBipartitionManager bipartitionManager;
     private final Map<Object, List<RangeBipartition>> hashToBipartitions;
+    private final List<RangeBipartition> geneTreeRangeList;
+    private final int[] geneTreeFrequencies;
     
     // Statistics for performance monitoring
     private long totalScoreCalculations = 0;
@@ -53,6 +55,21 @@ public class MemoryOptimizedWeightCalculator {
             geneTrees.geneTrees, geneTrees.realTaxaCount);
         
         this.hashToBipartitions = bipartitionManager.getHashToBipartitions();
+
+        // Build a stable, per-tree-sorted list of gene tree bipartitions with frequencies
+        List<Map.Entry<RangeBipartition, Integer>> entries =
+            new ArrayList<>(geneTrees.rangeBipartitions.entrySet());
+        entries.sort(Comparator
+            .comparingInt((Map.Entry<RangeBipartition, Integer> e) -> e.getKey().geneTreeIndex)
+            .thenComparingInt(e -> e.getKey().leftStart)
+            .thenComparingInt(e -> e.getKey().rightStart));
+
+        this.geneTreeRangeList = new ArrayList<>(entries.size());
+        this.geneTreeFrequencies = new int[entries.size()];
+        for (int i = 0; i < entries.size(); i++) {
+            geneTreeRangeList.add(entries.get(i).getKey());
+            geneTreeFrequencies[i] = entries.get(i).getValue();
+        }
         
         System.out.println("Memory-optimized weight calculator initialized");
         System.out.println("Range bipartition groups: " + hashToBipartitions.size());
@@ -67,6 +84,7 @@ public class MemoryOptimizedWeightCalculator {
     public Map<RangeBipartition, Double> calculateWeights(List<RangeBipartition> candidates) {
         System.out.println("==== MEMORY-OPTIMIZED WEIGHT CALCULATION STARTED ====");
         System.out.println("Computation mode: " + Config.COMPUTATION_MODE);
+        System.out.println("Score type: " + Config.SCORE_TYPE);
         System.out.println("Number of candidates: " + candidates.size());
         System.out.println("Gene tree bipartition groups: " + hashToBipartitions.size());
         
@@ -215,7 +233,7 @@ public class MemoryOptimizedWeightCalculator {
      * 
      * Implements the same scoring formula as original calculateScore method.
      */
-    private double calculateRangeScore(RangeBipartition range1, RangeBipartition range2) {
+    private double calculateRangeTripletScore(RangeBipartition range1, RangeBipartition range2) {
         // Calculate four intersection sizes: AA, AB, BA, BB
         // InverseIndexManager handles sentinel values automatically
         int aa = inverseIndexManager.getRangeIntersectionSize(
@@ -249,6 +267,62 @@ public class MemoryOptimizedWeightCalculator {
         
         return score1 + score2;
     }
+
+    private long quartetF(long a, long b, long c) {
+        return (a + b + c - 3L) * a * b * c;
+    }
+
+    private long quartetFF(long a1, long a2, long a3,
+                           long b1, long b2, long b3,
+                           long c1, long c2, long c3) {
+        return quartetF(a1, b2, c3) + quartetF(a1, b3, c2)
+             + quartetF(a2, b1, c3) + quartetF(a2, b3, c1)
+             + quartetF(a3, b1, c2) + quartetF(a3, b2, c1);
+    }
+
+    /**
+     * Calculate quartet score between candidate bipartition (A|B) and gene tree node (X|Y|Z).
+     * Uses 4 intersections + cached row/column sums; C side is implicit.
+     */
+    private double calculateRangeQuartetScore(RangeBipartition candidate, RangeBipartition geneTree,
+                                              int a, int b, int sg) {
+        int g = geneTree.geneTreeIndex;
+
+        int ax = inverseIndexManager.getRangeIntersectionSize(
+            candidate.geneTreeIndex, candidate.leftStart, candidate.leftEnd,
+            g, geneTree.leftStart, geneTree.leftEnd);
+
+        int ay = inverseIndexManager.getRangeIntersectionSize(
+            candidate.geneTreeIndex, candidate.leftStart, candidate.leftEnd,
+            g, geneTree.rightStart, geneTree.rightEnd);
+
+        int bx = inverseIndexManager.getRangeIntersectionSize(
+            candidate.geneTreeIndex, candidate.rightStart, candidate.rightEnd,
+            g, geneTree.leftStart, geneTree.leftEnd);
+
+        int by = inverseIndexManager.getRangeIntersectionSize(
+            candidate.geneTreeIndex, candidate.rightStart, candidate.rightEnd,
+            g, geneTree.rightStart, geneTree.rightEnd);
+
+        totalIntersectionCalculations += 4;
+
+        int x = geneTree.leftSize();
+        int y = geneTree.rightSize();
+        int z = sg - x - y;
+
+        int az = a - ax - ay;
+        int bz = b - bx - by;
+
+        int cx = x - ax - bx;
+        int cy = y - ay - by;
+        int cz = z - az - bz;
+
+        long a1 = ax, a2 = ay, a3 = az;
+        long b1 = bx, b2 = by, b3 = bz;
+        long c1 = cx, c2 = cy, c3 = cz;
+
+        return (double) quartetFF(a1, a2, a3, b1, b2, b3, c1, c2, c3);
+    }
     
     /**
      * Calculate score using range-based approach.
@@ -256,18 +330,44 @@ public class MemoryOptimizedWeightCalculator {
      */
     private double calculateRangeBasedScore(RangeBipartition candidate) {
         double totalScore = 0.0;
-        
-        // Use the existing gene tree RangeBipartitions from GeneTrees
-        for (Map.Entry<RangeBipartition, Integer> entry : geneTrees.rangeBipartitions.entrySet()) {
-            RangeBipartition geneTreeRange = entry.getKey();
-            int frequency = entry.getValue();
-            
-            double score = calculateRangeScore(candidate, geneTreeRange);
-            totalScore += score * frequency;
-            
-            totalScoreCalculations++;
+
+        if (Config.SCORE_TYPE == Config.ScoreType.QUARTET) {
+            int lastTree = -1;
+            int a = 0;
+            int b = 0;
+            int sg = 0;
+
+            int[] treeSizes = inverseIndexManager.getTreeTaxaCounts();
+
+            for (int i = 0; i < geneTreeRangeList.size(); i++) {
+                RangeBipartition geneTreeRange = geneTreeRangeList.get(i);
+                int frequency = geneTreeFrequencies[i];
+                int g = geneTreeRange.geneTreeIndex;
+
+                if (g != lastTree) {
+                    a = inverseIndexManager.getRangePresenceCount(
+                        candidate.geneTreeIndex, candidate.leftStart, candidate.leftEnd, g);
+                    b = inverseIndexManager.getRangePresenceCount(
+                        candidate.geneTreeIndex, candidate.rightStart, candidate.rightEnd, g);
+                    sg = treeSizes[g];
+                    lastTree = g;
+                }
+
+                double score = calculateRangeQuartetScore(candidate, geneTreeRange, a, b, sg);
+                totalScore += score * frequency;
+                totalScoreCalculations++;
+            }
+        } else {
+            for (int i = 0; i < geneTreeRangeList.size(); i++) {
+                RangeBipartition geneTreeRange = geneTreeRangeList.get(i);
+                int frequency = geneTreeFrequencies[i];
+
+                double score = calculateRangeTripletScore(candidate, geneTreeRange);
+                totalScore += score * frequency;
+                totalScoreCalculations++;
+            }
         }
-        
+
         return totalScore;
     }
     
@@ -287,7 +387,7 @@ public class MemoryOptimizedWeightCalculator {
      * @param geneTree The gene tree bipartition
      * @return The score contribution
      */
-    private double calculateMixedScore(MixedBipartition mixed, RangeBipartition geneTree) {
+    private double calculateMixedTripletScore(MixedBipartition mixed, RangeBipartition geneTree) {
         // Calculate four intersection sizes: AA, AB, BA, BB
         // Key difference: use leftTreeIndex for left side, rightTreeIndex for right side
         int aa = inverseIndexManager.getRangeIntersectionSize(
@@ -321,6 +421,46 @@ public class MemoryOptimizedWeightCalculator {
         
         return score1 + score2;
     }
+
+    private double calculateMixedQuartetScore(MixedBipartition mixed, RangeBipartition geneTree,
+                                              int a, int b, int sg) {
+        int g = geneTree.geneTreeIndex;
+
+        int ax = inverseIndexManager.getRangeIntersectionSize(
+            mixed.leftTreeIndex, mixed.leftStart, mixed.leftEnd,
+            g, geneTree.leftStart, geneTree.leftEnd);
+
+        int ay = inverseIndexManager.getRangeIntersectionSize(
+            mixed.leftTreeIndex, mixed.leftStart, mixed.leftEnd,
+            g, geneTree.rightStart, geneTree.rightEnd);
+
+        int bx = inverseIndexManager.getRangeIntersectionSize(
+            mixed.rightTreeIndex, mixed.rightStart, mixed.rightEnd,
+            g, geneTree.leftStart, geneTree.leftEnd);
+
+        int by = inverseIndexManager.getRangeIntersectionSize(
+            mixed.rightTreeIndex, mixed.rightStart, mixed.rightEnd,
+            g, geneTree.rightStart, geneTree.rightEnd);
+
+        totalIntersectionCalculations += 4;
+
+        int x = geneTree.leftSize();
+        int y = geneTree.rightSize();
+        int z = sg - x - y;
+
+        int az = a - ax - ay;
+        int bz = b - bx - by;
+
+        int cx = x - ax - bx;
+        int cy = y - ay - by;
+        int cz = z - az - bz;
+
+        long a1 = ax, a2 = ay, a3 = az;
+        long b1 = bx, b2 = by, b3 = bz;
+        long c1 = cx, c2 = cy, c3 = cz;
+
+        return (double) quartetFF(a1, a2, a3, b1, b2, b3, c1, c2, c3);
+    }
     
     /**
      * Calculate total weight for a single MixedBipartition.
@@ -331,17 +471,43 @@ public class MemoryOptimizedWeightCalculator {
      */
     public double calculateMixedWeight(MixedBipartition mixed) {
         double totalScore = 0.0;
-        
-        for (Map.Entry<RangeBipartition, Integer> entry : geneTrees.rangeBipartitions.entrySet()) {
-            RangeBipartition geneTreeRange = entry.getKey();
-            int frequency = entry.getValue();
-            
-            double score = calculateMixedScore(mixed, geneTreeRange);
-            totalScore += score * frequency;
-            
-            totalScoreCalculations++;
+
+        if (Config.SCORE_TYPE == Config.ScoreType.QUARTET) {
+            int lastTree = -1;
+            int a = 0;
+            int b = 0;
+            int sg = 0;
+            int[] treeSizes = inverseIndexManager.getTreeTaxaCounts();
+
+            for (int i = 0; i < geneTreeRangeList.size(); i++) {
+                RangeBipartition geneTreeRange = geneTreeRangeList.get(i);
+                int frequency = geneTreeFrequencies[i];
+                int g = geneTreeRange.geneTreeIndex;
+
+                if (g != lastTree) {
+                    a = inverseIndexManager.getRangePresenceCount(
+                        mixed.leftTreeIndex, mixed.leftStart, mixed.leftEnd, g);
+                    b = inverseIndexManager.getRangePresenceCount(
+                        mixed.rightTreeIndex, mixed.rightStart, mixed.rightEnd, g);
+                    sg = treeSizes[g];
+                    lastTree = g;
+                }
+
+                double score = calculateMixedQuartetScore(mixed, geneTreeRange, a, b, sg);
+                totalScore += score * frequency;
+                totalScoreCalculations++;
+            }
+        } else {
+            for (int i = 0; i < geneTreeRangeList.size(); i++) {
+                RangeBipartition geneTreeRange = geneTreeRangeList.get(i);
+                int frequency = geneTreeFrequencies[i];
+
+                double score = calculateMixedTripletScore(mixed, geneTreeRange);
+                totalScore += score * frequency;
+                totalScoreCalculations++;
+            }
         }
-        
+
         return totalScore;
     }
     
@@ -460,7 +626,12 @@ public class MemoryOptimizedWeightCalculator {
      */
     private Map<MixedBipartition, Double> calculateMixedWeightsGPU(List<MixedBipartition> candidates) {
         System.out.println("==== STARTING MIXED BIPARTITION GPU CALCULATION ====");
-        
+
+        if (Config.SCORE_TYPE == Config.ScoreType.QUARTET) {
+            System.out.println("Quartet scoring for mixed bipartitions not supported on GPU yet. Falling back to CPU...");
+            return calculateMixedWeightsMultiThread(candidates);
+        }
+
         try {
             // Check if CUDA library is available
             try {
@@ -476,19 +647,7 @@ public class MemoryOptimizedWeightCalculator {
             int numTrees = inverseIndexManager.getNumTrees();
             int numTaxa = inverseIndexManager.getNumTaxa();
             
-            // Extract gene tree ranges and frequencies
-            List<RangeBipartition> geneTreeRanges = new ArrayList<>();
-            List<Integer> frequencies = new ArrayList<>();
-            
-            for (Map.Entry<Object, List<RangeBipartition>> entry : hashToBipartitions.entrySet()) {
-                List<RangeBipartition> ranges = entry.getValue();
-                if (!ranges.isEmpty()) {
-                    geneTreeRanges.add(ranges.get(0)); // Representative
-                    frequencies.add(ranges.size());    // Frequency
-                }
-            }
-            
-            int numGeneTreeBips = geneTreeRanges.size();
+            int numGeneTreeBips = geneTreeRangeList.size();
             
             System.out.println("Mixed GPU Parameters:");
             System.out.println("  Mixed candidates: " + numCandidates);
@@ -517,7 +676,7 @@ public class MemoryOptimizedWeightCalculator {
                 (WeightCalcLib.CompactBipartition[]) geneTreeTemplate.toArray(numGeneTreeBips);
             
             for (int i = 0; i < numGeneTreeBips; i++) {
-                RangeBipartition range = geneTreeRanges.get(i);
+                RangeBipartition range = geneTreeRangeList.get(i);
                 geneTreeArray[i].geneTreeIndex = range.geneTreeIndex;
                 geneTreeArray[i].leftStart = range.leftStart;
                 geneTreeArray[i].leftEnd = range.leftEnd;
@@ -526,7 +685,7 @@ public class MemoryOptimizedWeightCalculator {
             }
             
             // Prepare frequency array
-            int[] frequencyArray = frequencies.stream().mapToInt(Integer::intValue).toArray();
+            int[] frequencyArray = geneTreeFrequencies;
             
             // Prepare result array
             double[] weights = new double[numCandidates];
@@ -610,19 +769,7 @@ public class MemoryOptimizedWeightCalculator {
             // Use hybrid GPU approach: BitSet candidates vs Range gene trees
             System.out.println("Using hybrid GPU approach: BitSet candidates vs compact range gene trees");
             
-            // Extract gene tree ranges and frequencies
-            List<RangeBipartition> geneTreeRanges = new ArrayList<>();
-            List<Integer> frequencies = new ArrayList<>();
-            
-            for (Map.Entry<Object, List<RangeBipartition>> entry : hashToBipartitions.entrySet()) {
-                List<RangeBipartition> ranges = entry.getValue();
-                if (!ranges.isEmpty()) {
-                    geneTreeRanges.add(ranges.get(0)); // Representative
-                    frequencies.add(ranges.size());    // Frequency
-                }
-            }
-            
-            System.out.println("Gene tree ranges: " + geneTreeRanges.size());
+            System.out.println("Gene tree ranges: " + geneTreeRangeList.size());
             System.out.println("Candidates: " + candidates.size());
             
             // Check if CUDA library is available
@@ -640,7 +787,7 @@ public class MemoryOptimizedWeightCalculator {
             // But use compact ranges for gene trees (which are large in number)
             System.out.println("Using hybrid approach: BitSet candidates vs compact gene tree ranges");
             
-            return calculateWeightsHybridGPU(candidates, geneTreeRanges, frequencies);
+            return calculateWeightsHybridGPU(candidates, geneTreeRangeList, geneTreeFrequencies);
             
         } catch (Exception e) {
             System.err.println("GPU calculation failed: " + e.getMessage());
@@ -657,7 +804,7 @@ public class MemoryOptimizedWeightCalculator {
     private Map<RangeBipartition, Double> calculateWeightsHybridGPU(
             List<RangeBipartition> candidates,
             List<RangeBipartition> geneTreeRanges,
-            List<Integer> frequencies) {
+            int[] frequencyArray) {
         
         System.out.println("==== STARTING PURE RANGE-BASED GPU CALCULATION ====");
         System.out.println("Range candidates: " + candidates.size());
@@ -703,9 +850,6 @@ public class MemoryOptimizedWeightCalculator {
                 geneTreeArray[i].rightEnd = range.rightEnd;
             }
             
-            // Prepare frequency array
-            int[] frequencyArray = frequencies.stream().mapToInt(Integer::intValue).toArray();
-            
             // Prepare result array
             double[] weights = new double[numCandidates];
             
@@ -719,6 +863,11 @@ public class MemoryOptimizedWeightCalculator {
             System.out.println("  - inverseIndex[tree][taxon] == -1 means taxon not present in tree");
             System.out.println("  - Only count intersections for taxa present in both trees");
             
+            Memory treeSizesMemory = flattenTreeSizes();
+            Memory missingOffsetsMemory = flattenMissingOffsets();
+            Memory missingCountsMemory = flattenMissingCounts();
+            Memory missingTaxaMemory = flattenMissingTaxa();
+
             WeightCalcLib.INSTANCE.launchCompactWeightCalculation(
                 candidateArray,
                 geneTreeArray,
@@ -726,10 +875,16 @@ public class MemoryOptimizedWeightCalculator {
                 weights,
                 inverseIndexMemory,
                 orderingMemory,
+                treeSizesMemory,
+                missingOffsetsMemory,
+                missingCountsMemory,
+                missingTaxaMemory,
+                inverseIndexManager.getMissingTaxaFlat().length,
                 numCandidates,
                 numGeneTreeBips,
                 numTrees,
-                numTaxa
+                numTaxa,
+                (Config.SCORE_TYPE == Config.ScoreType.QUARTET ? 1 : 0)
             );
             
             System.out.println("==== PURE RANGE-BASED GPU KERNEL COMPLETED ====");
@@ -827,15 +982,14 @@ public class MemoryOptimizedWeightCalculator {
     private Memory flattenOrderings() {
         int[][] orderings = inverseIndexManager.getGeneTreeOrderings();
         int numTrees = orderings.length;
+        int numTaxa = inverseIndexManager.getNumTaxa();
         
         System.out.println("==== FLATTENING ORDERINGS WITH VARIABLE TREE SIZES ====");
         System.out.println("Number of trees: " + numTrees);
         
-        // Find the maximum number of taxa across all trees
-        int maxNumTaxa = 0;
+        // Find basic stats for logging
         int minNumTaxa = Integer.MAX_VALUE;
         int totalTaxa = 0;
-        
         for (int tree = 0; tree < numTrees; tree++) {
             if (orderings[tree] == null) {
                 System.err.println("ERROR: Tree " + tree + " has null ordering array");
@@ -843,7 +997,6 @@ public class MemoryOptimizedWeightCalculator {
             }
             
             int actualLength = orderings[tree].length;
-            maxNumTaxa = Math.max(maxNumTaxa, actualLength);
             minNumTaxa = Math.min(minNumTaxa, actualLength);
             totalTaxa += actualLength;
             
@@ -855,14 +1008,15 @@ public class MemoryOptimizedWeightCalculator {
         
         System.out.println("Tree size statistics:");
         System.out.println("  Min taxa per tree: " + minNumTaxa);
-        System.out.println("  Max taxa per tree: " + maxNumTaxa);
+        System.out.println("  Max taxa per tree: " + 
+                         java.util.Arrays.stream(orderings).mapToInt(o -> o.length).max().orElse(0));
         System.out.println("  Average taxa per tree: " + (totalTaxa / (double) numTrees));
-        System.out.println("Using padded size: " + maxNumTaxa + " taxa per tree");
+        System.out.println("Using padded size: " + numTaxa + " taxa per tree (global taxa count)");
         
-        // Use the maximum size and pad shorter trees with -1 (sentinel value)
-        int paddedNumTaxa = maxNumTaxa;
+        // Use global taxa count and pad shorter trees with -1 (sentinel value)
+        int paddedNumTaxa = numTaxa;
         Memory memory = new Memory((long) numTrees * paddedNumTaxa * 4); // 4 bytes per int
-        System.out.println("Allocated memory for " + numTrees + " x " + paddedNumTaxa + " = " + 
+        System.out.println("Allocated memory for " + numTrees + " x " + paddedNumTaxa + " = " +
                          (numTrees * paddedNumTaxa) + " integers");
         
         int paddedPositions = 0;
@@ -897,6 +1051,50 @@ public class MemoryOptimizedWeightCalculator {
         
         // Note: Memory object will be automatically freed by JNA when no longer referenced
         // GPU kernel is responsible for copying data before this method returns
+        return memory;
+    }
+
+    @SuppressWarnings("resource")
+    private Memory flattenTreeSizes() {
+        int[] sizes = inverseIndexManager.getTreeTaxaCounts();
+        int numTrees = sizes.length;
+        Memory memory = new Memory((long) numTrees * 4);
+        for (int i = 0; i < numTrees; i++) {
+            memory.setInt((long) i * 4, sizes[i]);
+        }
+        return memory;
+    }
+
+    @SuppressWarnings("resource")
+    private Memory flattenMissingOffsets() {
+        int[] offsets = inverseIndexManager.getMissingOffsets();
+        int numTrees = offsets.length;
+        Memory memory = new Memory((long) numTrees * 4);
+        for (int i = 0; i < numTrees; i++) {
+            memory.setInt((long) i * 4, offsets[i]);
+        }
+        return memory;
+    }
+
+    @SuppressWarnings("resource")
+    private Memory flattenMissingCounts() {
+        int[] counts = inverseIndexManager.getMissingCounts();
+        int numTrees = counts.length;
+        Memory memory = new Memory((long) numTrees * 4);
+        for (int i = 0; i < numTrees; i++) {
+            memory.setInt((long) i * 4, counts[i]);
+        }
+        return memory;
+    }
+
+    @SuppressWarnings("resource")
+    private Memory flattenMissingTaxa() {
+        int[] flat = inverseIndexManager.getMissingTaxaFlat();
+        long bytes = Math.max(1, flat.length) * 4L;
+        Memory memory = new Memory(bytes);
+        for (int i = 0; i < flat.length; i++) {
+            memory.setInt((long) i * 4, flat[i]);
+        }
         return memory;
     }
     

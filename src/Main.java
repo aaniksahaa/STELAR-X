@@ -31,6 +31,7 @@ public class Main {
         String inputFilePath = null;
         String outputFilePath = null;
         String computationMode = null;
+        String scoreType = null;
         // expansionMethod and distanceMethod are fixed in this branch
         boolean verboseExpansion = false;
         String branchSupport = null;
@@ -56,6 +57,16 @@ public class Main {
                 computationMode = "CPU_PARALLEL";
             } else if (args[i].equals("--gpu") || args[i].equals("--gpu-parallel")) {
                 computationMode = "GPU_PARALLEL";
+            } else if (args[i].equals("--triplet")) {
+                scoreType = "TRIPLET";
+            } else if (args[i].equals("--quartet")) {
+                scoreType = "QUARTET";
+            } else if (args[i].equals("--opt") && i + 1 < args.length) {
+                scoreType = args[i + 1].toUpperCase();
+                i++;
+            } else if (args[i].equals("--score-type") && i + 1 < args.length) {
+                scoreType = args[i + 1].toUpperCase();
+                i++;
             } else if ((args[i].equals("-m") || args[i].equals("--mode")) && i + 1 < args.length) {
                 computationMode = args[i + 1];
                 i++; // Skip next argument as it's the mode
@@ -104,6 +115,10 @@ public class Main {
             System.out.println("  --cpu-parallel        Computation mode: CPU_PARALLEL");
             System.out.println("  --gpu                Computation mode: GPU_PARALLEL");
             System.out.println("  -m, --mode <mode>     Computation mode: CPU_SINGLE, CPU_PARALLEL, GPU_PARALLEL");
+            System.out.println("  --score-type <type>   Score type: TRIPLET or QUARTET (default: TRIPLET)");
+            System.out.println("  --triplet             Same as --score-type TRIPLET");
+            System.out.println("  --quartet             Same as --score-type QUARTET");
+            System.out.println("  --opt <type>          Alias for --score-type (TRIPLET or QUARTET)");
             System.out.println("  --expansion, -e        Enable mixed bipartitions (default: OFF)");
             System.out.println(
                     "  -s, --support <type>  Branch support: NONE, POSTERIOR, DETAILED, LENGTH, BOTH, PVALUE, ALL");
@@ -127,6 +142,15 @@ public class Main {
             } catch (IllegalArgumentException e) {
                 System.err.println("Error: Invalid computation mode '" + computationMode + "'");
                 System.err.println("Valid modes: CPU_SINGLE, CPU_PARALLEL, GPU_PARALLEL");
+                System.exit(-1);
+            }
+        }
+        if (scoreType != null) {
+            try {
+                Config.SCORE_TYPE = Config.ScoreType.valueOf(scoreType);
+            } catch (IllegalArgumentException e) {
+                System.err.println("Error: Invalid score type '" + scoreType + "'");
+                System.err.println("Valid types: TRIPLET, QUARTET");
                 System.exit(-1);
             }
         }
@@ -154,6 +178,7 @@ public class Main {
             System.out.println("Output file: " + outputFilePath);
         }
         System.out.println("Computation mode: " + Config.COMPUTATION_MODE);
+        System.out.println("Score type: " + Config.SCORE_TYPE);
         if (!scoreMode) {
             System.out.println("Expansion method: " + utils.BipartitionExpansionConfig.EXPANSION_METHOD);
             if (utils.BipartitionExpansionConfig.isDistanceExpansionEnabled()) {
@@ -203,7 +228,7 @@ public class Main {
             Tree speciesTree = new Tree(speciesNewick, geneTrees.taxaMap);
             System.out.println("Species tree parsed: " + speciesTree.leavesCount + " leaves");
 
-            // Calculate triplet score
+            // Calculate score (triplet or quartet)
             SpeciesTreeScorer scorer = new SpeciesTreeScorer(geneTrees);
             double score = scorer.calculateScore(speciesTree);
 
@@ -211,21 +236,36 @@ public class Main {
             double duration = (endTime - startTime) / 1_000_000_000.0;
 
             System.out.println("\n========================================");
-            System.out.println("TRIPLET_SCORE: " + score);
+            if (Config.SCORE_TYPE == Config.ScoreType.QUARTET) {
+                System.out.println("QUARTET_SCORE: " + score);
+            } else {
+                System.out.println("TRIPLET_SCORE: " + score);
+            }
 
-            // Calculate normalized score: score / (k * (n choose 3))
-            // k = number of gene trees
-            // n = number of taxa (leaves in species tree)
+            // Calculate normalized score
+            // Triplet: score / (k * (n choose 3))
+            // Quartet: score / (k * (n choose 4))
             double k = (double) geneTrees.geneTrees.size();
             double n = (double) speciesTree.leavesCount;
 
-            if (n >= 3) {
-                double maxTripletsPerTree = (n * (n - 1) * (n - 2)) / 6.0;
-                double maxPossibleScore = k * maxTripletsPerTree;
-                double normalizedScore = score / maxPossibleScore;
-                System.out.println("NORMALIZED_TRIPLET_SCORE: " + normalizedScore);
+            if (Config.SCORE_TYPE == Config.ScoreType.QUARTET) {
+                if (n >= 4) {
+                    double maxQuartetsPerTree = (n * (n - 1) * (n - 2) * (n - 3)) / 24.0;
+                    double maxPossibleScore = k * maxQuartetsPerTree;
+                    double normalizedScore = score / maxPossibleScore;
+                    System.out.println("NORMALIZED_QUARTET_SCORE: " + normalizedScore);
+                } else {
+                    System.out.println("NORMALIZED_QUARTET_SCORE: Undefined (n < 4)");
+                }
             } else {
-                System.out.println("NORMALIZED_TRIPLET_SCORE: Undefined (n < 3)");
+                if (n >= 3) {
+                    double maxTripletsPerTree = (n * (n - 1) * (n - 2)) / 6.0;
+                    double maxPossibleScore = k * maxTripletsPerTree;
+                    double normalizedScore = score / maxPossibleScore;
+                    System.out.println("NORMALIZED_TRIPLET_SCORE: " + normalizedScore);
+                } else {
+                    System.out.println("NORMALIZED_TRIPLET_SCORE: Undefined (n < 3)");
+                }
             }
 
             System.out.println("========================================");
@@ -330,7 +370,11 @@ public class Main {
         double duration = (endTime - startTime) / 1_000_000_000.0; // Convert to seconds
 
         System.out.println("\n========================================");
-        System.out.println("OPTIMAL_TRIPLET_SCORE: " + score);
+        if (Config.SCORE_TYPE == Config.ScoreType.QUARTET) {
+            System.out.println("OPTIMAL_QUARTET_SCORE: " + score);
+        } else {
+            System.out.println("OPTIMAL_TRIPLET_SCORE: " + score);
+        }
         System.out.println("========================================");
         System.out.println("Time taken: " + duration + " seconds");
         System.out.println("Program completed successfully!");

@@ -22,6 +22,7 @@ core/PosteriorCalculator.class
 utils/Helper.class
 core/QuartetFrequencyCounter$QuartetFrequencies.class
 utils/Config$NonQuartetType.class
+utils/Config$ScoreType.class
 core/InferenceDP.class
 tree/RangeBipartition$DoubleHashFunction.class
 utils/BipartitionExpansionConfig$DistanceMethod.class

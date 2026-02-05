@@ -65,9 +65,15 @@ __device__ int compactRangeIntersection(
     for (int pos = smallStart; pos < smallEnd; pos++) {
         // Get taxon ID at this position in small tree
         int taxonId = orderings[smallTree * numTaxa + pos];
+        if (taxonId < 0) {
+            continue; // padding / sentinel
+        }
         
         // Find position of this taxon in large tree using inverse index
         int positionInLargeTree = inverseIndex[largeTree * numTaxa + taxonId];
+        if (positionInLargeTree < 0) {
+            continue; // taxon missing in large tree
+        }
         
         // Check if taxon falls within large tree's range
         if (positionInLargeTree >= largeStart && positionInLargeTree < largeEnd) {
@@ -76,6 +82,49 @@ __device__ int compactRangeIntersection(
     }
     
     return count;
+}
+
+// Count how many taxa in a source range are present in a target tree
+__device__ int compactRangePresenceCount(
+    int sourceTree, int start, int end,
+    int targetTree,
+    int* inverseIndex,
+    int* orderings,
+    int* missingOffsets,
+    int* missingCounts,
+    int* missingTaxa,
+    int numTaxa
+) {
+    int rangeSize = end - start;
+    if (rangeSize <= 0) return 0;
+
+    int missCount = missingCounts[targetTree];
+    if (missCount == 0) {
+        return rangeSize;
+    }
+
+    if (missCount < rangeSize) {
+        int missingInRange = 0;
+        int offset = missingOffsets[targetTree];
+        for (int i = 0; i < missCount; i++) {
+            int taxonId = missingTaxa[offset + i];
+            int posInSource = inverseIndex[sourceTree * numTaxa + taxonId];
+            if (posInSource >= start && posInSource < end) {
+                missingInRange++;
+            }
+        }
+        return rangeSize - missingInRange;
+    } else {
+        int count = 0;
+        for (int pos = start; pos < end; pos++) {
+            int taxonId = orderings[sourceTree * numTaxa + pos];
+            if (taxonId < 0) continue;
+            if (inverseIndex[targetTree * numTaxa + taxonId] >= 0) {
+                count++;
+            }
+        }
+        return count;
+    }
 }
 
 // Device function to calculate score for a pair of bipartitions
@@ -139,6 +188,60 @@ __device__ double calculateCompactScore(
     }
     
     return score1 + score2;
+}
+
+__device__ long quartetF(long a, long b, long c) {
+    return (a + b + c - 3) * a * b * c;
+}
+
+__device__ long quartetFF(long a1, long a2, long a3,
+                          long b1, long b2, long b3,
+                          long c1, long c2, long c3) {
+    return quartetF(a1, b2, c3) + quartetF(a1, b3, c2)
+         + quartetF(a2, b1, c3) + quartetF(a2, b3, c1)
+         + quartetF(a3, b1, c2) + quartetF(a3, b2, c1);
+}
+
+__device__ double calculateCompactQuartetScore(
+    CompactBipartition candidate, CompactBipartition geneTree,
+    int a, int b, int sg,
+    int* inverseIndex, int* orderings,
+    int numTaxa
+) {
+    int g = geneTree.geneTreeIndex;
+
+    int ax = compactRangeIntersection(
+        candidate.geneTreeIndex, candidate.leftStart, candidate.leftEnd,
+        g, geneTree.leftStart, geneTree.leftEnd,
+        inverseIndex, orderings, numTaxa);
+
+    int ay = compactRangeIntersection(
+        candidate.geneTreeIndex, candidate.leftStart, candidate.leftEnd,
+        g, geneTree.rightStart, geneTree.rightEnd,
+        inverseIndex, orderings, numTaxa);
+
+    int bx = compactRangeIntersection(
+        candidate.geneTreeIndex, candidate.rightStart, candidate.rightEnd,
+        g, geneTree.leftStart, geneTree.leftEnd,
+        inverseIndex, orderings, numTaxa);
+
+    int by = compactRangeIntersection(
+        candidate.geneTreeIndex, candidate.rightStart, candidate.rightEnd,
+        g, geneTree.rightStart, geneTree.rightEnd,
+        inverseIndex, orderings, numTaxa);
+
+    int x = geneTree.leftEnd - geneTree.leftStart;
+    int y = geneTree.rightEnd - geneTree.rightStart;
+    int z = sg - x - y;
+
+    int az = a - ax - ay;
+    int bz = b - bx - by;
+
+    int cx = x - ax - bx;
+    int cy = y - ay - by;
+    int cz = z - az - bz;
+
+    return (double) quartetFF(ax, ay, az, bx, by, bz, cx, cy, cz);
 }
 
 // Device function to calculate score for mixed bipartition (cross-tree recombination)
@@ -295,9 +398,14 @@ extern "C" {
         double* weights,                   // Output array for weights
         int* inverseIndex,                 // Flattened inverse index [tree*numTaxa + taxon] = position
         int* orderings,                    // Flattened orderings [tree*numTaxa + position] = taxon
+        int* treeSizes,                    // [tree] = taxa count
+        int* missingOffsets,               // [tree] = offset in missingTaxa
+        int* missingCounts,                // [tree] = count of missing taxa
+        int* missingTaxa,                  // Flattened missing taxa list
         int numCandidates,                 // Number of candidate bipartitions
         int numGeneTreeBips,               // Number of gene tree bipartitions
-        int numTaxa                        // Number of taxa
+        int numTaxa,                       // Number of taxa
+        int scoreType                      // 0=TRIPLET, 1=QUARTET
     ) {
         int candidateIdx = blockIdx.x * blockDim.x + threadIdx.x;
         if (candidateIdx >= numCandidates) return;
@@ -305,9 +413,33 @@ extern "C" {
         double totalScore = 0.0;
         CompactBipartition candidate = candidates[candidateIdx];
         
+        int lastTree = -1;
+        int a = 0;
+        int b = 0;
+        int sg = 0;
+
         // Calculate score against all gene tree bipartitions
         for (int i = 0; i < numGeneTreeBips; i++) {
-            double score = calculateCompactScore(candidate, geneTreeBips[i], inverseIndex, orderings, numTaxa);
+            CompactBipartition geneTree = geneTreeBips[i];
+            double score;
+
+            if (scoreType == 0) {
+                score = calculateCompactScore(candidate, geneTree, inverseIndex, orderings, numTaxa);
+            } else {
+                int g = geneTree.geneTreeIndex;
+                if (g != lastTree) {
+                    a = compactRangePresenceCount(
+                        candidate.geneTreeIndex, candidate.leftStart, candidate.leftEnd,
+                        g, inverseIndex, orderings, missingOffsets, missingCounts, missingTaxa, numTaxa);
+                    b = compactRangePresenceCount(
+                        candidate.geneTreeIndex, candidate.rightStart, candidate.rightEnd,
+                        g, inverseIndex, orderings, missingOffsets, missingCounts, missingTaxa, numTaxa);
+                    sg = treeSizes[g];
+                    lastTree = g;
+                }
+                score = calculateCompactQuartetScore(
+                    candidate, geneTree, a, b, sg, inverseIndex, orderings, numTaxa);
+            }
             totalScore += score * frequencies[i];
         }
         
@@ -322,10 +454,16 @@ extern "C" {
         double* hWeights,
         int* hInverseIndex,
         int* hOrderings,
+        int* hTreeSizes,
+        int* hMissingOffsets,
+        int* hMissingCounts,
+        int* hMissingTaxa,
+        int missingTaxaCount,
         int numCandidates,
         int numGeneTreeBips,
         int numTrees,
-        int numTaxa
+        int numTaxa,
+        int scoreType
     ) {
         printf("==== LAUNCHING COMPACT GPU KERNEL ====\n");
         printf("Candidates: %d, Gene tree bips: %d, Trees: %d, Taxa: %d\n", 
@@ -334,6 +472,7 @@ extern "C" {
         // Device allocations
         CompactBipartition *dCandidates, *dGeneTreeBips;
         int *dFrequencies, *dInverseIndex, *dOrderings;
+        int *dTreeSizes, *dMissingOffsets, *dMissingCounts, *dMissingTaxa;
         double *dWeights;
         
         // Calculate memory sizes
@@ -343,13 +482,17 @@ extern "C" {
         size_t weightsSize = numCandidates * sizeof(double);
         size_t inverseIndexSize = (size_t)numTrees * numTaxa * sizeof(int);
         size_t orderingSize = (size_t)numTrees * numTaxa * sizeof(int);
+        size_t treeSizesSize = (size_t)numTrees * sizeof(int);
+        size_t missingOffsetsSize = (size_t)numTrees * sizeof(int);
+        size_t missingCountsSize = (size_t)numTrees * sizeof(int);
+        size_t missingTaxaSize = (size_t)(missingTaxaCount > 0 ? missingTaxaCount : 1) * sizeof(int);
         
         printf("Memory allocations:\n");
         printf("  Candidates: %zu KB\n", candidateSize / 1024);
         printf("  Gene trees: %zu KB\n", geneTreeSize / 1024);
         printf("  Inverse index: %zu MB\n", inverseIndexSize / (1024 * 1024));
         printf("  Orderings: %zu MB\n", orderingSize / (1024 * 1024));
-        printf("  Total: %zu MB\n", (candidateSize + geneTreeSize + frequencySize + weightsSize + inverseIndexSize + orderingSize) / (1024 * 1024));
+        printf("  Total: %zu MB\n", (candidateSize + geneTreeSize + frequencySize + weightsSize + inverseIndexSize + orderingSize + treeSizesSize + missingOffsetsSize + missingCountsSize + missingTaxaSize) / (1024 * 1024));
         
         // Allocate device memory
         cudaMalloc(&dCandidates, candidateSize);
@@ -358,6 +501,10 @@ extern "C" {
         cudaMalloc(&dWeights, weightsSize);
         cudaMalloc(&dInverseIndex, inverseIndexSize);
         cudaMalloc(&dOrderings, orderingSize);
+        cudaMalloc(&dTreeSizes, treeSizesSize);
+        cudaMalloc(&dMissingOffsets, missingOffsetsSize);
+        cudaMalloc(&dMissingCounts, missingCountsSize);
+        cudaMalloc(&dMissingTaxa, missingTaxaSize);
         
         // Copy data to device
         printf("Copying data to GPU...\n");
@@ -366,6 +513,12 @@ extern "C" {
         cudaMemcpy(dFrequencies, hFrequencies, frequencySize, cudaMemcpyHostToDevice);
         cudaMemcpy(dInverseIndex, hInverseIndex, inverseIndexSize, cudaMemcpyHostToDevice);
         cudaMemcpy(dOrderings, hOrderings, orderingSize, cudaMemcpyHostToDevice);
+        cudaMemcpy(dTreeSizes, hTreeSizes, treeSizesSize, cudaMemcpyHostToDevice);
+        cudaMemcpy(dMissingOffsets, hMissingOffsets, missingOffsetsSize, cudaMemcpyHostToDevice);
+        cudaMemcpy(dMissingCounts, hMissingCounts, missingCountsSize, cudaMemcpyHostToDevice);
+        if (missingTaxaCount > 0) {
+            cudaMemcpy(dMissingTaxa, hMissingTaxa, missingTaxaSize, cudaMemcpyHostToDevice);
+        }
         
         // Configure kernel launch parameters
         int blockSize = 256;  // Threads per block
@@ -378,7 +531,9 @@ extern "C" {
         printf("Launching compact weight calculation kernel...\n");
         calculateCompactWeightsKernel<<<gridSize, blockSize>>>(
             dCandidates, dGeneTreeBips, dFrequencies, dWeights,
-            dInverseIndex, dOrderings, numCandidates, numGeneTreeBips, numTaxa
+            dInverseIndex, dOrderings,
+            dTreeSizes, dMissingOffsets, dMissingCounts, dMissingTaxa,
+            numCandidates, numGeneTreeBips, numTaxa, scoreType
         );
         
         // Check for kernel launch errors
@@ -409,6 +564,10 @@ extern "C" {
         cudaFree(dWeights);
         cudaFree(dInverseIndex);
         cudaFree(dOrderings);
+        cudaFree(dTreeSizes);
+        cudaFree(dMissingOffsets);
+        cudaFree(dMissingCounts);
+        cudaFree(dMissingTaxa);
         
         printf("==== COMPACT GPU KERNEL COMPLETED SUCCESSFULLY ====\n");
     }

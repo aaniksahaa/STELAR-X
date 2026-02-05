@@ -34,6 +34,8 @@ Optional:
   --stelar-root      Path to STELAR-X root directory (default: current directory)
   --stelar-opts      Extra STELAR options passed to run.sh (default: empty)
   --expansion, -e    Enable mixed bipartitions (default: OFF)
+  --score-type <t>   Score type: TRIPLET or QUARTET (default: TRIPLET)
+  --opt <t>          Alias for --score-type
   --no-time-monitor  Disable time-monitoring (overrides default ON)
   --no-gpu-monitor   Disable GPU-monitoring (overrides default ON)
   --no-notify, -nn   Disable ntfy.sh notifications
@@ -65,6 +67,7 @@ while [[ $# -gt 0 ]]; do
     --debug) DEBUG=1; shift ;;
     --help|-h) print_help; exit 0 ;;
     --cpu|--cpu-parallel|--gpu|--gpu-parallel|--expansion|-e) STELAR_ARGS+=("$1"); shift ;;
+    --score-type|--opt) STELAR_ARGS+=("$1" "$2"); shift 2 ;;
     -m|--mode|-s|--support|--branch-support|--lambda)
       STELAR_ARGS+=("$1" "$2"); shift 2 ;;
     -v|--verbose) STELAR_ARGS+=("$1"); shift ;;

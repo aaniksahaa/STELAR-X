@@ -24,6 +24,10 @@ public class InverseIndexManager {
     private final int[][] geneTreeOrderings; // [treeIndex][position] = taxonId
     private final int numTrees;
     private final int numTaxa;
+    private final int[] treeTaxaCounts;
+    private int[] missingOffsets;
+    private int[] missingCounts;
+    private int[] missingTaxaFlat;
     
     // Statistics for logging
     private long totalIntersectionCalls = 0;
@@ -40,6 +44,7 @@ public class InverseIndexManager {
         this.numTaxa = realTaxaCount;
         this.inverseIndex = new int[numTrees][numTaxa];
         this.geneTreeOrderings = new int[numTrees][];
+        this.treeTaxaCounts = new int[numTrees];
         
         long startTime = System.currentTimeMillis();
         buildInverseIndex(geneTrees);
@@ -81,6 +86,7 @@ public class InverseIndexManager {
             collectLeavesInOrder(tree.root, ordering);
             
             geneTreeOrderings[treeIdx] = ordering.stream().mapToInt(Integer::intValue).toArray();
+            treeTaxaCounts[treeIdx] = geneTreeOrderings[treeIdx].length;
             totalLeaves += ordering.size();
             
             // Build inverse mapping: taxonId -> position
@@ -121,6 +127,8 @@ public class InverseIndexManager {
         System.out.println("Average leaves per tree: " + (totalLeaves / (double) numTrees));
         System.out.println("Total sentinel positions (taxa not in trees): " + totalSentinelPositions);
         System.out.println("Average missing taxa per tree: " + (totalSentinelPositions / (double) numTrees));
+
+        buildMissingTaxaLists();
         
         // Validate index consistency (including sentinel values)
         validateInverseIndex();
@@ -222,6 +230,50 @@ public class InverseIndexManager {
                              sentinelValidationErrors + " sentinel errors");
         }
     }
+
+    /**
+     * Build missing taxa lists for each tree using inverse index sentinel values.
+     * Stores a flat array with per-tree offsets for cache-friendly scanning.
+     */
+    private void buildMissingTaxaLists() {
+        System.out.println("Building missing taxa lists for each tree...");
+
+        missingCounts = new int[numTrees];
+        int totalMissing = 0;
+
+        // First pass: count missing taxa per tree
+        for (int treeIdx = 0; treeIdx < numTrees; treeIdx++) {
+            int missing = 0;
+            for (int taxonId = 0; taxonId < numTaxa; taxonId++) {
+                if (inverseIndex[treeIdx][taxonId] == -1) {
+                    missing++;
+                }
+            }
+            missingCounts[treeIdx] = missing;
+            totalMissing += missing;
+        }
+
+        missingOffsets = new int[numTrees];
+        int running = 0;
+        for (int treeIdx = 0; treeIdx < numTrees; treeIdx++) {
+            missingOffsets[treeIdx] = running;
+            running += missingCounts[treeIdx];
+        }
+
+        missingTaxaFlat = new int[totalMissing];
+        for (int treeIdx = 0; treeIdx < numTrees; treeIdx++) {
+            int offset = missingOffsets[treeIdx];
+            int idx = 0;
+            for (int taxonId = 0; taxonId < numTaxa; taxonId++) {
+                if (inverseIndex[treeIdx][taxonId] == -1) {
+                    missingTaxaFlat[offset + idx] = taxonId;
+                    idx++;
+                }
+            }
+        }
+
+        System.out.println("Missing taxa lists built: total missing = " + totalMissing);
+    }
     
     /**
      * Calculate intersection size between two ranges using inverse index.
@@ -274,6 +326,60 @@ public class InverseIndexManager {
         } else {
             totalElementsProcessed += size2;
             return countIntersection(tree2, start2, end2, tree1, start1, end1);
+        }
+    }
+
+    /**
+     * Count how many taxa in a source tree range are present in a target tree.
+     * Uses missing taxa lists when beneficial for performance.
+     */
+    public int getRangePresenceCount(int sourceTree, int start, int end, int targetTree) {
+        if (sourceTree < 0 || sourceTree >= numTrees || targetTree < 0 || targetTree >= numTrees) {
+            System.err.println("Invalid tree indices: source=" + sourceTree + ", target=" + targetTree);
+            return 0;
+        }
+        if (start < 0 || end < start) {
+            System.err.println("Invalid range parameters: [" + start + "," + end + ")");
+            return 0;
+        }
+
+        int rangeSize = end - start;
+        if (rangeSize == 0) return 0;
+
+        int missingCount = missingCounts[targetTree];
+        if (missingCount == 0) {
+            return rangeSize; // all taxa present in target tree
+        }
+
+        if (missingCount < rangeSize) {
+            int missingInRange = 0;
+            int offset = missingOffsets[targetTree];
+            for (int i = 0; i < missingCount; i++) {
+                int taxonId = missingTaxaFlat[offset + i];
+                int posInSource = inverseIndex[sourceTree][taxonId];
+                if (posInSource >= start && posInSource < end) {
+                    missingInRange++;
+                }
+            }
+            return rangeSize - missingInRange;
+        } else {
+            int[] ordering = geneTreeOrderings[sourceTree];
+            if (ordering == null) {
+                System.err.println("Null ordering for source tree " + sourceTree);
+                return 0;
+            }
+            int maxPos = Math.min(end, ordering.length);
+            int count = 0;
+            for (int pos = start; pos < maxPos; pos++) {
+                int taxonId = ordering[pos];
+                if (taxonId < 0 || taxonId >= numTaxa) {
+                    continue;
+                }
+                if (inverseIndex[targetTree][taxonId] != -1) {
+                    count++;
+                }
+            }
+            return count;
         }
     }
     
@@ -392,6 +498,22 @@ public class InverseIndexManager {
     
     public int[][] getGeneTreeOrderings() { 
         return geneTreeOrderings; 
+    }
+
+    public int[] getTreeTaxaCounts() {
+        return treeTaxaCounts;
+    }
+
+    public int[] getMissingOffsets() {
+        return missingOffsets;
+    }
+
+    public int[] getMissingCounts() {
+        return missingCounts;
+    }
+
+    public int[] getMissingTaxaFlat() {
+        return missingTaxaFlat;
     }
     
     public int getNumTrees() { 

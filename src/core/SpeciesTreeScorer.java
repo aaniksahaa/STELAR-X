@@ -35,6 +35,12 @@ public class SpeciesTreeScorer {
     // Species tree is at index = numGeneTrees
     private int[][] extendedInverseIndex;
     private int[][] extendedOrderings;
+    private int[] treeSizes;
+    private int[] missingOffsets;
+    private int[] missingCounts;
+    private int[] missingTaxaFlat;
+    private List<RangeBipartition> geneTreeRangeList;
+    private int[] geneTreeFrequencies;
     
     // Species tree bipartitions as RangeBipartitions
     private List<RangeBipartition> speciesBipartitions;
@@ -52,8 +58,9 @@ public class SpeciesTreeScorer {
      * @return Total triplet score
      */
     public double calculateScore(Tree speciesTree) {
-        System.out.println("\n=== Species Tree Triplet Score Calculation ===");
+        System.out.println("\n=== Species Tree Score Calculation ===");
         System.out.println("Computation mode: " + Config.COMPUTATION_MODE);
+        System.out.println("Score type: " + Config.SCORE_TYPE);
         System.out.println("Gene trees: " + numGeneTrees);
         System.out.println("Gene tree bipartitions: " + geneTrees.rangeBipartitions.size());
         System.out.println("Taxa: " + numTaxa);
@@ -66,8 +73,11 @@ public class SpeciesTreeScorer {
         // Step 2: Extract bipartitions from species tree as RangeBipartitions
         extractSpeciesBipartitions(speciesTree);
         System.out.println("Species tree bipartitions: " + speciesBipartitions.size());
+
+        // Step 3: Build stable gene-tree bipartition list (sorted by tree index)
+        buildGeneTreeRangeList();
         
-        // Step 3: Calculate total score based on computation mode
+        // Step 4: Calculate total score based on computation mode
         double totalScore;
         
         switch (Config.COMPUTATION_MODE) {
@@ -167,7 +177,7 @@ public class SpeciesTreeScorer {
         System.out.println("Preparing data for GPU kernel...");
         
         int numSpeciesBips = speciesBipartitions.size();
-        int numGeneTreeBips = geneTrees.rangeBipartitions.size();
+            int numGeneTreeBips = geneTreeRangeList.size();
         int totalTrees = numGeneTrees + 1;  // Gene trees + species tree
         
         System.out.println("GPU Parameters:");
@@ -201,16 +211,14 @@ public class SpeciesTreeScorer {
                 (CompactBipartition[]) geneTreeTemplate.toArray(numGeneTreeBips);
             int[] frequencies = new int[numGeneTreeBips];
             
-            int idx = 0;
-            for (Map.Entry<RangeBipartition, Integer> entry : geneTrees.rangeBipartitions.entrySet()) {
-                RangeBipartition rb = entry.getKey();
+            for (int idx = 0; idx < geneTreeRangeList.size(); idx++) {
+                RangeBipartition rb = geneTreeRangeList.get(idx);
                 geneTreeBipsArray[idx].geneTreeIndex = rb.geneTreeIndex;
                 geneTreeBipsArray[idx].leftStart = rb.leftStart;
                 geneTreeBipsArray[idx].leftEnd = rb.leftEnd;
                 geneTreeBipsArray[idx].rightStart = rb.rightStart;
                 geneTreeBipsArray[idx].rightEnd = rb.rightEnd;
-                frequencies[idx] = entry.getValue();
-                idx++;
+                frequencies[idx] = geneTreeFrequencies[idx];
             }
             System.out.println("Gene tree bipartitions array prepared (contiguous memory)");
             
@@ -239,6 +247,20 @@ public class SpeciesTreeScorer {
                 }
             }
             System.out.println("Inverse index and orderings flattened");
+            Memory treeSizesMem = new Memory((long) totalTrees * 4);
+            Memory missingOffsetsMem = new Memory((long) totalTrees * 4);
+            Memory missingCountsMem = new Memory((long) totalTrees * 4);
+            long missingBytes = Math.max(1, missingTaxaFlat.length) * 4L;
+            Memory missingTaxaMem = new Memory(missingBytes);
+
+            for (int t = 0; t < totalTrees; t++) {
+                treeSizesMem.setInt((long) t * 4, treeSizes[t]);
+                missingOffsetsMem.setInt((long) t * 4, missingOffsets[t]);
+                missingCountsMem.setInt((long) t * 4, missingCounts[t]);
+            }
+            for (int i = 0; i < missingTaxaFlat.length; i++) {
+                missingTaxaMem.setInt((long) i * 4, missingTaxaFlat[i]);
+            }
             
             // Output array for weights
             double[] weights = new double[numSpeciesBips];
@@ -253,10 +275,16 @@ public class SpeciesTreeScorer {
                 weights,
                 inverseIndexMem,
                 orderingMem,
+                treeSizesMem,
+                missingOffsetsMem,
+                missingCountsMem,
+                missingTaxaMem,
+                missingTaxaFlat.length,
                 numSpeciesBips,
                 numGeneTreeBips,
                 totalTrees,
-                numTaxa
+                numTaxa,
+                (Config.SCORE_TYPE == Config.ScoreType.QUARTET ? 1 : 0)
             );
             
             // Sum up weights to get total score
@@ -284,6 +312,7 @@ public class SpeciesTreeScorer {
         int totalTrees = numGeneTrees + 1;
         extendedInverseIndex = new int[totalTrees][numTaxa];
         extendedOrderings = new int[totalTrees][];
+        treeSizes = new int[totalTrees];
         
         // Copy gene tree inverse indices from existing InverseIndexManager
         // We'll build our own for gene trees too for simplicity
@@ -293,6 +322,7 @@ public class SpeciesTreeScorer {
             collectLeavesInOrder(geneTree.root, ordering);
             
             extendedOrderings[t] = ordering.stream().mapToInt(Integer::intValue).toArray();
+            treeSizes[t] = extendedOrderings[t].length;
             
             // Initialize with -1 (sentinel for missing taxa)
             Arrays.fill(extendedInverseIndex[t], -1);
@@ -312,6 +342,7 @@ public class SpeciesTreeScorer {
         collectLeavesInOrder(speciesTree.root, speciesOrdering);
         
         extendedOrderings[speciesIdx] = speciesOrdering.stream().mapToInt(Integer::intValue).toArray();
+        treeSizes[speciesIdx] = extendedOrderings[speciesIdx].length;
         
         Arrays.fill(extendedInverseIndex[speciesIdx], -1);
         for (int pos = 0; pos < extendedOrderings[speciesIdx].length; pos++) {
@@ -322,6 +353,8 @@ public class SpeciesTreeScorer {
         }
         
         System.out.println("Extended inverse index built for " + totalTrees + " trees");
+
+        buildMissingTaxaListsExtended();
     }
     
     /**
@@ -341,6 +374,58 @@ public class SpeciesTreeScorer {
             for (TreeNode child : node.childs) {
                 collectLeavesInOrder(child, ordering);
             }
+        }
+    }
+
+    private void buildMissingTaxaListsExtended() {
+        int totalTrees = numGeneTrees + 1;
+        missingCounts = new int[totalTrees];
+        int totalMissing = 0;
+
+        for (int treeIdx = 0; treeIdx < totalTrees; treeIdx++) {
+            int missing = 0;
+            for (int taxonId = 0; taxonId < numTaxa; taxonId++) {
+                if (extendedInverseIndex[treeIdx][taxonId] == -1) {
+                    missing++;
+                }
+            }
+            missingCounts[treeIdx] = missing;
+            totalMissing += missing;
+        }
+
+        missingOffsets = new int[totalTrees];
+        int running = 0;
+        for (int treeIdx = 0; treeIdx < totalTrees; treeIdx++) {
+            missingOffsets[treeIdx] = running;
+            running += missingCounts[treeIdx];
+        }
+
+        missingTaxaFlat = new int[totalMissing];
+        for (int treeIdx = 0; treeIdx < totalTrees; treeIdx++) {
+            int offset = missingOffsets[treeIdx];
+            int idx = 0;
+            for (int taxonId = 0; taxonId < numTaxa; taxonId++) {
+                if (extendedInverseIndex[treeIdx][taxonId] == -1) {
+                    missingTaxaFlat[offset + idx] = taxonId;
+                    idx++;
+                }
+            }
+        }
+    }
+
+    private void buildGeneTreeRangeList() {
+        List<Map.Entry<RangeBipartition, Integer>> entries =
+            new ArrayList<>(geneTrees.rangeBipartitions.entrySet());
+        entries.sort(Comparator
+            .comparingInt((Map.Entry<RangeBipartition, Integer> e) -> e.getKey().geneTreeIndex)
+            .thenComparingInt(e -> e.getKey().leftStart)
+            .thenComparingInt(e -> e.getKey().rightStart));
+
+        geneTreeRangeList = new ArrayList<>(entries.size());
+        geneTreeFrequencies = new int[entries.size()];
+        for (int i = 0; i < entries.size(); i++) {
+            geneTreeRangeList.add(entries.get(i).getKey());
+            geneTreeFrequencies[i] = entries.get(i).getValue();
         }
     }
     
@@ -425,15 +510,40 @@ public class SpeciesTreeScorer {
      */
     private double calculateBipartitionWeight(RangeBipartition speciesBip) {
         double totalScore = 0.0;
-        
-        for (Map.Entry<RangeBipartition, Integer> entry : geneTrees.rangeBipartitions.entrySet()) {
-            RangeBipartition geneBip = entry.getKey();
-            int frequency = entry.getValue();
-            
-            double score = calculateRangeScore(speciesBip, geneBip);
-            totalScore += score * frequency;
+
+        if (Config.SCORE_TYPE == Config.ScoreType.QUARTET) {
+            int lastTree = -1;
+            int a = 0;
+            int b = 0;
+            int sg = 0;
+
+            for (int i = 0; i < geneTreeRangeList.size(); i++) {
+                RangeBipartition geneBip = geneTreeRangeList.get(i);
+                int frequency = geneTreeFrequencies[i];
+                int g = geneBip.geneTreeIndex;
+
+                if (g != lastTree) {
+                    a = getRangePresenceCount(
+                        speciesBip.geneTreeIndex, speciesBip.leftStart, speciesBip.leftEnd, g);
+                    b = getRangePresenceCount(
+                        speciesBip.geneTreeIndex, speciesBip.rightStart, speciesBip.rightEnd, g);
+                    sg = treeSizes[g];
+                    lastTree = g;
+                }
+
+                double score = calculateRangeQuartetScore(speciesBip, geneBip, a, b, sg);
+                totalScore += score * frequency;
+            }
+        } else {
+            for (int i = 0; i < geneTreeRangeList.size(); i++) {
+                RangeBipartition geneBip = geneTreeRangeList.get(i);
+                int frequency = geneTreeFrequencies[i];
+
+                double score = calculateRangeTripletScore(speciesBip, geneBip);
+                totalScore += score * frequency;
+            }
         }
-        
+
         return totalScore;
     }
     
@@ -441,7 +551,7 @@ public class SpeciesTreeScorer {
      * Calculate score between two RangeBipartitions using inverse index.
      * Same formula as MemoryOptimizedWeightCalculator.
      */
-    private double calculateRangeScore(RangeBipartition bip1, RangeBipartition bip2) {
+    private double calculateRangeTripletScore(RangeBipartition bip1, RangeBipartition bip2) {
         // Calculate four intersection sizes
         int aa = getRangeIntersectionSize(
             bip1.geneTreeIndex, bip1.leftStart, bip1.leftEnd,
@@ -472,6 +582,53 @@ public class SpeciesTreeScorer {
         
         return score1 + score2;
     }
+
+    private long quartetF(long a, long b, long c) {
+        return (a + b + c - 3L) * a * b * c;
+    }
+
+    private long quartetFF(long a1, long a2, long a3,
+                           long b1, long b2, long b3,
+                           long c1, long c2, long c3) {
+        return quartetF(a1, b2, c3) + quartetF(a1, b3, c2)
+             + quartetF(a2, b1, c3) + quartetF(a2, b3, c1)
+             + quartetF(a3, b1, c2) + quartetF(a3, b2, c1);
+    }
+
+    private double calculateRangeQuartetScore(RangeBipartition candidate, RangeBipartition geneTree,
+                                              int a, int b, int sg) {
+        int g = geneTree.geneTreeIndex;
+
+        int ax = getRangeIntersectionSize(
+            candidate.geneTreeIndex, candidate.leftStart, candidate.leftEnd,
+            g, geneTree.leftStart, geneTree.leftEnd);
+        int ay = getRangeIntersectionSize(
+            candidate.geneTreeIndex, candidate.leftStart, candidate.leftEnd,
+            g, geneTree.rightStart, geneTree.rightEnd);
+        int bx = getRangeIntersectionSize(
+            candidate.geneTreeIndex, candidate.rightStart, candidate.rightEnd,
+            g, geneTree.leftStart, geneTree.leftEnd);
+        int by = getRangeIntersectionSize(
+            candidate.geneTreeIndex, candidate.rightStart, candidate.rightEnd,
+            g, geneTree.rightStart, geneTree.rightEnd);
+
+        int x = geneTree.leftSize();
+        int y = geneTree.rightSize();
+        int z = sg - x - y;
+
+        int az = a - ax - ay;
+        int bz = b - bx - by;
+
+        int cx = x - ax - bx;
+        int cy = y - ay - by;
+        int cz = z - az - bz;
+
+        long a1 = ax, a2 = ay, a3 = az;
+        long b1 = bx, b2 = by, b3 = bz;
+        long c1 = cx, c2 = cy, c3 = cz;
+
+        return (double) quartetFF(a1, a2, a3, b1, b2, b3, c1, c2, c3);
+    }
     
     /**
      * Calculate intersection size between two ranges using inverse index.
@@ -491,6 +648,45 @@ public class SpeciesTreeScorer {
             return countIntersection(tree1, start1, end1, tree2, start2, end2);
         } else {
             return countIntersection(tree2, start2, end2, tree1, start1, end1);
+        }
+    }
+
+    private int getRangePresenceCount(int sourceTree, int start, int end, int targetTree) {
+        if (start < 0 || end < start) {
+            return 0;
+        }
+        int rangeSize = end - start;
+        if (rangeSize == 0) return 0;
+
+        int missingCount = missingCounts[targetTree];
+        if (missingCount == 0) {
+            return rangeSize;
+        }
+
+        if (missingCount < rangeSize) {
+            int missingInRange = 0;
+            int offset = missingOffsets[targetTree];
+            for (int i = 0; i < missingCount; i++) {
+                int taxonId = missingTaxaFlat[offset + i];
+                int posInSource = extendedInverseIndex[sourceTree][taxonId];
+                if (posInSource >= start && posInSource < end) {
+                    missingInRange++;
+                }
+            }
+            return rangeSize - missingInRange;
+        } else {
+            int[] ordering = extendedOrderings[sourceTree];
+            if (ordering == null) return 0;
+            int maxPos = Math.min(end, ordering.length);
+            int count = 0;
+            for (int pos = start; pos < maxPos; pos++) {
+                int taxonId = ordering[pos];
+                if (taxonId < 0 || taxonId >= numTaxa) continue;
+                if (extendedInverseIndex[targetTree][taxonId] != -1) {
+                    count++;
+                }
+            }
+            return count;
         }
     }
     
@@ -522,4 +718,3 @@ public class SpeciesTreeScorer {
         return count;
     }
 }
-
