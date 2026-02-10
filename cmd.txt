@@ -3,6 +3,11 @@ cd ASTER
 make
 
 ## if problem happens
+
+# may simply do --> conda deactivate
+
+# or the following
+
 # confirm which ld is being used (currently it's conda's)
 which ld
 ld --version | head -n 1

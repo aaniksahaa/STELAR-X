@@ -10,8 +10,10 @@ tree/Tree.class
 core/MissingTaxaManager.class
 tree/TreePrinter.class
 core/WeightCalculator.class
+core/ASTRALInferenceDP.class
 tree/RangeBipartition$XORHashFunction.class
 tree/ClusterHashPair.class
+tree/UnrootedCluster.class
 core/QuartetFrequencyCounter.class
 core/ClusterHashManager$ClusterRange.class
 utils/Threading.class
@@ -28,12 +30,15 @@ core/InferenceDP.class
 tree/RangeBipartition$DoubleHashFunction.class
 utils/BipartitionExpansionConfig$DistanceMethod.class
 taxon/Taxon.class
+core/ASTRALInferenceDP$BipartitionKey.class
+tree/UnrootedBipartitionManager$UnrootedBipartition.class
 core/ClusterHashManager.class
 core/WeightCalculator$WeightCalcLib$Bipartition.class
 core/MemoryOptimizedWeightCalculator.class
 core/WeightCalculator$WeightCalcLib$MixedCompactBipartition.class
 core/SpeciesTreeScorer.class
 tree/TreePrinter$PrintableNode.class
+tree/UnrootedBipartitionManager.class
 core/MemoryOptimizedWeightCalculator$1.class
 utils/HashUtils.class
 Main.class
@@ -43,6 +48,7 @@ core/QuartetFrequencyCounter$Quadripartition.class
 core/BranchSupportCalculator$BranchAnnotationType.class
 core/QuartetScoreCalculator.class
 utils/Config$ComputationMode.class
+core/ASTRALInferenceDP$ClusterPair.class
 utils/Config.class
 tree/RangeBipartition$HashFunction.class
 core/BranchSupportCalculator.class
@@ -54,3 +60,4 @@ core/BranchSupportCalculator$BranchSupportStatistics.class
 tree/Cluster.class
 tree/SideCluster.class
 core/InverseIndexManager.class
+tree/UnrootedCluster$ClusterHashPair.class
