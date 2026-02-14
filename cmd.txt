@@ -1,4 +1,15 @@
 
+
+
+
+./process_unrooted.sh -i data/all-gt-1k.tre -o data/all-gt-1k-c.tre -ogs "0"
+
+
+./run-with-monitor.sh -i data/all-gt-1k-c.tre -o data/out-all-gt-1k.tre
+
+python rf.py data/out-all-gt-1k.tre data/st-1k.tre
+
+
 cd ASTER 
 make
 
