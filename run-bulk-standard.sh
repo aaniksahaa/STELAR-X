@@ -35,6 +35,8 @@ ALGORITHMS=("aster" "supertriplets" "tmc")
 ALGORITHMS=("aster" "supertriplets")
 ALGORITHMS=("tmc")
 
+ALGORITHMS=("stelar")
+
 
 
 # Algorithm-specific options
@@ -73,6 +75,8 @@ folders=("37-taxon" "100-taxon" "200-taxon" "500-taxon")
 # folders=("100-taxon")
 # folders=("200-taxon")
 
+folders=("500-taxon" "1000-taxon")
+
 
 declare -A innerFolderNames
 innerFolderNames["11-taxon"]="estimated_Xgenes_strongILS/estimated_5genes_strongILS estimated_Xgenes_strongILS/estimated_15genes_strongILS estimated_Xgenes_strongILS/estimated_25genes_strongILS estimated_Xgenes_strongILS/estimated_50genes_strongILS estimated_Xgenes_strongILS/estimated_100genes_strongILS"
@@ -91,7 +95,17 @@ innerFolderNames["48-taxon"]="estimated-genetrees/1X-25-500 estimated-genetrees/
 innerFolderNames["48-taxon-latest"]="estimated_genetrees/1X-1000-500"
 innerFolderNames["100-taxon"]="inner100"
 innerFolderNames["200-taxon"]="inner200"
-innerFolderNames["500-taxon"]="model.500.2000000.0.000001"
+
+# innerFolderNames["500-taxon"]="estimated-genetrees/model.500.2000000.0.000001 true-genetrees/model.500.2000000.0.000001"
+# innerFolderNames["1000-taxon"]="estimated-genetrees/model.1000.2000000.0.000001 true-genetrees/model.1000.2000000.0.000001"
+
+innerFolderNames["500-taxon"]="estimated-genetrees/model.500.2000000.0.000001/50-gt estimated-genetrees/model.500.2000000.0.000001/200-gt estimated-genetrees/model.500.2000000.0.000001/1000-gt true-genetrees/model.500.2000000.0.000001/1000-gt"
+innerFolderNames["1000-taxon"]="estimated-genetrees/model.1000.2000000.0.000001/50-gt estimated-genetrees/model.1000.2000000.0.000001/200-gt estimated-genetrees/model.1000.2000000.0.000001/1000-gt true-genetrees/model.1000.2000000.0.000001/1000-gt"
+
+# innerFolderNames["500-taxon"]="true-genetrees/model.500.2000000.0.000001/1000-gt"
+# innerFolderNames["1000-taxon"]="true-genetrees/model.1000.2000000.0.000001/1000-gt"
+
+
 innerFolderNames["biological"]="nuclear"
 innerFolderNames["mammalian"]="424genes"
 innerFolderNames["amniota"]="aa nt"
@@ -104,7 +118,8 @@ replicates["48-taxon"]=20
 replicates["48-taxon-latest"]=20
 replicates["100-taxon"]=10
 replicates["200-taxon"]=10
-replicates["500-taxon"]=1
+replicates["500-taxon"]=20
+replicates["1000-taxon"]=20
 replicates["biological"]=1
 replicates["mammalian"]=1
 replicates["amniota"]=1
@@ -449,7 +464,10 @@ run_algorithm_and_write_stats() {
       # Prefer rf.py inside STELAR_X_ROOT if present
       if [[ -f "${STELAR_X_ROOT%/}/rf.py" && -x "$(command -v python3)" ]]; then
         echo "      Calculating RF using ${STELAR_X_ROOT%/}/rf.py"
-        rf_output=$(python3 "${STELAR_X_ROOT%/}/rf.py" "$OUT_FILE" "$TRUE_SPECIES_TREE" 2>&1) || rf_output="$rf_output"
+        rf_output=$(python "${STELAR_X_ROOT%/}/rf.py" "$OUT_FILE" "$TRUE_SPECIES_TREE" 2>&1) || rf_output="$rf_output"
+        
+        echo "$rf_output"
+        
         # try to find a number in output
         rf_candidate=$(echo "$rf_output" | grep -Eo '[0-9]+(\.[0-9]+)?' | head -n1 || true)
         if [[ -n "$rf_candidate" ]]; then
@@ -457,6 +475,11 @@ run_algorithm_and_write_stats() {
         else
           RF_RATE="NA"
         fi
+
+        echo ""
+        echo "RF rate: ${RF_RATE}"
+        echo ""
+
       elif [[ -f "${BASE_DIR%/}/RF/getFpFn.py" && -x "$(command -v python3)" ]]; then
         echo "      Calculating RF using ${BASE_DIR%/}/RF/getFpFn.py"
         # getFpFn.py returns a tuple; attempt to extract the same metric as earlier script
@@ -631,6 +654,46 @@ for folder in "${folders[@]}"; do
             # special handling for 100/200-taxon true tree path (kept from your original)
             if [[ "$folder" == "100-taxon" || "$folder" == "200-taxon" ]]; then
                 TRUE_TREE="${DATASET_DIR%/}/$folder/true-species-trees/${REPL}/sp-cleaned"
+            fi
+
+            # # special handling for 500/1000-taxon true tree path (kept from your original)
+            # if [[ "$folder" == "500-taxon" || "$folder" == "1000-taxon" ]]; then
+            #     # here 500 or 1000 should be conditional
+
+            #     TRUE_TREE="${DATASET_DIR%/}/$folder/true-species-trees/model.1000.2000000.0.000001/${REPL}/sp-cleaned"
+
+            #     # ALL_GT_FILE="${DATASET_DIR%/}/$folder/$GT_FOLDER/gt-cleaned"
+
+            #     # ./process_unrooted.sh -i ${ALL_GT_FILE} -o ${ALL_GT_FILE}-rooted-og-0.tre -ogs "0"
+
+            #     ALL_GT_FILE="${DATASET_DIR%/}/$folder/$GT_FOLDER/gt-cleaned-rooted-og-0.tre"
+
+            #     # CURRENT_GT_FOLDER="${DATASET_DIR%/}/$folder/${inner_folder}/${REPL}"
+
+            #     # # NEW_50_GT_FOLDER="${DATASET_DIR%/}/$folder/${inner_folder}/50-gt/${REPL}"
+            #     # # NEW_200_GT_FOLDER="${DATASET_DIR%/}/$folder/${inner_folder}/200-gt/${REPL}"
+            #     # NEW_1000_GT_FOLDER="${DATASET_DIR%/}/$folder/${inner_folder}/1000-gt/${REPL}"
+
+            #     # # mkdir -p ${NEW_50_GT_FOLDER} ${NEW_200_GT_FOLDER} ${NEW_1000_GT_FOLDER}
+
+            #     # mkdir -p ${NEW_1000_GT_FOLDER}
+
+            #     # cp ${CURRENT_GT_FOLDER}/gt-cleaned ${NEW_1000_GT_FOLDER}/gt-cleaned
+            #     # # cp ${CURRENT_GT_FOLDER}/gt-cleaned-50 ${NEW_50_GT_FOLDER}/gt-cleaned
+            #     # # cp ${CURRENT_GT_FOLDER}/gt-cleaned-200 ${NEW_200_GT_FOLDER}/gt-cleaned
+
+            #     # continue
+            # fi
+
+            # special handling for 500/1000-taxon true tree path (kept from your original)
+            if [[ "$folder" == "500-taxon" ]]; then
+                TRUE_TREE="${DATASET_DIR%/}/$folder/true-species-trees/model.500.2000000.0.000001/${REPL}/sp-cleaned"
+                ALL_GT_FILE="${DATASET_DIR%/}/$folder/$GT_FOLDER/gt-cleaned-rooted-og-0.tre"
+            fi
+
+            if [[ "$folder" == "1000-taxon" ]]; then
+                TRUE_TREE="${DATASET_DIR%/}/$folder/true-species-trees/model.1000.2000000.0.000001/${REPL}/sp-cleaned"
+                ALL_GT_FILE="${DATASET_DIR%/}/$folder/$GT_FOLDER/gt-cleaned-rooted-og-0.tre"
             fi
 
             if [[ ! -f "$ALL_GT_FILE" ]]; then
