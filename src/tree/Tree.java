@@ -7,13 +7,35 @@ import java.util.Stack;
 import taxon.Taxon;
 
 public class Tree {
-    
+
     public ArrayList<TreeNode> nodes;
     public TreeNode root;
     public Map<String, Taxon> taxaMap;
     public TreeNode[] leaves;
     public int leavesCount;
     public boolean isRooted = true; // Always rooted
+
+    // ── New fields for ASTRAL-X style pipeline ──────────────────────────────
+    /** Index of this tree in the gene tree list (0..k-1). Set after construction. */
+    public int treeIndex = -1;
+
+    /**
+     * postorderArray[pos] = taxon ID at left-to-right (inorder) position pos.
+     * Length = leafCount (= leavesCount). Populated during construction.
+     */
+    public int[] postorderArray;
+
+    /**
+     * positionMap[taxonId] = position in postorderArray (-1 if absent).
+     * Length = total taxa count n. Populated after taxaMap size is known.
+     */
+    public int[] positionMap;
+
+    /** Number of leaves (alias for leavesCount, set when postorderArray is built). */
+    public int leafCount;
+
+    /** True when this tree contains all n taxa (leafCount == totalTaxa). */
+    public boolean isComplete;
     
     public TreeNode addNode(ArrayList<TreeNode> children, TreeNode parent) {
         TreeNode nd = new TreeNode().setIndex(nodes.size()).setChilds(children).setParent(parent);
@@ -100,8 +122,57 @@ public class Tree {
         
         // Validate that this is a proper rooted tree
         validateRootedTree();
-        
+
         filterLeaves();
+        buildPostorderArrays();
+    }
+
+    /**
+     * Build postorderArray and positionMap for the new ASTRAL-X-style pipeline.
+     * postorderArray[pos] = taxonId  (left-to-right inorder leaf traversal)
+     * positionMap[taxonId] = pos     (-1 if absent)
+     * Also sets leafCount and isComplete (requires taxaMap to be set).
+     *
+     * Called automatically at end of parseFromNewick().
+     * For trees built via the no-arg constructor, call manually after construction.
+     */
+    public void buildPostorderArrays() {
+        if (root == null) return;
+        int n = taxaMap != null ? taxaMap.size() : leavesCount;
+
+        // Collect leaves in left-to-right order
+        ArrayList<Integer> order = new ArrayList<>();
+        collectLeavesInOrder(root, order);
+
+        leafCount = order.size();
+        postorderArray = new int[leafCount];
+        positionMap = new int[n];
+        java.util.Arrays.fill(positionMap, -1);
+
+        for (int pos = 0; pos < leafCount; pos++) {
+            int taxonId = order.get(pos);
+            postorderArray[pos] = taxonId;
+            if (taxonId >= 0 && taxonId < n) {
+                positionMap[taxonId] = pos;
+            }
+        }
+
+        isComplete = (leafCount == n);
+    }
+
+    private void collectLeavesInOrder(TreeNode node, ArrayList<Integer> order) {
+        if (node == null) return;
+        if (node.isLeaf()) {
+            if (node.taxon != null) {
+                order.add(node.taxon.id);
+            }
+            return;
+        }
+        if (node.childs != null) {
+            for (TreeNode child : node.childs) {
+                collectLeavesInOrder(child, order);
+            }
+        }
     }
     
     private int skipBranchInfo(String newickLine, int startIndex) {

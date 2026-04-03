@@ -5,52 +5,59 @@ import java.io.FileNotFoundException;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.InputStreamReader;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+
 import preprocessing.GeneTrees;
 import utils.Config;
-import core.InferenceDP;
+import utils.PhaseLogger;
 import core.SpeciesTreeScorer;
-import tree.RangeBipartition;
-import tree.MixedBipartition;
 import tree.Tree;
+import taxon.Taxon;
+import taxon.TaxonRegistry;
+import hash.TaxonHasher;
+import hash.PrefixHashArrays;
+import cluster.ClusterTable;
+import partition.PartitionTable;
+import dp.DPTable;
+import dp.Inference;
+import weight.WeightTable;
 
 /**
- * Main entry point for phylogeny project with GeneTrees processing.
- * 
- * This implementation uses the actual GeneTrees class to parse and process
- * gene trees from Newick format input files.
+ * Main entry point for STELAR-X phylogeny inference.
+ *
+ * Uses the ASTRAL-X-style pipeline to dramatically reduce peak RAM:
+ *   Phase 1  Parse    -> trees, registry
+ *   Phase 2  Hash     -> hasher, pref         (hasher=null after)
+ *   Phase 3  Clusters -> clusterTable         (uses pref)
+ *   Phase 4  Partitions -> partTable          (uses pref)
+ *   Phase 5  DP space   -> dpTable            (uses pref)
+ *            *** pref=null; System.gc(); ***  <- THE KEY MEMORY WIN
+ *   Phase 6  Weights  -> weightTable          (uses Tree.postorderArray/positionMap)
+ *   Phase 7  Inference -> species tree        (uses dpTable + weightTable)
  */
 public class Main {
 
-    /**
-     * Main method that handles command line arguments and orchestrates the
-     * analysis.
-     */
     public static void main(String[] args) throws IOException {
 
-        String inputFilePath = null;
-        String outputFilePath = null;
+        String inputFilePath   = null;
+        String outputFilePath  = null;
         String computationMode = null;
-        // expansionMethod and distanceMethod are fixed in this branch
         boolean verboseExpansion = false;
-        String branchSupport = null;
-        double lambda = 0.5;
-        boolean useMixedBipartitions = false; // Cross-tree recombination flag (default: OFF)
-        String speciesTreePath = null; // For score-only mode
+        String branchSupport   = null;
+        double lambda          = 0.5;
+        boolean useMixedBipartitions = false;
+        String speciesTreePath = null;
 
-        // Parse command line arguments
+        // ── Parse CLI arguments ────────────────────────────────────────────────
         for (int i = 0; i < args.length; i++) {
             if ((args[i].equals("-i") || args[i].equals("--input")) && i + 1 < args.length) {
-                inputFilePath = args[i + 1];
-                i++; // Skip next argument as it's the file path
+                inputFilePath = args[++i];
             } else if ((args[i].equals("-o") || args[i].equals("--output")) && i + 1 < args.length) {
-                outputFilePath = args[i + 1];
-                i++; // Skip next argument as it's the file path
+                outputFilePath = args[++i];
             } else if ((args[i].equals("-c") || args[i].equals("--score") || args[i].equals("--species-tree"))
                     && i + 1 < args.length) {
-                speciesTreePath = args[i + 1];
-                i++; // Skip next argument as it's the species tree path
+                speciesTreePath = args[++i];
             } else if (args[i].equals("--cpu")) {
                 computationMode = "CPU_SINGLE";
             } else if (args[i].equals("--cpu-parallel")) {
@@ -58,26 +65,22 @@ public class Main {
             } else if (args[i].equals("--gpu") || args[i].equals("--gpu-parallel")) {
                 computationMode = "GPU_PARALLEL";
             } else if ((args[i].equals("-m") || args[i].equals("--mode")) && i + 1 < args.length) {
-                computationMode = args[i + 1];
-                i++; // Skip next argument as it's the mode
+                computationMode = args[++i];
             } else if (args[i].equals("--expansion") || args[i].equals("-e")) {
                 useMixedBipartitions = true;
                 if (i + 1 < args.length && !args[i + 1].startsWith("-")) {
-                    // legacy value (ignored)
-                    i++;
+                    i++; // legacy value – ignored
                 }
             } else if (args[i].equals("-v") || args[i].equals("--verbose")) {
                 verboseExpansion = true;
             } else if ((args[i].equals("-s") || args[i].equals("--support") || args[i].equals("--branch-support"))
                     && i + 1 < args.length) {
-                branchSupport = args[i + 1];
-                i++; // Skip next argument as it's the support type
+                branchSupport = args[++i];
             } else if (args[i].equals("--lambda") && i + 1 < args.length) {
                 try {
-                    lambda = Double.parseDouble(args[i + 1]);
-                    i++; // Skip next argument as it's the lambda value
+                    lambda = Double.parseDouble(args[++i]);
                 } catch (NumberFormatException e) {
-                    System.err.println("Error: Invalid lambda value '" + args[i + 1] + "'");
+                    System.err.println("Error: Invalid lambda value '" + args[i] + "'");
                     System.exit(-1);
                 }
             } else if (args[i].equals("--use-mixed") || args[i].equals("--extend-candidates")
@@ -88,40 +91,33 @@ public class Main {
             }
         }
 
-        // Validate required arguments
-        // Score-only mode: -i gene_trees.tre -c species_tree.tre (no -o needed)
-        // Inference mode: -i gene_trees.tre -o output.tre
+        // ── Validate arguments ─────────────────────────────────────────────────
         if (inputFilePath == null || (outputFilePath == null && speciesTreePath == null)) {
             System.out.println("Usage:");
             System.out.println("  Inference mode: java Main -i <gene_trees> -o <output_file> [options]");
             System.out.println("  Score mode:     java Main -i <gene_trees> -c <species_tree> [options]");
             System.out.println("");
             System.out.println("Options:");
-            System.out.println(
-                    "  -c <tree>            Calculate triplet score between gene trees and given species tree");
-            System.out.println("  --score <tree>       Same as -c");
+            System.out.println("  -c <tree>             Calculate triplet score between gene trees and given species tree");
+            System.out.println("  --score <tree>        Same as -c");
             System.out.println("  --species-tree <tree> Same as -c");
-            System.out.println("  --cpu                Computation mode: CPU_SINGLE");
+            System.out.println("  --cpu                 Computation mode: CPU_SINGLE");
             System.out.println("  --cpu-parallel        Computation mode: CPU_PARALLEL");
-            System.out.println("  --gpu                Computation mode: GPU_PARALLEL");
+            System.out.println("  --gpu                 Computation mode: GPU_PARALLEL");
             System.out.println("  -m, --mode <mode>     Computation mode: CPU_SINGLE, CPU_PARALLEL, GPU_PARALLEL");
-            System.out.println("  --expansion, -e        Enable mixed bipartitions (default: OFF)");
-            System.out.println(
-                    "  -s, --support <type>  Branch support: NONE, POSTERIOR, DETAILED, LENGTH, BOTH, PVALUE, ALL");
+            System.out.println("  --expansion, -e       Enable mixed bipartitions (default: OFF)");
+            System.out.println("  -s, --support <type>  Branch support: NONE, POSTERIOR, DETAILED, LENGTH, BOTH, PVALUE, ALL");
             System.out.println("  --lambda <val>        Lambda parameter for branch support (default: 0.5)");
             System.out.println("  -v, --verbose         Verbose expansion output");
-            System.out.println("  (Mixed bipartitions are enabled when --expansion is set)");
             System.exit(-1);
         }
 
-        // Validate input file exists
         File inputFile = new File(inputFilePath);
         if (!inputFile.exists()) {
             System.err.println("Error: Input file '" + inputFilePath + "' does not exist.");
             System.exit(-1);
         }
 
-        // Set computation mode if specified
         if (computationMode != null) {
             try {
                 Config.COMPUTATION_MODE = Config.ComputationMode.valueOf(computationMode);
@@ -132,21 +128,16 @@ public class Main {
             }
         }
 
-        // Expansion method is fixed to NONE in this branch
-        utils.BipartitionExpansionConfig.EXPANSION_METHOD = utils.BipartitionExpansionConfig.ExpansionMethod.NONE;
+        utils.BipartitionExpansionConfig.EXPANSION_METHOD =
+                utils.BipartitionExpansionConfig.ExpansionMethod.NONE;
 
-        // Set verbose expansion if specified
         if (verboseExpansion) {
             utils.BipartitionExpansionConfig.VERBOSE_EXPANSION = true;
             System.out.println("Verbose expansion output enabled.");
         }
 
-        // Mixed bipartitions are enabled by --expansion
-
-        // Determine mode
         boolean scoreMode = (speciesTreePath != null);
 
-        // ── Print runtime environment summary ──
         printRuntimeEnvironment(Config.COMPUTATION_MODE);
 
         System.out.println("Input file: " + inputFilePath);
@@ -156,14 +147,9 @@ public class Main {
         } else {
             System.out.println("Mode: INFERENCE (find optimal species tree)");
             System.out.println("Output file: " + outputFilePath);
-        }
-        if (!scoreMode) {
             System.out.println("Expansion method: " + utils.BipartitionExpansionConfig.EXPANSION_METHOD);
-            if (utils.BipartitionExpansionConfig.isDistanceExpansionEnabled()) {
-                System.out.println("Distance method: " + utils.BipartitionExpansionConfig.DISTANCE_METHOD);
-            }
-            System.out.println(
-                    "Cross-tree recombination (via --expansion): " + (useMixedBipartitions ? "ENABLED" : "disabled"));
+            System.out.println("Cross-tree recombination (via --expansion): " +
+                    (useMixedBipartitions ? "ENABLED" : "disabled"));
             if (branchSupport != null) {
                 System.out.println("Branch support: " + branchSupport);
                 System.out.println("Lambda parameter: " + lambda);
@@ -172,41 +158,34 @@ public class Main {
 
         long startTime = System.nanoTime();
 
-        // Process gene trees
-        GeneTrees geneTrees = new GeneTrees(inputFilePath);
-        geneTrees.readTaxaNames(); // Ensure taxaMap is initialized
-        geneTrees.readGeneTrees(null);
-
         // ================================================================
-        // SCORE MODE: Calculate triplet score for given species tree
+        // SCORE MODE: delegate to SpeciesTreeScorer (unchanged path)
         // ================================================================
         if (scoreMode) {
-            // Validate species tree file exists
             File speciesFile = new File(speciesTreePath);
             if (!speciesFile.exists()) {
                 System.err.println("Error: Species tree file '" + speciesTreePath + "' does not exist.");
                 System.exit(-1);
             }
 
-            // Read species tree newick
             String speciesNewick = null;
             try (BufferedReader reader = new BufferedReader(new FileReader(speciesTreePath))) {
                 speciesNewick = reader.readLine();
-                if (speciesNewick != null) {
-                    speciesNewick = speciesNewick.trim();
-                }
+                if (speciesNewick != null) speciesNewick = speciesNewick.trim();
             }
-
             if (speciesNewick == null || speciesNewick.isEmpty()) {
                 System.err.println("Error: Species tree file is empty.");
                 System.exit(-1);
             }
 
+            GeneTrees geneTrees = new GeneTrees(inputFilePath);
+            geneTrees.readTaxaNames();
+            geneTrees.readGeneTrees(null);
+
             System.out.println("\nParsing species tree...");
             Tree speciesTree = new Tree(speciesNewick, geneTrees.taxaMap);
             System.out.println("Species tree parsed: " + speciesTree.leavesCount + " leaves");
 
-            // Calculate triplet score
             SpeciesTreeScorer scorer = new SpeciesTreeScorer(geneTrees);
             double score = scorer.calculateScore(speciesTree);
 
@@ -216,78 +195,105 @@ public class Main {
             System.out.println("\n========================================");
             System.out.println("TRIPLET_SCORE: " + score);
 
-            // Calculate normalized score: score / (k * (n choose 3))
-            // k = number of gene trees
-            // n = number of taxa (leaves in species tree)
             double k = (double) geneTrees.geneTrees.size();
             double n = (double) speciesTree.leavesCount;
-
             if (n >= 3) {
-                double maxTripletsPerTree = (n * (n - 1) * (n - 2)) / 6.0;
-                double maxPossibleScore = k * maxTripletsPerTree;
-                double normalizedScore = score / maxPossibleScore;
-                System.out.println("NORMALIZED_TRIPLET_SCORE: " + normalizedScore);
+                double maxPossibleScore = k * (n * (n - 1) * (n - 2)) / 6.0;
+                System.out.println("NORMALIZED_TRIPLET_SCORE: " + score / maxPossibleScore);
             } else {
                 System.out.println("NORMALIZED_TRIPLET_SCORE: Undefined (n < 3)");
             }
-
             System.out.println("========================================");
             System.out.println("Time taken: " + duration + " seconds");
             System.out.println("Score calculation completed successfully!");
-
             return;
         }
 
         // ================================================================
-        // INFERENCE MODE: Find optimal species tree via DP
+        // INFERENCE MODE: ASTRAL-X-style 7-phase pipeline
         // ================================================================
 
-        // Generate candidate bipartitions with cross-tree recombination extension
-        System.out.println("Generating candidate bipartitions...");
+        // ── Phase 1: Parse ─────────────────────────────────────────────────────
+        long t1 = PhaseLogger.begin("Phase 1  Parse", false);
 
-        // Generate mixed bipartitions via cross-tree recombination
-        // These will only be used in DP if expansion is enabled
-        List<RangeBipartition> candidates = geneTrees.generateExtendedCandidateBipartitions(useMixedBipartitions);
-        System.out.println("Total candidate bipartitions (gene tree): " + candidates.size());
+        GeneTrees geneTrees = new GeneTrees(inputFilePath);
+        geneTrees.readTaxaNames();
+        geneTrees.readGeneTrees(null);
 
-        // Report mixed bipartitions generated by cross-tree recombination
-        List<MixedBipartition> mixedBips = geneTrees.getMixedBipartitions();
-        if (mixedBips != null && !mixedBips.isEmpty()) {
-            System.out.println("Mixed bipartitions from cross-tree recombination: " + mixedBips.size());
-            long crossTree = mixedBips.stream().filter(MixedBipartition::isCrossTree).count();
-            System.out.println("  - Cross-tree (truly new): " + crossTree);
-            System.out.println("  - Same-tree: " + (mixedBips.size() - crossTree));
+        List<tree.Tree> trees = geneTrees.geneTrees;
+        int numTaxa = geneTrees.realTaxaCount;
+
+        // Assign treeIndex to each tree (needed by pipeline classes)
+        for (int i = 0; i < trees.size(); i++) {
+            trees.get(i).treeIndex = i;
         }
 
-        // Run inference
-        InferenceDP inference = new InferenceDP(geneTrees, candidates);
+        // Build TaxonRegistry from geneTrees.taxaMap  (name -> Taxon)
+        TaxonRegistry registry = buildRegistry(geneTrees.taxaMap, geneTrees.taxonIdToLabel, numTaxa);
 
-        // Enable mixed bipartitions in DP if expansion is enabled
-        if (useMixedBipartitions && mixedBips != null && !mixedBips.isEmpty()) {
-            System.out.println("\nEnabling mixed bipartitions in DP inference...");
-            inference.enableMixedBipartitions(mixedBips);
-        }
+        PhaseLogger.end("Phase 1  Parse", t1, false);
 
-        double score = inference.solve();
+        // ── Phase 2: Hash ──────────────────────────────────────────────────────
+        long t2 = PhaseLogger.begin("Phase 2  Hash", false);
 
-        // candidates and mixedBips are dead after solve().
-        // inference.solve() already nulled its internal candidateRangeBips reference.
-        // Nulling here removes the last external references so the GC can collect
-        // the RangeBipartition / MixedBipartition objects before reconstructTree() runs.
-        candidates = null;
-        mixedBips = null;
-        long gcHeapBefore = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+        TaxonHasher hasher = new TaxonHasher(numTaxa, 2, 0xDEADBEEFL);
+        PrefixHashArrays pref = new PrefixHashArrays(trees, hasher);
+        hasher = null; // free after pref is built
+
+        PhaseLogger.end("Phase 2  Hash", t2, false);
+
+        // ── Phase 3: Clusters ──────────────────────────────────────────────────
+        long t3 = PhaseLogger.begin("Phase 3  Clusters", false);
+
+        ClusterTable clusterTable = new ClusterTable(trees, pref, numTaxa);
+
+        PhaseLogger.end("Phase 3  Clusters", t3, false);
+
+        // ── Phase 4: Partitions ────────────────────────────────────────────────
+        long t4 = PhaseLogger.begin("Phase 4  Partitions", false);
+
+        PartitionTable partTable = new PartitionTable(trees, pref);
+
+        PhaseLogger.end("Phase 4  Partitions", t4, false);
+
+        // ── Phase 5: DP space ──────────────────────────────────────────────────
+        long t5 = PhaseLogger.begin("Phase 5  DP space", false);
+
+        DPTable dpTable = new DPTable(trees, pref, clusterTable);
+
+        PhaseLogger.end("Phase 5  DP space", t5, false);
+
+        // *** THE KEY MEMORY WIN: free prefix arrays before weight calc ***
+        pref = null;
+        long gcBefore = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
         System.gc();
-        long gcHeapAfter = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
-        System.out.println("Pre-reconstruct GC hint: heap " + gcHeapBefore / 1_000_000 + " MB -> "
-                + gcHeapAfter / 1_000_000 + " MB (freed "
-                + (gcHeapBefore - gcHeapAfter) / 1_000_000 + " MB)");
+        long gcAfter = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+        System.out.println("Pre-Phase-6 GC: heap " + gcBefore / 1_000_000 + " MB -> "
+                + gcAfter / 1_000_000 + " MB (freed " + (gcBefore - gcAfter) / 1_000_000 + " MB)");
 
-        Tree resultTree = inference.reconstructTree();
+        // ── Phase 6: Weights ───────────────────────────────────────────────────
+        long t6 = PhaseLogger.begin("Phase 6  Weights", false);
 
-        // Calculate branch support if requested
+        WeightTable weightTable = new WeightTable(dpTable, partTable, clusterTable, trees);
+
+        PhaseLogger.end("Phase 6  Weights", t6, false);
+
+        // ── Phase 7: Inference ─────────────────────────────────────────────────
+        long t7 = PhaseLogger.begin("Phase 7  Inference", false);
+
+        Inference inference = new Inference();
+        String newick = inference.run(dpTable, weightTable, clusterTable, trees, registry);
+
+        PhaseLogger.end("Phase 7  Inference", t7, false);
+
+        // ── Write output ───────────────────────────────────────────────────────
+
+        // Branch support annotation (if requested) requires a Tree object.
+        // Parse the Newick string back into a Tree for annotation.
         if (branchSupport != null && !branchSupport.equals("NONE")) {
             System.out.println("\nCalculating branch support...");
+
+            Tree resultTree = new Tree(newick, geneTrees.taxaMap);
 
             core.BranchSupportCalculator.BranchAnnotationType annotationType;
             try {
@@ -322,108 +328,121 @@ public class Main {
                 return;
             }
 
-            core.BranchSupportCalculator supportCalculator = new core.BranchSupportCalculator(geneTrees, resultTree,
-                    lambda, annotationType);
+            core.BranchSupportCalculator supportCalculator =
+                    new core.BranchSupportCalculator(geneTrees, resultTree, lambda, annotationType);
 
-            // Validate quartet frequencies for debugging (optional)
             if (verboseExpansion) {
                 supportCalculator.validateQuartetFrequencies();
             }
-
-            // Annotate branches
             supportCalculator.annotateBranches();
 
-            // Print statistics
-            core.BranchSupportCalculator.BranchSupportStatistics stats = supportCalculator.calculateStatistics();
+            core.BranchSupportCalculator.BranchSupportStatistics stats =
+                    supportCalculator.calculateStatistics();
             System.out.println("\n" + stats.toString());
+
+            newick = resultTree.getNewickFormat();
         }
 
-        // Write output
         try (FileWriter writer = new FileWriter(outputFilePath)) {
-            writer.write(resultTree.getNewickFormat());
+            writer.write(newick);
         }
 
         long endTime = System.nanoTime();
-        double duration = (endTime - startTime) / 1_000_000_000.0; // Convert to seconds
+        double duration = (endTime - startTime) / 1_000_000_000.0;
 
         System.out.println("\n========================================");
-        System.out.println("OPTIMAL_TRIPLET_SCORE: " + score);
+        System.out.println("OPTIMAL_TRIPLET_SCORE: " + inference.getDPScore(dpTable.getRootHash()));
         System.out.println("========================================");
         System.out.println("Time taken: " + duration + " seconds");
         System.out.println("Program completed successfully!");
         System.out.println("Output written to: " + outputFilePath);
     }
 
+    // ── Helpers ────────────────────────────────────────────────────────────────
+
     /**
-     * Prints a concise runtime environment summary: computation mode, device info,
-     * available threads, and JVM heap memory.
+     * Build a TaxonRegistry from the taxaMap produced by GeneTrees.
+     * Uses the taxonIdToLabel array to ensure IDs match exactly.
      */
+    private static TaxonRegistry buildRegistry(Map<String, Taxon> taxaMap,
+                                               String[] taxonIdToLabel,
+                                               int numTaxa) {
+        TaxonRegistry registry = new TaxonRegistry();
+        // Register names in ID order so getId(name) == taxon.id
+        if (taxonIdToLabel != null) {
+            for (int id = 0; id < numTaxa && id < taxonIdToLabel.length; id++) {
+                String name = taxonIdToLabel[id];
+                if (name != null) {
+                    registry.register(name);
+                }
+            }
+        } else {
+            // Fallback: register in whatever map order
+            for (String name : taxaMap.keySet()) {
+                registry.register(name);
+            }
+        }
+        registry.lock();
+        return registry;
+    }
+
+    /** Prints a concise runtime environment summary. */
     private static void printRuntimeEnvironment(Config.ComputationMode mode) {
-        int cpuCores = Runtime.getRuntime().availableProcessors();
+        int cpuCores      = Runtime.getRuntime().availableProcessors();
         long maxHeapBytes = Runtime.getRuntime().maxMemory();
-        String heapStr = formatBytes(maxHeapBytes);
+        String heapStr    = formatBytes(maxHeapBytes);
 
         String deviceLine;
         switch (mode) {
             case GPU_PARALLEL:
                 String gpuName = detectGpuName();
-                if (gpuName != null) {
-                    deviceLine = "GPU — " + gpuName;
-                } else {
-                    deviceLine = "GPU (device details unavailable — will attempt CUDA at runtime)";
-                }
+                deviceLine = (gpuName != null) ? "GPU \u2014 " + gpuName
+                        : "GPU (device details unavailable \u2014 will attempt CUDA at runtime)";
                 break;
             case CPU_PARALLEL:
                 deviceLine = "CPU (" + cpuCores + " cores, multi-threaded)";
                 break;
             case CPU_SINGLE:
+            default:
                 deviceLine = "CPU (single-threaded)";
                 break;
-            default:
-                deviceLine = "unknown";
         }
 
-        // ANSI colors
-        String CYAN   = "\u001B[36m";
-        String BOLD   = "\u001B[1m";
-        String GREEN  = "\u001B[32m";
-        String YELLOW = "\u001B[33m";
-        String RESET  = "\u001B[0m";
+        String CYAN  = "\u001B[36m";
+        String BOLD  = "\u001B[1m";
+        String GREEN = "\u001B[32m";
+        String RESET = "\u001B[0m";
 
         System.out.println();
-        System.out.println(CYAN + "════════════════════════════════════════════════════" + RESET);
+        System.out.println(CYAN + "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550" + RESET);
         System.out.println(BOLD + CYAN + "  STELAR-X  Runtime Environment" + RESET);
-        System.out.println(CYAN + "════════════════════════════════════════════════════" + RESET);
+        System.out.println(CYAN + "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550" + RESET);
         System.out.println("  Compute:  " + BOLD + GREEN + mode + RESET);
         System.out.println("  Device:   " + deviceLine);
         System.out.println("  Threads:  " + cpuCores + " available");
         System.out.println("  JVM Heap: " + heapStr);
-        System.out.println(CYAN + "════════════════════════════════════════════════════" + RESET);
+        System.out.println(CYAN + "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550" + RESET);
         System.out.println();
     }
 
-    /**
-     * Tries to detect GPU name by running nvidia-smi.
-     * Returns null if GPU cannot be detected.
-     */
     private static String detectGpuName() {
         try {
             Process proc = new ProcessBuilder(
                     "nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits")
-                    .redirectErrorStream(true)
-                    .start();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
+                    .redirectErrorStream(true).start();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(proc.getInputStream()))) {
                 String line = reader.readLine();
                 int exitCode = proc.waitFor();
                 if (exitCode == 0 && line != null && !line.trim().isEmpty()) {
-                    // Output format: "NVIDIA GeForce RTX 4060 Laptop GPU, 8188"
                     String[] parts = line.split(",");
                     if (parts.length >= 2) {
-                        String name = parts[0].trim();
-                        String memMB = parts[1].trim();
+                        String name   = parts[0].trim();
+                        String memMB  = parts[1].trim();
                         try {
                             int mb = Integer.parseInt(memMB);
-                            String memStr = (mb >= 1024) ? String.format("%.0f GB", mb / 1024.0) : (mb + " MB");
+                            String memStr = (mb >= 1024)
+                                    ? String.format("%.0f GB", mb / 1024.0) : (mb + " MB");
                             return name + " (" + memStr + ")";
                         } catch (NumberFormatException e) {
                             return name;
@@ -432,112 +451,16 @@ public class Main {
                     return line.trim();
                 }
             }
-        } catch (Exception e) {
-            // nvidia-smi not found or failed — that's fine
-        }
+        } catch (Exception ignored) {}
         return null;
     }
 
-    /**
-     * Formats byte count to human-readable string.
-     */
     private static String formatBytes(long bytes) {
-        if (bytes >= 1024L * 1024 * 1024) {
+        if (bytes >= 1024L * 1024 * 1024)
             return String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024));
-        } else if (bytes >= 1024L * 1024) {
+        else if (bytes >= 1024L * 1024)
             return String.format("%.0f MB", bytes / (1024.0 * 1024));
-        } else {
+        else
             return bytes + " bytes";
-        }
-    }
-
-    /**
-     * Processes gene trees using the GeneTrees class and returns analysis results.
-     * 
-     * @param inputFilePath Path to the input file containing gene trees in Newick
-     *                      format
-     * @return Formatted string with analysis results
-     * @throws FileNotFoundException if the input file cannot be read
-     */
-    private static String processGeneTrees(String inputFilePath) throws FileNotFoundException {
-        System.out.println("Initializing GeneTrees...");
-
-        // Create GeneTrees object and read taxa names
-        GeneTrees geneTrees = new GeneTrees(inputFilePath);
-        var taxaMap = geneTrees.readTaxaNames();
-
-        System.out.println("Reading and parsing gene trees...");
-
-        // Read and process all gene trees
-        geneTrees.readGeneTrees(null); // No distance matrix needed for basic analysis
-
-        // Debug output
-        // debugOutput(geneTrees);
-
-        System.out.println(geneTrees.geneTrees.get(0).isRooted);
-
-        // Test InferenceDP algorithm
-        System.out.println("Testing InferenceDP algorithm...");
-        List<RangeBipartition> candidates = new ArrayList<>(geneTrees.rangeBipartitions.keySet());
-
-        if (!candidates.isEmpty()) {
-            InferenceDP dp = new InferenceDP(geneTrees, candidates);
-            double maxScore = dp.solve();
-
-            System.out.println("DP Algorithm completed with maximum score: " + maxScore);
-
-            Tree reconstructedTree = dp.reconstructTree();
-            if (reconstructedTree != null && reconstructedTree.root != null) {
-                System.out.println("Tree reconstruction successful");
-                return reconstructedTree.getNewickFormat();
-            }
-        }
-
-        return "";
-    }
-
-    /**
-     * Debug function that prints detailed analysis information to console
-     */
-    private static void debugOutput(GeneTrees geneTrees) {
-        // Gather analysis information
-        int geneTreeCount = geneTrees.geneTrees.size();
-        int taxaCount = geneTrees.realTaxaCount;
-        // int uniquePartitions = geneTrees.triPartitions.size();
-        int uniqueRangeBipartitions = geneTrees.rangeBipartitions.size();
-
-        System.out.println("Processing complete:");
-        System.out.println("  - Gene trees processed: " + geneTreeCount);
-        System.out.println("  - Taxa found: " + taxaCount);
-        // System.out.println(" - Unique tripartitions: " + uniquePartitions);
-        System.out.println("  - Unique RangeBipartitions: " + uniqueRangeBipartitions);
-
-        // Print taxa names
-        System.out.print("Taxa names: ");
-        for (int i = 0; i < geneTrees.taxonIdToLabel.length; i++) {
-            if (i > 0)
-                System.out.print(", ");
-            System.out.print(geneTrees.taxonIdToLabel[i]);
-        }
-        System.out.println();
-
-        // Print RangeBipartitions with counts
-        System.out.println("RangeBipartitions:");
-        for (var entry : geneTrees.rangeBipartitions.entrySet()) {
-            System.out.println("  " + entry.getKey().toString() + " : " + entry.getValue());
-        }
-    }
-
-    /**
-     * Writes analysis results to the specified output file.
-     * 
-     * @param outputFilePath Path to the output file
-     * @param content        Content to write to the file
-     * @throws IOException if there's an error writing to the file
-     */
-    private static void writeResults(String outputFilePath, String content) throws IOException {
-        FileWriter writer = new FileWriter(outputFilePath);
-        writer.write(content);
-        writer.close();
     }
 }
