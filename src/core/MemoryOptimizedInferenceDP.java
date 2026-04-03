@@ -19,12 +19,12 @@ public class MemoryOptimizedInferenceDP {
     
     private final GeneTrees geneTrees;
     private final List<RangeBipartition> candidateRangeBips;
-    private final Map<ClusterHashPair, List<RangeBipartition>> clusterHashToRangeBips;
+    private Map<ClusterHashPair, List<RangeBipartition>> clusterHashToRangeBips;
     private Map<RangeBipartition, Double> rangeBipWeights;
     private final Map<ClusterHashPair, Double> dpMemo;
     private final Map<ClusterHashPair, Object> dpChoice;  // Can be RangeBipartition or MixedBipartition
     private final ClusterHashManager clusterHashManager;
-    private final MemoryEfficientBipartitionManager bipartitionManager;
+    private MemoryEfficientBipartitionManager bipartitionManager;
     
     // Mixed bipartition support (cross-tree recombination)
     private List<MixedBipartition> mixedBipartitions;
@@ -327,27 +327,55 @@ public class MemoryOptimizedInferenceDP {
         ClusterHashPair allTaxaHash = clusterHashManager.getAllTaxaClusterHash();
         System.out.println("All taxa cluster hash: " + allTaxaHash.toDebugString());
         System.out.println("All taxa cluster size: " + clusterHashManager.getClusterSize(allTaxaHash));
-        
+
+        // bipartitionManager (prefix sums, XOR arrays, hash-to-bipartition map) is only needed
+        // through weight calculation / mixed-bip preprocessing — both done before solve().
+        // Null it now so the GC can reclaim it before dp() inflates dpMemo.
+        bipartitionManager = null;
+        long gcHeapBefore1 = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+        System.gc();
+        long gcHeapAfter1 = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+        System.out.println("Pre-DP GC hint: heap " + gcHeapBefore1 / 1_000_000 + " MB -> "
+                + gcHeapAfter1 / 1_000_000 + " MB (freed "
+                + (gcHeapBefore1 - gcHeapAfter1) / 1_000_000 + " MB)");
+
         double result = dp(allTaxaHash);
-        
+
+        // Capture sizes before nulling (used in the summary below).
+        int clusterHashStateSpaceSize = clusterHashToRangeBips.size();
+        int mixedClusterHashGroupSize = (clusterHashToMixedBips != null ? clusterHashToMixedBips.size() : 0);
+
+        // Weight maps and hash-to-bips maps are only needed during dp().
+        // Null them now so the GC can reclaim them before reconstructTree() runs.
+        clusterHashToRangeBips = null;
+        rangeBipWeights = null;
+        clusterHashToMixedBips = null;
+        mixedBipWeights = null;
+        mixedBipartitions = null;
+        long gcHeapBefore2 = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+        System.gc();
+        long gcHeapAfter2 = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+        System.out.println("Post-DP GC hint: heap " + gcHeapBefore2 / 1_000_000 + " MB -> "
+                + gcHeapAfter2 / 1_000_000 + " MB (freed "
+                + (gcHeapBefore2 - gcHeapAfter2) / 1_000_000 + " MB)");
+
         long endTime = System.currentTimeMillis();
         totalProcessingTime = endTime - startTime;
-        
+
         System.out.println("==== DP SOLUTION COMPLETED ====");
         System.out.println("Optimal score: " + result);
         System.out.println("Processing time: " + totalProcessingTime + " ms");
         System.out.println("DP calls: " + dpCalls);
-        System.out.println("Memo hits: " + memoHits + " (" + 
+        System.out.println("Memo hits: " + memoHits + " (" +
                          (dpCalls > 0 ? String.format("%.2f%%", 100.0 * memoHits / dpCalls) : "0%") + ")");
         System.out.println("Cluster validations: " + clusterValidations);
-        System.out.println("Unique clusters in DP state space: " + clusterHashToRangeBips.size());
+        System.out.println("Unique clusters in DP state space: " + clusterHashStateSpaceSize);
         System.out.println("Unique clusters visited (memoized): " + dpMemo.size());
-        
+
         // Print mixed bipartition statistics if enabled
         if (useMixedBipartitions) {
             System.out.println("Mixed bipartitions enabled: YES");
-            System.out.println("Mixed cluster hash groups: " + 
-                             (clusterHashToMixedBips != null ? clusterHashToMixedBips.size() : 0));
+            System.out.println("Mixed cluster hash groups: " + mixedClusterHashGroupSize);
             System.out.println("Mixed bipartition choices in optimal tree: " + mixedBipChoices);
         }
         
@@ -620,7 +648,7 @@ public class MemoryOptimizedInferenceDP {
             dpCalls > 0 ? String.format("%.2f%%", 100.0 * memoHits / dpCalls) : "0%").append(")\n");
         sb.append("  Cluster validations: ").append(clusterValidations).append("\n");
         sb.append("  Memoized clusters: ").append(dpMemo.size()).append("\n");
-        sb.append("  Cluster hash groups (range): ").append(clusterHashToRangeBips.size()).append("\n");
+        sb.append("  Cluster hash groups (range): ").append(clusterHashToRangeBips != null ? clusterHashToRangeBips.size() : "freed").append("\n");
         
         if (useMixedBipartitions) {
             sb.append("  Mixed bipartitions enabled: YES\n");
