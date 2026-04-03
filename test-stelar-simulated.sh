@@ -27,7 +27,7 @@ SPMIN="500000"
 SPMAX="1500000"
 
 USE_LEGACY_LAYOUT=false
-STELAR_OPTS="GPU_PARALLEL NONE"
+STELAR_OPTS="--gpu"
 FRESH=false
 
 # Monitoring options (DEFAULT: ON)
@@ -233,12 +233,12 @@ fi
 STELAR_PID=""
 if [[ "${TIME_MONITOR:-false}" = true && -n "$TIME_CMD" ]]; then
   (
-    cd "$STELAR_ROOT" && "$TIME_CMD" -v ./run.sh "$ALL_GT_FILE" "$OUT_STELAR" $STELAR_OPTS < /dev/null 2>&1 | tee "$TIME_TMP"
+    cd "$STELAR_ROOT" && "$TIME_CMD" -v ./run.sh -i "$ALL_GT_FILE" -o "$OUT_STELAR" $STELAR_OPTS < /dev/null 2>&1 | tee "$TIME_TMP"
   ) &
   STELAR_PID=$!
 else
   (
-    cd "$STELAR_ROOT" && ./run.sh "$ALL_GT_FILE" "$OUT_STELAR" $STELAR_OPTS < /dev/null 2>&1 | tee "$TIME_TMP"
+    cd "$STELAR_ROOT" && ./run.sh -i "$ALL_GT_FILE" -o "$OUT_STELAR" $STELAR_OPTS < /dev/null 2>&1 | tee "$TIME_TMP"
   ) &
   STELAR_PID=$!
 fi
