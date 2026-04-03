@@ -276,6 +276,8 @@ cd ..
 
 
 
+
+
 ## A10K dataset runner (10k-astral-dataset layout)
 ./run-a10k.sh -m stelar --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated --stelar-opts "--threads 16"
 ./run-a10k.sh -m aster --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated --aster-opts "-t 32"
