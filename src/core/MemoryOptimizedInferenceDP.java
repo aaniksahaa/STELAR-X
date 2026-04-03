@@ -18,7 +18,7 @@ import tree.*;
 public class MemoryOptimizedInferenceDP {
     
     private final GeneTrees geneTrees;
-    private final List<RangeBipartition> candidateRangeBips;
+    private List<RangeBipartition> candidateRangeBips;
     private Map<ClusterHashPair, List<RangeBipartition>> clusterHashToRangeBips;
     private Map<RangeBipartition, Double> rangeBipWeights;
     private final Map<ClusterHashPair, Double> dpMemo;
@@ -345,13 +345,17 @@ public class MemoryOptimizedInferenceDP {
         int clusterHashStateSpaceSize = clusterHashToRangeBips.size();
         int mixedClusterHashGroupSize = (clusterHashToMixedBips != null ? clusterHashToMixedBips.size() : 0);
 
-        // Weight maps and hash-to-bips maps are only needed during dp().
+        // Weight maps, hash-to-bips maps, and the candidate list are only needed during dp().
         // Null them now so the GC can reclaim them before reconstructTree() runs.
+        // NOTE: candidateRangeBips points to the same list as 'candidates' in Main.java.
+        // Nulling here removes the DP's reference; the caller must also null its reference
+        // before the RangeBipartition objects themselves become unreachable.
         clusterHashToRangeBips = null;
         rangeBipWeights = null;
         clusterHashToMixedBips = null;
         mixedBipWeights = null;
         mixedBipartitions = null;
+        candidateRangeBips = null;
         long gcHeapBefore2 = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
         System.gc();
         long gcHeapAfter2 = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();

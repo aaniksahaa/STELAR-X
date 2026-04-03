@@ -269,6 +269,20 @@ public class Main {
         }
 
         double score = inference.solve();
+
+        // candidates and mixedBips are dead after solve().
+        // inference.solve() already nulled its internal candidateRangeBips reference.
+        // Nulling here removes the last external references so the GC can collect
+        // the RangeBipartition / MixedBipartition objects before reconstructTree() runs.
+        candidates = null;
+        mixedBips = null;
+        long gcHeapBefore = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+        System.gc();
+        long gcHeapAfter = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+        System.out.println("Pre-reconstruct GC hint: heap " + gcHeapBefore / 1_000_000 + " MB -> "
+                + gcHeapAfter / 1_000_000 + " MB (freed "
+                + (gcHeapBefore - gcHeapAfter) / 1_000_000 + " MB)");
+
         Tree resultTree = inference.reconstructTree();
 
         // Calculate branch support if requested

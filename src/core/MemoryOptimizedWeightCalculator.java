@@ -731,9 +731,19 @@ public class MemoryOptimizedWeightCalculator {
                 numTrees,
                 numTaxa
             );
-            
+
             System.out.println("==== PURE RANGE-BASED GPU KERNEL COMPLETED ====");
-            
+
+            // Input arrays are no longer needed after the kernel returns.
+            // Null them now so the GC can reclaim them (~800 MB+ native memory for
+            // inverseIndex + orderings at 100K taxa × 1K trees) while we fill the result map.
+            // Do NOT null weights[] — it is still being read in the loop below.
+            candidateArray = null;
+            geneTreeArray  = null;
+            frequencyArray = null;
+            inverseIndexMemory = null;
+            orderingMemory     = null;
+
             // Convert results back to Java Map
             Map<RangeBipartition, Double> result = new HashMap<>();
             for (int i = 0; i < numCandidates; i++) {
