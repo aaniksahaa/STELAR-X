@@ -117,6 +117,22 @@ ASTER/bin/astral4_int128 -i all_gt_bs_rooted_37.tre -o out-37.tre
 
 ./run-aster-with-monitor.sh -i all_gt_bs_rooted_200.tre -o out.tre -t 16 -C
 
+
+## SETTING UP ASTRAL-MP
+
+cd baselines/ASTRAL
+chmod +x compile_astral.sh run_astral.sh setup_gpu_astral.sh
+./setup_gpu_astral.sh
+./compile_astral.sh
+./run_astral.sh -i ../inputs/in200.tr -o ./out.tr 
+
+
+./run_astral.sh -i ../inputs/in200.tr -o ./out.tr -T 32
+
+# --> make sure that GPU being used
+
+
+
 ## Unified baseline runner (with monitoring)
 ./run-baseline-with-monitor.sh -m aster -i all_gt_bs_rooted_37.tre -o data/out-aster.tre --aster-opts "-t 16 -C"
 ./run-baseline-with-monitor.sh -m astral -i all_gt_bs_rooted_37.tre -o data/out-astral.tre --astral-opts "-t 8"
