@@ -1,8 +1,29 @@
 # STELAR-X: Scaling Coalescent-Based Species Tree Inference to 100,000 Species and Beyond
 
-**STELAR-X** is a highly scalable, statistically consistent summary method for species tree inference that reconstructs species trees from large collections of gene trees under the multispecies coalescent model. It achieves near-input-size O(nk) memory usage through a redesigned computational framework built on compact integer-tuple bipartition encodings, fast precomputation of bipartition weights, and GPU-accelerated parallelism, all integrated into an optimized dynamic programming pipeline.
+**STELAR-X** is a scalable, statistically consistent summary method for coalescent-based species tree inference from large collections of gene trees. It combines compact bipartition encodings, fast weight precomputation, GPU-accelerated parallelism, and optimized dynamic programming to analyze datasets as large as **100,000 taxa × 1,000 genes in just 8.5 hours using 86 GB RAM**.
 
-With this combination of algorithmic engineering and parallel computation, STELAR-X delivers unprecedented scalability—analyzing **100,000 taxa × 1,000 genes in about 8.5 hours using 86 GB RAM**, and **1,000 taxa × 100,000 genes in 4 minutes using 106 GB RAM**. STELAR-X is therefore expected to handle substantially larger datasets (>100,000 taxa) on machines with a few hundred gigabytes of RAM (e.g., 256 GB) and modest multi-day runtimes.
+**The paper  STELAR-X has been accepted for presentation at [RECOMB 2026](https://recomb.org/recomb2026/) in Greece.**
+
+## Citation
+
+If you use **STELAR-X**, its source code, or results produced by it in your research, please cite our paper:
+
+> Anik Saha and Md. Shamsuzzoha Bayzid.  
+> **STELAR-X: Scaling Coalescent-Based Species Tree Inference to 100,000 Species and Beyond.**  
+> Accepted at RECOMB 2026.  
+> bioRxiv, 2025. https://doi.org/10.1101/2025.11.22.689894
+
+```bibtex
+@article{saha2025stelarx,
+  title   = {{STELAR-X}: Scaling Coalescent-Based Species Tree
+             Inference to 100,000 Species and Beyond},
+  author  = {Saha, Anik and Bayzid, Md. Shamsuzzoha},
+  journal = {bioRxiv},
+  year    = {2025},
+  doi     = {10.1101/2025.11.22.689894},
+  note    = {Accepted at RECOMB 2026}
+}
+```
 
 > **Platform:** Developed and tested on **Ubuntu Linux**.
 
