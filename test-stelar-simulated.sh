@@ -27,7 +27,7 @@ SPMIN="500000"
 SPMAX="1500000"
 
 USE_LEGACY_LAYOUT=false
-STELAR_OPTS="GPU_PARALLEL NONE"
+STELAR_OPTS="-m GPU_PARALLEL -s NONE"
 FRESH=false
 
 # Monitoring options (DEFAULT: ON)
@@ -161,6 +161,24 @@ echo "==> Running STELAR (output will be written to $OUT_STELAR)"
 
 mkdir -p "${SIMPHY_RUN_DIR%/}"
 
+# Convert the previous local shorthand ("GPU_PARALLEL NONE") into the
+# flag-based interface expected by run.sh.
+read -r -a STELAR_OPTS_ARR <<< "$STELAR_OPTS"
+if [[ ${#STELAR_OPTS_ARR[@]} -gt 0 ]]; then
+  case "${STELAR_OPTS_ARR[0]}" in
+    CPU_SINGLE|CPU_PARALLEL|GPU_PARALLEL)
+      LEGACY_STELAR_OPTS=("${STELAR_OPTS_ARR[@]}")
+      STELAR_OPTS_ARR=("-m" "${LEGACY_STELAR_OPTS[0]}")
+      if [[ ${#LEGACY_STELAR_OPTS[@]} -gt 1 && "${LEGACY_STELAR_OPTS[1]}" != "NONE" ]]; then
+        STELAR_OPTS_ARR+=("-e")
+      fi
+      if [[ ${#LEGACY_STELAR_OPTS[@]} -gt 2 ]]; then
+        STELAR_OPTS_ARR+=("${LEGACY_STELAR_OPTS[@]:2}")
+      fi
+      ;;
+  esac
+fi
+
 # create log paths inside run dir so they're easy to inspect remotely
 TIME_TMP="${SIMPHY_RUN_DIR%/}/.stelar_time_err.log"
 MON_TMP="${SIMPHY_RUN_DIR%/}/.stelar_gpu_mem.log"
@@ -233,12 +251,12 @@ fi
 STELAR_PID=""
 if [[ "${TIME_MONITOR:-false}" = true && -n "$TIME_CMD" ]]; then
   (
-    cd "$STELAR_ROOT" && "$TIME_CMD" -v ./run.sh "$ALL_GT_FILE" "$OUT_STELAR" $STELAR_OPTS < /dev/null 2>&1 | tee "$TIME_TMP"
+    cd "$STELAR_ROOT" && "$TIME_CMD" -v ./run.sh --input "$ALL_GT_FILE" --output "$OUT_STELAR" "${STELAR_OPTS_ARR[@]}" < /dev/null 2>&1 | tee "$TIME_TMP"
   ) &
   STELAR_PID=$!
 else
   (
-    cd "$STELAR_ROOT" && ./run.sh "$ALL_GT_FILE" "$OUT_STELAR" $STELAR_OPTS < /dev/null 2>&1 | tee "$TIME_TMP"
+    cd "$STELAR_ROOT" && ./run.sh --input "$ALL_GT_FILE" --output "$OUT_STELAR" "${STELAR_OPTS_ARR[@]}" < /dev/null 2>&1 | tee "$TIME_TMP"
   ) &
   STELAR_PID=$!
 fi
@@ -420,4 +438,3 @@ fi
 
 echo "Done."
 exit 0
-
