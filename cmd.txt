@@ -383,4 +383,10 @@ python cleaner.py data/63430.gene.trees data/63k-r-og-strcam.tre --outgroup "Str
 CPU ONLY RUNS 
 =========================
 
+./run-bulk-simulated.sh \
+  -m stelar \
+  --stelar-opts "--cpu-parallel -s NONE" \
+  -T 32
+
+  
 
