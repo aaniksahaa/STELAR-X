@@ -116,8 +116,9 @@ echo
 
 echo -e "${YELLOW}Searching for stat-*.csv files in $DATASET_DIR...${NC}"
 
-# Find all stat-*.csv files
-stat_files=($(find "$DATASET_DIR" -name "stat-*.csv" -type f 2>/dev/null || true))
+# Find legacy stat-*.csv files. Exclude mode-specific STELAR files so this
+# collector remains backward-compatible with its original single-header merge.
+stat_files=($(find "$DATASET_DIR" -name "stat-*.csv" ! -name "stat-stelar-*_t*.csv" -type f 2>/dev/null || true))
 
 if [ ${#stat_files[@]} -eq 0 ]; then
     echo -e "${RED}No stat-*.csv files found in $DATASET_DIR${NC}"

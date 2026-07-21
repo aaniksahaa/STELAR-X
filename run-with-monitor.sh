@@ -114,6 +114,28 @@ echo "GPU monitor:    $GPU_MONITOR"
 echo "Notifications:  $(if [[ "$NO_NOTIFY" = true ]]; then echo "disabled"; else echo "enabled"; fi)"
 echo
 
+STELAR_RUN_MODE="AUTO"
+STELAR_THREADS="AUTO"
+STELAR_OPTIONS_STR="${STELAR_ARGS[*]:-}"
+for ((i=0; i<${#STELAR_ARGS[@]}; i++)); do
+  case "${STELAR_ARGS[$i]}" in
+    --cpu) STELAR_RUN_MODE="CPU_SINGLE" ;;
+    --cpu-parallel) STELAR_RUN_MODE="CPU_PARALLEL" ;;
+    --gpu|--gpu-parallel) STELAR_RUN_MODE="GPU_PARALLEL" ;;
+    -m|--mode)
+      if [[ -n "${STELAR_ARGS[$((i+1))]:-}" ]]; then
+        STELAR_RUN_MODE="${STELAR_ARGS[$((i+1))]}"
+      fi
+      ;;
+    -T|--threads)
+      if [[ -n "${STELAR_ARGS[$((i+1))]:-}" ]]; then
+        STELAR_THREADS="${STELAR_ARGS[$((i+1))]}"
+      fi
+      ;;
+  esac
+done
+STELAR_STATS_TAG="$(printf "%s" "${STELAR_RUN_MODE,,}_t${STELAR_THREADS}" | tr -c 'a-z0-9_.-' '_')"
+
 # Validate input file
 if [[ ! -f "$INPUT_FILE" ]]; then
   echo -e "${RED}Error: Input file '$INPUT_FILE' does not exist.${NC}"
@@ -223,6 +245,7 @@ else
 fi
 
 STELAR_PID=""
+STELAR_EXIT_CODE=""
 echo -e "${YELLOW}Running STELAR-X...${NC}"
 echo -e "${YELLOW}Command: cd $STELAR_ROOT && ./run.sh --input \"$INPUT_FILE\" --output \"$OUTPUT_FILE\" ${STELAR_ARGS[*]}${NC}"
 echo
@@ -243,19 +266,30 @@ fi
 # Give a short moment and verify the job didn't die immediately
 sleep 0.25
 if ! kill -0 "$STELAR_PID" >/dev/null 2>&1; then
-  echo -e "${RED}Error: STELAR process (pid ${STELAR_PID}) failed to start or died immediately.${NC}"
-  echo "----- Captured time/generic stderr (first 200 lines) -----"
-  head -n 200 "$TIME_TMP" 2>/dev/null || true
-  echo "---------------------------------------------------------"
   touch "$TEMP_DIR/.stelar_done"
-  exit 5
+  if wait "$STELAR_PID"; then
+    STELAR_EXIT_CODE=0
+    echo "STELAR process (pid ${STELAR_PID}) finished before startup check completed."
+  else
+    STELAR_EXIT_CODE=$?
+    echo -e "${RED}Error: STELAR process (pid ${STELAR_PID}) failed to start or died immediately.${NC}"
+    echo "----- Captured time/generic stderr (first 200 lines) -----"
+    head -n 200 "$TIME_TMP" 2>/dev/null || true
+    echo "---------------------------------------------------------"
+    exit 5
+  fi
 fi
 
-echo "STELAR started with PID ${STELAR_PID} (logging to ${TIME_TMP} if time-monitor enabled)"
+if [[ -z "$STELAR_EXIT_CODE" ]]; then
+  echo "STELAR started with PID ${STELAR_PID} (logging to ${TIME_TMP} if time-monitor enabled)"
 
-# Wait for stelar to finish
-wait "$STELAR_PID"
-STELAR_EXIT_CODE=$?
+  # Wait for stelar to finish
+  if wait "$STELAR_PID"; then
+    STELAR_EXIT_CODE=0
+  else
+    STELAR_EXIT_CODE=$?
+  fi
+fi
 
 # Stop GPU monitor by placing sentinel file
 touch "$TEMP_DIR/.stelar_done"
@@ -367,11 +401,18 @@ if [[ -f "$OUTPUT_FILE" ]]; then
   echo "Output size:    $(wc -l < "$OUTPUT_FILE") lines"
 fi
 
-# Create a simple stats file next to the output
+# Create stats files next to the output. Keep the legacy path for existing scripts,
+# and also write a mode-specific file so CPU/GPU runs do not overwrite each other.
 STATS_FILE="${OUTPUT_FILE%.tre}_stats.csv"
-echo "algorithm,input_file,output_file,running_time_s,max_cpu_mb,max_gpu_mb,optimal_triplet_score,normalized_triplet_score,exit_code" > "$STATS_FILE"
-echo "stelar-x,$(basename "$INPUT_FILE"),$(basename "$OUTPUT_FILE"),${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB},${OPTIMAL_TRIPLET_SCORE},${NORMALIZED_SCORE},${STELAR_EXIT_CODE}" >> "$STATS_FILE"
+MODE_STATS_FILE="${OUTPUT_FILE%.tre}_${STELAR_STATS_TAG}_stats.csv"
+STATS_HEADER="algorithm,mode,threads,stelar_options,input_file,output_file,running_time_s,max_cpu_mb,max_gpu_mb,optimal_triplet_score,normalized_triplet_score,exit_code"
+STATS_ROW="stelar-x,${STELAR_RUN_MODE},${STELAR_THREADS},\"${STELAR_OPTIONS_STR}\",$(basename "$INPUT_FILE"),$(basename "$OUTPUT_FILE"),${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB},${OPTIMAL_TRIPLET_SCORE},${NORMALIZED_SCORE},${STELAR_EXIT_CODE}"
+echo "$STATS_HEADER" > "$STATS_FILE"
+echo "$STATS_ROW" >> "$STATS_FILE"
+echo "$STATS_HEADER" > "$MODE_STATS_FILE"
+echo "$STATS_ROW" >> "$MODE_STATS_FILE"
 echo "Stats saved to: $STATS_FILE"
+echo "Mode stats saved to: $MODE_STATS_FILE"
 
 # Send notification (ntfy) if enabled and curl available
 if [[ "$NO_NOTIFY" = false ]] && command -v curl >/dev/null 2>&1; then

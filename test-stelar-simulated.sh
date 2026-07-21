@@ -129,40 +129,6 @@ ALL_GT_FILE="${SIMPHY_RUN_DIR%/}/all_gt.tre"
 TRUE_SPECIES_TREE="${SIMPHY_RUN_DIR%/}/s_tree.trees"
 OUT_STELAR="${SIMPHY_RUN_DIR%/}/out-stelar.tre"
 
-# Debug/tracing
-if [[ "${DEBUG:-0}" = "1" ]]; then
-  set -x
-fi
-
-# checkpoint: if stat file exists and --fresh not provided, skip everything
-if [[ "$FRESH" = false && -f "${STAT_FILE}" ]]; then
-  echo "SKIPPING: ${STAT_FILE} already exists. Use --fresh to force rerun."
-  exit 0
-fi
-
-echo "Parameters:"
-echo "  taxa_num:       $TAXA_NUM"
-echo "  gene_trees:     $GENE_TREES"
-echo "  replicate:      $REPLICATE"
-if [[ "$SIMPHY_DATA_DIR_SET" = true ]]; then
-  echo "  simphy data dir: $SIMPHY_DATA_DIR (custom)"
-else
-  echo "  simphy data dir: ${SIMPHY_DIR%/}/data (default)"
-fi
-echo "  simphy run dir: $SIMPHY_RUN_DIR"
-echo "  out stelar:     $OUT_STELAR"
-echo "  stat file:      $STAT_FILE"
-echo
-
-if [[ ! -f "$ALL_GT_FILE" ]]; then
-  echo "Error: gene-tree file not found at $ALL_GT_FILE"
-  exit 6
-fi
-
-echo "==> Running STELAR (output will be written to $OUT_STELAR)"
-
-mkdir -p "${SIMPHY_RUN_DIR%/}"
-
 # Convert the previous local shorthand ("GPU_PARALLEL NONE") into the
 # flag-based interface expected by run.sh.
 read -r -a STELAR_OPTS_ARR <<< "$STELAR_OPTS"
@@ -180,6 +146,66 @@ if [[ ${#STELAR_OPTS_ARR[@]} -gt 0 ]]; then
       ;;
   esac
 fi
+
+STELAR_RUN_MODE="AUTO"
+STELAR_THREADS="AUTO"
+STELAR_OPTIONS_STR="${STELAR_OPTS_ARR[*]:-}"
+for ((i=0; i<${#STELAR_OPTS_ARR[@]}; i++)); do
+  case "${STELAR_OPTS_ARR[$i]}" in
+    --cpu) STELAR_RUN_MODE="CPU_SINGLE" ;;
+    --cpu-parallel) STELAR_RUN_MODE="CPU_PARALLEL" ;;
+    --gpu|--gpu-parallel) STELAR_RUN_MODE="GPU_PARALLEL" ;;
+    -m|--mode)
+      if [[ -n "${STELAR_OPTS_ARR[$((i+1))]:-}" ]]; then
+        STELAR_RUN_MODE="${STELAR_OPTS_ARR[$((i+1))]}"
+      fi
+      ;;
+    -T|--threads)
+      if [[ -n "${STELAR_OPTS_ARR[$((i+1))]:-}" ]]; then
+        STELAR_THREADS="${STELAR_OPTS_ARR[$((i+1))]}"
+      fi
+      ;;
+  esac
+done
+STELAR_STATS_TAG="$(printf "%s" "${STELAR_RUN_MODE,,}_t${STELAR_THREADS}" | tr -c 'a-z0-9_.-' '_')"
+MODE_STAT_FILE="${SIMPHY_RUN_DIR%/}/stat-stelar-${STELAR_STATS_TAG}.csv"
+MODE_OUT_STELAR="${SIMPHY_RUN_DIR%/}/out-stelar-${STELAR_STATS_TAG}.tre"
+
+# Debug/tracing
+if [[ "${DEBUG:-0}" = "1" ]]; then
+  set -x
+fi
+
+# checkpoint: if mode-specific stat file exists and --fresh not provided, skip everything
+if [[ "$FRESH" = false && -f "${MODE_STAT_FILE}" ]]; then
+  echo "SKIPPING: ${MODE_STAT_FILE} already exists. Use --fresh to force rerun."
+  exit 0
+fi
+
+echo "Parameters:"
+echo "  taxa_num:       $TAXA_NUM"
+echo "  gene_trees:     $GENE_TREES"
+echo "  replicate:      $REPLICATE"
+if [[ "$SIMPHY_DATA_DIR_SET" = true ]]; then
+  echo "  simphy data dir: $SIMPHY_DATA_DIR (custom)"
+else
+  echo "  simphy data dir: ${SIMPHY_DIR%/}/data (default)"
+fi
+echo "  simphy run dir: $SIMPHY_RUN_DIR"
+echo "  out stelar:     $OUT_STELAR"
+echo "  mode out stelar:$MODE_OUT_STELAR"
+echo "  stat file:      $STAT_FILE"
+echo "  mode stat file: $MODE_STAT_FILE"
+echo
+
+if [[ ! -f "$ALL_GT_FILE" ]]; then
+  echo "Error: gene-tree file not found at $ALL_GT_FILE"
+  exit 6
+fi
+
+echo "==> Running STELAR (output will be written to $OUT_STELAR)"
+
+mkdir -p "${SIMPHY_RUN_DIR%/}"
 
 # create log paths inside run dir so they're easy to inspect remotely
 TIME_TMP="${SIMPHY_RUN_DIR%/}/.stelar_time_err.log"
@@ -251,6 +277,7 @@ fi
 # Launch STELAR -- prefer using TIME_CMD if available, otherwise run directly
 # Capture both stdout and stderr to TIME_TMP (using tee to also show live output)
 STELAR_PID=""
+STELAR_EXIT_CODE=""
 if [[ "${TIME_MONITOR:-false}" = true && -n "$TIME_CMD" ]]; then
   (
     cd "$STELAR_ROOT" && "$TIME_CMD" -v ./run.sh --input "$ALL_GT_FILE" --output "$OUT_STELAR" "${STELAR_OPTS_ARR[@]}" < /dev/null 2>&1 | tee "$TIME_TMP"
@@ -266,22 +293,33 @@ fi
 # Give a short moment and verify the job didn't die immediately
 sleep 0.25
 if ! kill -0 "$STELAR_PID" >/dev/null 2>&1; then
-  echo "Error: STELAR process (pid ${STELAR_PID}) failed to start or died immediately."
-  echo "----- Captured time/generic stderr (first 200 lines) -----"
-  head -n 200 "$TIME_TMP" 2>/dev/null || true
-  echo "---------------------------------------------------------"
   touch "${SIMPHY_RUN_DIR%/}/.stelar_done"
   if [[ -n "${MON_PID:-}" ]]; then
     wait "$MON_PID" 2>/dev/null || true
   fi
-  exit 5
+  if wait "$STELAR_PID"; then
+    STELAR_EXIT_CODE=0
+    echo "STELAR process (pid ${STELAR_PID}) finished before startup check completed."
+  else
+    STELAR_EXIT_CODE=$?
+    echo "Error: STELAR process (pid ${STELAR_PID}) failed to start or died immediately."
+    echo "----- Captured time/generic stderr (first 200 lines) -----"
+    head -n 200 "$TIME_TMP" 2>/dev/null || true
+    echo "---------------------------------------------------------"
+    exit 5
+  fi
 fi
 
-echo "STELAR started with PID ${STELAR_PID} (logging to ${TIME_TMP} if time-monitor enabled)"
+if [[ -z "$STELAR_EXIT_CODE" ]]; then
+  echo "STELAR started with PID ${STELAR_PID} (logging to ${TIME_TMP} if time-monitor enabled)"
 
-# Wait for stelar to finish
-wait "$STELAR_PID"
-STELAR_EXIT_CODE=$?
+  # Wait for stelar to finish
+  if wait "$STELAR_PID"; then
+    STELAR_EXIT_CODE=0
+  else
+    STELAR_EXIT_CODE=$?
+  fi
+fi
 
 # Stop GPU monitor by placing sentinel file
 touch "${SIMPHY_RUN_DIR%/}/.stelar_done"
@@ -349,6 +387,11 @@ echo "Max CPU RAM (MB): ${MAX_CPU_MB}"
 echo "Max GPU VRAM (MB): ${MAX_GPU_MB}"
 echo "Optimal Triplet Score: ${OPTIMAL_TRIPLET_SCORE}"
 
+if [[ -f "$OUT_STELAR" ]]; then
+  cp "$OUT_STELAR" "$MODE_OUT_STELAR"
+  echo "Copied mode-specific output to $MODE_OUT_STELAR"
+fi
+
 # RF calculation (if rf.py exists and true species tree present)
 RF_RATE="NA"
 if [[ -f "$OUT_STELAR" && -f "$TRUE_SPECIES_TREE" ]]; then
@@ -375,11 +418,15 @@ fi
 
 # Write CSV (overwrite every run)
 mkdir -p "$(dirname "$STAT_FILE")"
-echo "alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,optimal-triplet-score,running-time-s,max-cpu-mb,max-gpu-mb" > "$STAT_FILE"
-CSV_ROW="stelar,${TAXA_NUM},${GENE_TREES},${REPLICATE},${SB},${SPMIN},${SPMAX},${RF_RATE},${OPTIMAL_TRIPLET_SCORE},${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB}"
+CSV_HEADER="alg,mode,threads,stelar-options,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,optimal-triplet-score,running-time-s,max-cpu-mb,max-gpu-mb"
+CSV_ROW="stelar,${STELAR_RUN_MODE},${STELAR_THREADS},\"${STELAR_OPTIONS_STR}\",${TAXA_NUM},${GENE_TREES},${REPLICATE},${SB},${SPMIN},${SPMAX},${RF_RATE},${OPTIMAL_TRIPLET_SCORE},${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB}"
+echo "$CSV_HEADER" > "$STAT_FILE"
 echo "$CSV_ROW" >> "$STAT_FILE"
+echo "$CSV_HEADER" > "$MODE_STAT_FILE"
+echo "$CSV_ROW" >> "$MODE_STAT_FILE"
 
 echo "Wrote stats to $STAT_FILE"
+echo "Wrote mode stats to $MODE_STAT_FILE"
 
 
 
