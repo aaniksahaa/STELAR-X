@@ -51,6 +51,7 @@ Optional:
   --simphy-data-dir  Custom directory for simphy data storage (overrides simphy-dir/data)
   --stelar-root      Path to STELAR-X root (overrides --base-dir)
   --stelar-opts      Extra args for STELAR run (default: "$STELAR_OPTS")
+  -T, --threads N    Max CPU threads/cores to expose to Java
   --sb               Substitution/birthrate parameter (default: ${SB})
   --spmin            Population size minimum (default: ${SPMIN})
   --spmax            Population size maximum (default: ${SPMAX})
@@ -74,6 +75,7 @@ while [[ $# -gt 0 ]]; do
     --simphy-data-dir) SIMPHY_DATA_DIR="$2"; SIMPHY_DATA_DIR_SET=true; shift 2 ;;
     --stelar-root) STELAR_ROOT="$2"; STELAR_ROOT_SET=true; shift 2 ;;
     --stelar-opts) STELAR_OPTS="$2"; shift 2 ;;
+    -T|--threads) STELAR_OPTS="$STELAR_OPTS --threads $2"; shift 2 ;;
     --base-dir|-b) BASE_DIR="$2"; shift 2 ;;
     --sb) SB="$2"; shift 2 ;;
     --spmin) SPMIN="$2"; shift 2 ;;

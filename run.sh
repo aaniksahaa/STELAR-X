@@ -12,6 +12,7 @@
 #   --cpu-parallel         CPU parallel mode
 #   --gpu                  GPU parallel mode (default)
 #   -m, --mode <mode>      CPU_SINGLE, CPU_PARALLEL, GPU_PARALLEL
+#   -T, --threads <n>      Max CPU threads/cores to expose to Java
 #   -e, --expansion        Enable mixed bipartitions
 #   -s, --support <type>   Branch support: NONE, POSTERIOR, DETAILED, LENGTH, BOTH, PVALUE, ALL
 #   --lambda <val>         Lambda parameter for branch support (default: 0.5)
@@ -44,6 +45,7 @@ EXPANSION_ENABLED="false"
 XMS="${STELAR_XMS:-4g}"
 XMX="${STELAR_XMX:-128g}"
 EXTRA_JAVA_ARGS=()
+THREADS_REQUESTED=""
 
 # ── Help ──
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
@@ -62,6 +64,14 @@ while [[ $# -gt 0 ]]; do
     --cpu-parallel)   COMPUTATION_MODE="CPU_PARALLEL"; JAVA_PROGRAM_ARGS+=("--cpu-parallel"); shift ;;
     --gpu|--gpu-parallel) COMPUTATION_MODE="GPU_PARALLEL"; JAVA_PROGRAM_ARGS+=("--gpu"); shift ;;
     -m|--mode)        COMPUTATION_MODE="$2"; JAVA_PROGRAM_ARGS+=("-m" "$2"); shift 2 ;;
+    -T|--threads)
+      THREADS_REQUESTED="$2"
+      if [[ ! "$THREADS_REQUESTED" =~ ^[1-9][0-9]*$ ]]; then
+        echo -e "${RED}Error: --threads requires a positive integer.${NC}"
+        exit 1
+      fi
+      shift 2
+      ;;
     -e|--expansion)   EXPANSION_ENABLED="true"; JAVA_PROGRAM_ARGS+=("--expansion"); shift ;;
     -v|--verbose)     VERBOSE_EXPANSION="true"; JAVA_PROGRAM_ARGS+=("--verbose"); shift ;;
     -s|--support|--branch-support) JAVA_PROGRAM_ARGS+=("-s" "$2"); shift 2 ;;
@@ -117,6 +127,19 @@ if [[ "$COMPUTATION_MODE" == "GPU_PARALLEL" && "$HAS_CUDA_LIB" == false ]]; then
   echo -e "${YELLOW}The program will attempt GPU and fall back to CPU if it fails.${NC}"
 fi
 
+# ── Cap Java-visible CPU count if requested ──
+if [[ -n "$THREADS_REQUESTED" ]]; then
+  AVAILABLE_THREADS="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo "$THREADS_REQUESTED")"
+  if [[ ! "$AVAILABLE_THREADS" =~ ^[1-9][0-9]*$ ]]; then
+    AVAILABLE_THREADS="$THREADS_REQUESTED"
+  fi
+  ACTIVE_THREADS="$THREADS_REQUESTED"
+  if (( ACTIVE_THREADS > AVAILABLE_THREADS )); then
+    ACTIVE_THREADS="$AVAILABLE_THREADS"
+  fi
+  EXTRA_JAVA_ARGS+=("-XX:ActiveProcessorCount=${ACTIVE_THREADS}")
+fi
+
 # ── Create output directory if needed ──
 if [[ -n "$OUTPUT_FILE" ]]; then
   OUTPUT_DIR=$(dirname "$OUTPUT_FILE")
@@ -130,6 +153,9 @@ echo "=== STELAR-X ==="
 echo "Input:       $INPUT_FILE"
 [[ -n "$OUTPUT_FILE" ]] && echo "Output:      $OUTPUT_FILE"
 echo "Mode:        $COMPUTATION_MODE"
+if [[ -n "$THREADS_REQUESTED" ]]; then
+  echo "Threads:     ${ACTIVE_THREADS} (requested ${THREADS_REQUESTED})"
+fi
 echo "Expansion:   $EXPANSION_ENABLED"
 echo "Java heap:   -Xms${XMS} -Xmx${XMX}"
 echo
@@ -137,6 +163,7 @@ echo
 # ── Run ──
 exec java \
   -Xms"${XMS}" -Xmx"${XMX}" \
+  "${EXTRA_JAVA_ARGS[@]}" \
   -Djava.library.path="$CUDA_LIB_DIR" \
   -Djna.platform.library.path="$CUDA_LIB_DIR" \
   -cp "$JAR" \

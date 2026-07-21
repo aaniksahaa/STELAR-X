@@ -76,6 +76,14 @@ baselines/ASTRID/ASTRID2 -i all_gt_bs_rooted_200.tre -o out-200-as2.tre
 
 
 
+./run-baseline-with-monitor.sh \
+  -m astral \
+  -i all_gt_bs_rooted_37.tre \
+  -o out-37.tre \
+  --astral-opts "-T 32 -t 4"
+
+
+
 
 
 
@@ -140,7 +148,7 @@ chmod +x compile_astral.sh run_astral.sh setup_gpu_astral.sh
   -i all_gt_bs_rooted_37.tre \
   -o data/out-astral-37.tre \
   --astral-opts "-T 32"
-  
+
 
 
 ## Unified baseline runner (with monitoring)
@@ -368,3 +376,11 @@ python cleaner.py data/63430.gene.trees data/63k-r-og-strcam.tre --outgroup "Str
 ./run-with-monitor.sh -i data/63k-r-rand.tre -o data/sp-63k-r-rand.tre
 
 ./run-with-monitor.sh -i data/63k-r-og-strcam.tre -o data/sp-63k-r-og-strcam.tre
+
+
+
+
+CPU ONLY RUNS 
+=========================
+
+

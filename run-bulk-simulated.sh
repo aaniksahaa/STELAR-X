@@ -18,8 +18,10 @@ BASE_DIR_PROVIDED=false
 METHOD="stelar"  # default method
 FRESH=false
 NUM_REPLICATES=1
+THREADS=""
 
 # Method-specific options (passed through)
+STELAR_OPTS=""
 ASTER_OPTS=""
 ASTER_BIN=""
 ASTRAL_OPTS=""
@@ -40,7 +42,9 @@ Options:
   --method, -m      Method to use: stelar, aster, astral, treeqmc, wqfmtree, supertriplets, stp-nni, tmc (default: stelar)
   --base-dir, -b    Base directory (optional, passed to sub-scripts if provided)
   --num-replicates, -n  Number of replicates to run (default: 1)
+  -T, --threads N   Max CPU threads/cores for STELAR-X runs
   --fresh           Pass --fresh to sim.sh and test scripts (recreate outputs)
+  --stelar-opts     Extra options for STELAR-X (for method=stelar)
   --aster-opts      Extra options for ASTER (for method=aster)
   --aster-bin       Path to ASTER binary (for method=aster)
   --astral-opts     Extra options for ASTRAL (for method=astral)
@@ -67,6 +71,9 @@ while [[ $# -gt 0 ]]; do
     --method|-m) METHOD="$2"; shift 2 ;;
     --base-dir|-b) BASE_DIR="$2"; BASE_DIR_PROVIDED=true; shift 2 ;;
     --num-replicates|-n) NUM_REPLICATES="$2"; shift 2 ;;
+    -T|--threads) THREADS="$2"; shift 2 ;;
+    --stelar-opts) STELAR_OPTS="$2"; shift 2 ;;
+    --stelar-opts=*) STELAR_OPTS="${1#*=}"; shift ;;
     --aster-opts) ASTER_OPTS="$2"; shift 2 ;;
     --aster-opts=*) ASTER_OPTS="${1#*=}"; shift ;;
     --aster-bin) ASTER_BIN="$2"; shift 2 ;;
@@ -193,7 +200,15 @@ for t in "${T_LIST[@]}"; do
             echo "  Running replicate R$i with $METHOD"
             
             if [[ "$METHOD" == "stelar" ]]; then
-              ./test-stelar-simulated.sh -r "R$i" $BASE_DIR_ARG -t "$t" -g "$g" --sb "$sb" --spmin "$spmin" --spmax "$spmax" $FRESH_ARG
+              STELAR_METHOD_ARGS=()
+              if [[ -n "$STELAR_OPTS" ]]; then
+                STELAR_METHOD_ARGS+=(--stelar-opts "$STELAR_OPTS")
+              fi
+              if [[ -n "$THREADS" ]]; then
+                STELAR_METHOD_ARGS+=(--threads "$THREADS")
+              fi
+
+              ./test-stelar-simulated.sh -r "R$i" $BASE_DIR_ARG -t "$t" -g "$g" --sb "$sb" --spmin "$spmin" --spmax "$spmax" "${STELAR_METHOD_ARGS[@]}" $FRESH_ARG
             else
               METHOD_ARGS=(--method "$METHOD")
               if [[ -n "$ASTER_OPTS" ]]; then

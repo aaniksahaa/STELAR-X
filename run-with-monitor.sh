@@ -33,6 +33,7 @@ Required:
 Optional:
   --stelar-root      Path to STELAR-X root directory (default: current directory)
   --stelar-opts      Extra STELAR options passed to run.sh (default: empty)
+  -T, --threads N    Max CPU threads/cores to expose to Java
   --expansion, -e    Enable mixed bipartitions (default: OFF)
   --no-time-monitor  Disable time-monitoring (overrides default ON)
   --no-gpu-monitor   Disable GPU-monitoring (overrides default ON)
@@ -65,7 +66,7 @@ while [[ $# -gt 0 ]]; do
     --debug) DEBUG=1; shift ;;
     --help|-h) print_help; exit 0 ;;
     --cpu|--cpu-parallel|--gpu|--gpu-parallel|--expansion|-e) STELAR_ARGS+=("$1"); shift ;;
-    -m|--mode|-s|--support|--branch-support|--lambda)
+    -T|--threads|-m|--mode|-s|--support|--branch-support|--lambda)
       STELAR_ARGS+=("$1" "$2"); shift 2 ;;
     -v|--verbose) STELAR_ARGS+=("$1"); shift ;;
     --) shift; STELAR_ARGS+=("$@"); break ;;
