@@ -132,6 +132,16 @@ chmod +x compile_astral.sh run_astral.sh setup_gpu_astral.sh
 # --> make sure that GPU being used
 
 
+./run-baseline-with-monitor.sh -m astral -i all_gt_bs_rooted_37.tre -o data/out-astral-37.tre --astral-opts "-T 32"
+
+
+./run-baseline-with-monitor.sh \
+  -m astral \
+  -i all_gt_bs_rooted_37.tre \
+  -o data/out-astral-37.tre \
+  --astral-opts "-T 32"
+  
+
 
 ## Unified baseline runner (with monitoring)
 ./run-baseline-with-monitor.sh -m aster -i all_gt_bs_rooted_37.tre -o data/out-aster.tre --aster-opts "-t 16 -C"

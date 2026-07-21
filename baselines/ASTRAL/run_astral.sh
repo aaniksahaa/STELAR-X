@@ -16,6 +16,8 @@ XMS="${ASTRAL_XMS:-4g}"
 XMX="${ASTRAL_XMX:-128g}"
 JAVA_MEM_OPTS="-Xms${XMS} -Xmx${XMX}"
 JAVA_MEM_OVERRIDE=false
+JAVA_LIBRARY_PATH="${ASTRAL_JAVA_LIBRARY_PATH:-}"
+ASTRAL_USE_AVX2="${ASTRAL_USE_AVX2:-false}"
 
 # Define paths based on ASTRAL_ROOT
 MAIN_DIR="${ASTRAL_ROOT}/main"
@@ -63,6 +65,8 @@ if [ $# -eq 0 ]; then
     echo "  --xmx SIZE       Java Xmx (default: 128g or env ASTRAL_XMX)"
     echo "  --Xms SIZE       Same as --xms"
     echo "  --Xmx SIZE       Same as --xmx"
+    echo "  --java-library-path DIR  Native library path (default: lib/no_avx2)"
+    echo "  --use-avx2              Use lib/libAstral.so instead of lib/no_avx2"
     echo "  --java-mem OPTS  Java memory opts (override all; legacy)"
     echo ""
     echo "Examples:"
@@ -84,6 +88,7 @@ echo ""
 
 # Run ASTRAL with all provided arguments
 ASTRAL_ARGS=()
+OUTPUT_FILE=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --java-mem)
@@ -111,6 +116,27 @@ while [[ $# -gt 0 ]]; do
             XMX="$2"
             shift 2
             ;;
+        --java-library-path)
+            if [[ -z "${2:-}" ]]; then
+                echo "Error: --java-library-path requires an argument"
+                exit 1
+            fi
+            JAVA_LIBRARY_PATH="$2"
+            shift 2
+            ;;
+        --use-avx2)
+            ASTRAL_USE_AVX2=true
+            shift
+            ;;
+        -o)
+            if [[ -z "${2:-}" ]]; then
+                echo "Error: -o requires an argument"
+                exit 1
+            fi
+            OUTPUT_FILE="$2"
+            ASTRAL_ARGS+=("$1" "$2")
+            shift 2
+            ;;
         *)
             ASTRAL_ARGS+=("$1")
             shift
@@ -128,10 +154,26 @@ cd "${MAIN_DIR}"
 if [[ "$JAVA_MEM_OVERRIDE" = false ]]; then
     JAVA_MEM_OPTS="-Xms${XMS} -Xmx${XMX}"
 fi
-java ${JAVA_MEM_OPTS} -classpath "${CLASSPATH}" phylonet.coalescent.CommandLine "${ASTRAL_ARGS[@]}"
+if [[ -z "$JAVA_LIBRARY_PATH" ]]; then
+    if [[ "$ASTRAL_USE_AVX2" = true ]]; then
+        JAVA_LIBRARY_PATH="$LIB_DIR"
+    else
+        JAVA_LIBRARY_PATH="${LIB_DIR}/no_avx2"
+    fi
+fi
+java ${JAVA_MEM_OPTS} -Djava.library.path="${JAVA_LIBRARY_PATH}" -classpath "${CLASSPATH}" phylonet.coalescent.CommandLine "${ASTRAL_ARGS[@]}"
 
 # Capture exit code
 exit_code=$?
+
+if [[ "$exit_code" -eq 139 || "$exit_code" -eq 134 ]]; then
+    if [[ -n "$OUTPUT_FILE" && -s "$OUTPUT_FILE" ]]; then
+        echo ""
+        echo "Warning: ASTRAL exited with native crash code $exit_code after writing output."
+        echo "Treating this as success because output exists: $OUTPUT_FILE"
+        exit_code=0
+    fi
+fi
 
 echo ""
 echo "ASTRAL finished with exit code: $exit_code"

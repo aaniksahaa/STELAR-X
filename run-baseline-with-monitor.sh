@@ -25,6 +25,7 @@ ASTER_BIN=""
 ASTRAL_OPTS=""
 ASTRAL_XMS=""
 ASTRAL_XMX=""
+ASTRAL_CPU_ONLY=false
 TREEQMC_OPTS=""
 WQFM_OPTS=""
 SUPERTRIPLETS_OPTS=""
@@ -63,6 +64,7 @@ Method Options:
   --aster-opts "..."         Extra options for ASTER
   --aster-bin PATH          Path to ASTER binary (relative to ASTER root or absolute)
   --astral-opts "..."        Extra options for ASTRAL
+  --astral-cpu-only          Disable ASTRAL GPU/OpenCL path (passes -C)
   --astral-xms SIZE          ASTRAL Java Xms (e.g., 4g)
   --astral-xmx SIZE          ASTRAL Java Xmx (e.g., 128g)
   --astral-Xms SIZE          Same as --astral-xms
@@ -102,6 +104,7 @@ while [[ $# -gt 0 ]]; do
     --aster-bin) ASTER_BIN="$2"; shift 2 ;;
     --astral-opts) ASTRAL_OPTS="$2"; shift 2 ;;
     --astral-opts=*) ASTRAL_OPTS="${1#*=}"; shift ;;
+    --astral-cpu-only) ASTRAL_CPU_ONLY=true; shift ;;
     --astral-xms|--astral-Xms) ASTRAL_XMS="$2"; shift 2 ;;
     --astral-xmx|--astral-Xmx) ASTRAL_XMX="$2"; shift 2 ;;
     --treeqmc-opts) TREEQMC_OPTS="$2"; shift 2 ;;
@@ -314,8 +317,16 @@ case "$METHOD" in
     if [[ -n "$ASTRAL_XMX" ]]; then
       ASTRAL_MEM_ARGS+=(--xmx "$ASTRAL_XMX")
     fi
+    if [[ "$ASTRAL_CPU_ONLY" = true ]]; then
+      ASTRAL_OPTS_ARR=(-C "${ASTRAL_OPTS_ARR[@]}")
+    fi
 
-    echo -e "${YELLOW}Command: cd $ASTRAL_ROOT && ./run_astral.sh -i \"$INPUT_FILE\" -o \"$OUTPUT_FILE\" ${ASTRAL_OPTS}${NC}"
+    ASTRAL_DISPLAY_OPTS="${ASTRAL_OPTS}"
+    if [[ "$ASTRAL_CPU_ONLY" = true ]]; then
+      ASTRAL_DISPLAY_OPTS="-C ${ASTRAL_DISPLAY_OPTS}"
+    fi
+
+    echo -e "${YELLOW}Command: cd $ASTRAL_ROOT && ./run_astral.sh -i \"$INPUT_FILE\" -o \"$OUTPUT_FILE\" ${ASTRAL_DISPLAY_OPTS}${NC}"
     ( cd "$ASTRAL_ROOT" && run_with_time ./run_astral.sh -i "$INPUT_FILE" -o "$OUTPUT_FILE" "${ASTRAL_MEM_ARGS[@]}" "${ASTRAL_OPTS_ARR[@]}" )
     BASELINE_EXIT_CODE=$?
     ;;
