@@ -380,21 +380,24 @@ python cleaner.py data/63430.gene.trees data/63k-r-og-strcam.tre --outgroup "Str
 
 
 
-
+===========================================================================
 CPU ONLY RUNS 
-=========================
+===========================================================================
 
 ./run-bulk-simulated.sh \
   -m stelar \
   --stelar-opts "--cpu-parallel -s NONE" \
+  --num-replicates 5 \
   -T 32
 
 
 ./run-bulk-simulated.sh \
   -m astral \
+  --num-replicates 5 \
   --astral-opts "-C -T 32 -t 0"
 
-  
+
+===========================================================================
 
 
 

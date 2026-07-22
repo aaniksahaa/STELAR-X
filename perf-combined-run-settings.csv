@@ -1,3 +1,4 @@
-alg,mode,threads,stelar-options,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,optimal-triplet-score,running-time-s,max-cpu-mb,max-gpu-mb,gt-gt,gt-st
+alg,mode,threads,run-options,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,optimal-triplet-score,running-time-s,max-cpu-mb,max-gpu-mb,gt-gt,gt-st
+astral,CPU_ONLY,32,"-C -T 32 -t 0",100,10,R1,0.000001,100000,200000,0.0619,,1.485,249.281,18.432,,
 stelar,CPU_PARALLEL,32,"--cpu-parallel -s NONE --threads 32",100,10,R1,0.000001,100000,200000,0.0515,1592391.0,0.260,86.625,0.000,,
 stelar,GPU_PARALLEL,AUTO,"-m GPU_PARALLEL -s NONE",10,10,R1,0.000001,100000,200000,0.1429,1127.0,0.390,170.473,0.000,,

@@ -211,20 +211,20 @@ fi
 echo "Done."
 
 echo
-echo "Collecting run-setting-aware STELAR stats..."
+echo "Collecting run-setting-aware stats..."
 
-mapfile -t stelar_mode_files < <(find "$SIMPHY_DATA_DIR" -type f -name "stat-stelar-*.csv" ! -name "stat-stelar.csv" -print 2>/dev/null | sort)
+mapfile -t run_setting_files < <(find "$SIMPHY_DATA_DIR" -type f \( -name "stat-stelar-*.csv" -o -name "stat-astral-*.csv" \) ! -name "stat-stelar.csv" ! -name "stat-astral.csv" -print 2>/dev/null | sort)
 
-if [[ ${#stelar_mode_files[@]} -eq 0 ]]; then
-  echo "No mode-specific STELAR stat files found under $SIMPHY_DATA_DIR"
+if [[ ${#run_setting_files[@]} -eq 0 ]]; then
+  echo "No mode-specific stat files found under $SIMPHY_DATA_DIR"
   exit 0
 fi
 
-RUN_SETTINGS_HEADER="alg,mode,threads,stelar-options,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,optimal-triplet-score,running-time-s,max-cpu-mb,max-gpu-mb,gt-gt,gt-st"
+RUN_SETTINGS_HEADER="alg,mode,threads,run-options,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,optimal-triplet-score,running-time-s,max-cpu-mb,max-gpu-mb,gt-gt,gt-st"
 printf "%s\n" "$RUN_SETTINGS_HEADER" > "$RUN_SETTINGS_OUT_FILE"
 
 mode_rows=0
-for stat_file in "${stelar_mode_files[@]}"; do
+for stat_file in "${run_setting_files[@]}"; do
   file_header=$(head -n 1 "$stat_file" | tr -d '\r' | awk '{$1=$1;print}')
   dir=$(dirname "$stat_file")
   stat_sim="${dir%/}/stat-sim.csv"
@@ -252,6 +252,12 @@ for stat_file in "${stelar_mode_files[@]}"; do
         out[j]=gt_gt;
       } else if (u[j] == "gt-st") {
         out[j]=gt_st;
+      } else if (u[j] == "run-options" && ("run-options" in col_map)) {
+        out[j]=$(col_map["run-options"]);
+      } else if (u[j] == "run-options" && ("stelar-options" in col_map)) {
+        out[j]=$(col_map["stelar-options"]);
+      } else if (u[j] == "run-options" && ("astral-options" in col_map)) {
+        out[j]=$(col_map["astral-options"]);
       } else if (u[j] in col_map) {
         out[j]=$(col_map[u[j]]);
       }

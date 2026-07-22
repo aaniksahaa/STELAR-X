@@ -180,14 +180,50 @@ TRUE_SPECIES_TREE="${SIMPHY_RUN_DIR%/}/s_tree.trees"
 OUT_BASELINE="${SIMPHY_RUN_DIR%/}/out-${METHOD}.tre"
 LOCK_FILE="${SIMPHY_RUN_DIR%/}/.${METHOD}.lock"
 
+RUN_MODE="DEFAULT"
+RUN_THREADS="AUTO"
+RUN_OPTIONS=""
+MODE_STAT_FILE=""
+MODE_OUT_BASELINE=""
+MODE_LOCK_FILE=""
+if [[ "$METHOD" == "astral" ]]; then
+  RUN_OPTIONS="$ASTRAL_OPTS"
+  RUN_MODE="GPU_OR_OPENCL"
+  ASTRAL_OPTS_ARR_FOR_TAG=()
+  if [[ -n "$ASTRAL_OPTS" ]]; then
+    # shellcheck disable=SC2206
+    ASTRAL_OPTS_ARR_FOR_TAG=( $ASTRAL_OPTS )
+  fi
+  for ((i=0; i<${#ASTRAL_OPTS_ARR_FOR_TAG[@]}; i++)); do
+    case "${ASTRAL_OPTS_ARR_FOR_TAG[$i]}" in
+      -C|--cpu-only)
+        RUN_MODE="CPU_ONLY"
+        ;;
+      -T)
+        if [[ -n "${ASTRAL_OPTS_ARR_FOR_TAG[$((i+1))]:-}" ]]; then
+          RUN_THREADS="${ASTRAL_OPTS_ARR_FOR_TAG[$((i+1))]}"
+        fi
+        ;;
+    esac
+  done
+  RUN_STATS_TAG="$(printf "%s" "${RUN_MODE,,}_t${RUN_THREADS}" | tr -c 'a-z0-9_.-' '_')"
+  MODE_STAT_FILE="${SIMPHY_RUN_DIR%/}/stat-${METHOD}-${RUN_STATS_TAG}.csv"
+  MODE_OUT_BASELINE="${SIMPHY_RUN_DIR%/}/out-${METHOD}-${RUN_STATS_TAG}.tre"
+  MODE_LOCK_FILE="${SIMPHY_RUN_DIR%/}/.${METHOD}-${RUN_STATS_TAG}.lock"
+fi
+
 # Debug/tracing
 if [[ "${DEBUG:-0}" = "1" ]]; then
   set -x
 fi
 
 # checkpoint: if lock file exists and --fresh not provided, skip everything
-if [[ "$FRESH" = false && -f "${LOCK_FILE}" ]]; then
-  echo "SKIPPING: ${LOCK_FILE} already exists. Use --fresh to force rerun."
+CHECK_LOCK_FILE="$LOCK_FILE"
+if [[ -n "$MODE_LOCK_FILE" ]]; then
+  CHECK_LOCK_FILE="$MODE_LOCK_FILE"
+fi
+if [[ "$FRESH" = false && -f "${CHECK_LOCK_FILE}" ]]; then
+  echo "SKIPPING: ${CHECK_LOCK_FILE} already exists. Use --fresh to force rerun."
   exit 0
 fi
 
@@ -204,6 +240,10 @@ fi
 echo "  simphy run dir: $SIMPHY_RUN_DIR"
 echo "  out baseline:   $OUT_BASELINE"
 echo "  stat file:      $STAT_FILE"
+if [[ -n "$MODE_STAT_FILE" ]]; then
+  echo "  mode out:       $MODE_OUT_BASELINE"
+  echo "  mode stat file: $MODE_STAT_FILE"
+fi
 echo
 
 if [[ ! -f "$ALL_GT_FILE" ]]; then
@@ -307,8 +347,22 @@ echo "$CSV_ROW" >> "$STAT_FILE"
 
 echo "Wrote stats to $STAT_FILE"
 
+if [[ -n "$MODE_STAT_FILE" ]]; then
+  MODE_CSV_HEADER="alg,mode,threads,run-options,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb"
+  MODE_CSV_ROW="${METHOD},${RUN_MODE},${RUN_THREADS},\"${RUN_OPTIONS}\",${TAXA_NUM},${GENE_TREES},${REPLICATE},${SB},${SPMIN},${SPMAX},${RF_RATE},${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB}"
+  echo "$MODE_CSV_HEADER" > "$MODE_STAT_FILE"
+  echo "$MODE_CSV_ROW" >> "$MODE_STAT_FILE"
+  if [[ -f "$OUT_BASELINE" ]]; then
+    cp "$OUT_BASELINE" "$MODE_OUT_BASELINE"
+  fi
+  echo "Wrote mode stats to $MODE_STAT_FILE"
+fi
+
 # Create lock file to indicate successful completion
 touch "${LOCK_FILE}"
+if [[ -n "$MODE_LOCK_FILE" ]]; then
+  touch "${MODE_LOCK_FILE}"
+fi
 echo -e "\\033[1;32m✅ Run completed successfully. Lock file created.\\033[0m"
 
 # Send notification (ntfy) - only on success

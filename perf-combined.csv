@@ -1,3 +1,4 @@
 alg,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb,gt-gt,gt-st
 stelar,100,10,R1,0.000001,100000,200000,0.0515,0.260,86.625,0.000,,
 stelar,10,10,R1,0.000001,100000,200000,0.1429,0.390,170.473,0.000,,
+astral,100,10,R1,0.000001,100000,200000,0.0619,1.485,249.281,18.432,,
