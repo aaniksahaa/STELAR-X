@@ -349,6 +349,38 @@ nvcc --version
 | `nvcc` not found | CUDA toolkit not installed | `sudo apt install -y nvidia-cuda-toolkit` |
 | Slow performance | Running in single-threaded mode | Use `--cpu-parallel` or `--gpu` |
 
+### `nvidia-smi` works, but STELAR-X selects CPU mode
+
+`nvidia-smi` only confirms that the NVIDIA driver can see the GPU. STELAR-X also requires its native CUDA library at `cuda/libweight_calc.so`; without it, automatic mode selection falls back to `CPU_PARALLEL`.
+
+Check the driver, toolkit, and library separately:
+
+```bash
+nvidia-smi
+nvcc --version
+test -f cuda/libweight_calc.so && echo "library found" || echo "library missing"
+git status --short -- cuda/libweight_calc.so
+git ls-tree -l HEAD cuda/libweight_calc.so
+```
+
+If Git reports `D cuda/libweight_calc.so` and `git ls-tree` lists the file, restore the tracked pre-built library and request GPU mode explicitly:
+
+```bash
+git restore cuda/libweight_calc.so
+./run-with-monitor.sh -i genes.tre -o species-gpu.tre --gpu
+```
+
+A successful launch reports `Library exists: Yes`, `Mode: GPU_PARALLEL`, and later `CUDA library loaded successfully` when the native kernel is loaded.
+
+One way the library can disappear is a failed rebuild: `make clean` deletes it before compiling. In particular, CUDA Toolkit 13 no longer supports offline compilation for Volta (`sm_70`), while the supplied Makefile includes that target. Either restore the pre-built library as above, remove the unsupported `sm_70` entries from `cuda/Makefile`, or build only for the installed GPU. For example, an RTX 4090 (compute capability 8.9) can be rebuilt with:
+
+```bash
+make -C cuda \
+  NVCC_FLAGS='-O3 -Xcompiler -fPIC -shared -gencode arch=compute_89,code=sm_89 -gencode arch=compute_89,code=compute_89'
+```
+
+Do not run the unchanged `build.sh` after restoring the library under CUDA 13: it will invoke `make clean` and attempt the unsupported `sm_70` build again.
+
 ---
 
 ## Project Structure

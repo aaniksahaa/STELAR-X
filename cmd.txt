@@ -390,7 +390,6 @@ CPU ONLY RUNS
   --num-replicates 5 \
   -T 32
 
-
 ./run-bulk-simulated.sh \
   -m astral \
   --num-replicates 5 \
