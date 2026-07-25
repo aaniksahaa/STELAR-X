@@ -395,6 +395,12 @@ CPU ONLY RUNS
   --num-replicates 5 \
   --astral-opts "-C -T 32 -t 0"
 
+
+./run-bulk-simulated.sh \
+  -m aster \
+  --num-replicates 5 \
+  --aster-opts "-t 32"
+
 ===========================================================================
 
 
