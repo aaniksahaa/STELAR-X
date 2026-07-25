@@ -89,31 +89,28 @@ baselines/ASTRID/ASTRID2 -i all_gt_bs_rooted_200.tre -o out-200-as2.tre
 
 
 
+## SETUP ASTER
 
-cd ASTER 
+conda deactivate
+
+cd baselines/ASTER
 make
-
-## if problem happens
-# confirm which ld is being used (currently it's conda's)
-which ld
-ld --version | head -n 1
-
-# temporarily prefer system toolchain over conda's
-export PATH=/usr/bin:$PATH
-
-# (optional but helpful) ensure gcc uses system binutils
-export LD=/usr/bin/ld
-
-cd ~/phylogeny/STELAR-MP/ASTER
-make clean 2>/dev/null || true
-make
-
-
 make astral_int128
 
-ASTER/bin/astral4 -C -i all_gt_bs_rooted_200.tre -o out.tre -t 8
+conda activate main
 
-ASTER/bin/astral4_int128 -i all_gt_bs_rooted_37.tre -o out-37.tre
+cd ../..
+
+baselines/ASTER/bin/astral4 all_gt_bs_rooted_37.tre
+
+
+
+baselines/ASTER/bin/astral4 -C -i all_gt_bs_rooted_200.tre -o out.tre -t 8
+
+baselines/ASTER/bin/astral4_int128 -i all_gt_bs_rooted_37.tre -o out-37.tre
+
+
+
 
 ./run-with-monitor.sh -h
 
