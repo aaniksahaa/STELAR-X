@@ -109,6 +109,12 @@ baselines/ASTER/bin/astral4 -C -i all_gt_bs_rooted_200.tre -o out.tre -t 8
 
 baselines/ASTER/bin/astral4_int128 -i all_gt_bs_rooted_37.tre -o out-37.tre
 
+./run-baseline-with-monitor.sh -m aster -i all_gt_bs_rooted_37.tre -o data/out-astral-37.tre --astral-opts "-T 32"
+
+
+
+
+
 
 
 
