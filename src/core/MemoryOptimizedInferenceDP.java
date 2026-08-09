@@ -50,11 +50,9 @@ public class MemoryOptimizedInferenceDP {
         this.dpMemo = new HashMap<>();
         this.dpChoice = new HashMap<>();
         
-        // Initialize bipartition manager and cluster hash manager
-        System.out.println("Initializing MemoryEfficientBipartitionManager...");
-        this.bipartitionManager = new MemoryEfficientBipartitionManager(
-            geneTrees.geneTrees, geneTrees.realTaxaCount);
-        bipartitionManager.processGeneTreesParallel();
+        // Reuse the range data already built during GeneTrees preprocessing.
+        System.out.println("Reusing preprocessed MemoryEfficientBipartitionManager...");
+        this.bipartitionManager = geneTrees.getBipartitionManager();
         
         System.out.println("Initializing ClusterHashManager...");
         this.clusterHashManager = new ClusterHashManager(

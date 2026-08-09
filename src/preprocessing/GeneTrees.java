@@ -472,10 +472,12 @@ public class GeneTrees {
      * Get the bipartition manager for external access to prefix arrays.
      */
     public MemoryEfficientBipartitionManager getBipartitionManager() {
+        if (bipartitionManager == null) {
+            throw new IllegalStateException("Gene trees must be read before requesting bipartition data");
+        }
         return bipartitionManager;
     }
     
     // Removed addValidBipartition method - no longer used with memory-efficient approach
 } 
-
 

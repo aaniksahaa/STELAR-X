@@ -182,7 +182,9 @@ public class MemoryEfficientBipartitionManager {
                     for (int treeIdx = startIdx; treeIdx < endIdx; treeIdx++) {
                         Tree tree = geneTrees.get(treeIdx);
                         if (tree.isRooted()) {
-                            extractRangeBipartitions(tree.root, treeIdx, localHashMap);
+                            IdentityHashMap<TreeNode, int[]> subtreeRanges = new IdentityHashMap<>();
+                            calculateSubtreeRanges(tree.root, treeIdx, new int[] {0}, subtreeRanges);
+                            extractRangeBipartitions(tree.root, treeIdx, localHashMap, subtreeRanges);
                         }
                         processedTrees.incrementAndGet();
                     }
@@ -225,15 +227,17 @@ public class MemoryEfficientBipartitionManager {
      * Extract range bipartitions from a gene tree recursively.
      * This mirrors the original calculateSTBipartitionsUtilLocal logic.
      */
-    private void extractRangeBipartitions(TreeNode node, int treeIndex, Map<Object, List<RangeBipartition>> localHashMap) {
+    private void extractRangeBipartitions(TreeNode node, int treeIndex,
+                                          Map<Object, List<RangeBipartition>> localHashMap,
+                                          IdentityHashMap<TreeNode, int[]> subtreeRanges) {
         if (node.isLeaf()) {
             return;
         }
         
         if (node.childs != null && node.childs.size() == 2) {
             // Calculate ranges for both left and right subtrees
-            int[] leftRange = calculateSubtreeRange(node.childs.get(0), treeIndex);
-            int[] rightRange = calculateSubtreeRange(node.childs.get(1), treeIndex);
+            int[] leftRange = subtreeRanges.get(node.childs.get(0));
+            int[] rightRange = subtreeRanges.get(node.childs.get(1));
             
             if (leftRange != null && rightRange != null && 
                 leftRange[0] <= leftRange[1] && rightRange[0] <= rightRange[1]) {
@@ -252,7 +256,7 @@ public class MemoryEfficientBipartitionManager {
         // Recursively process children
         if (node.childs != null) {
             for (TreeNode child : node.childs) {
-                extractRangeBipartitions(child, treeIndex, localHashMap);
+                extractRangeBipartitions(child, treeIndex, localHashMap, subtreeRanges);
             }
         }
     }
@@ -261,16 +265,16 @@ public class MemoryEfficientBipartitionManager {
      * Calculate the range (min and max positions) covered by a subtree.
      * Returns [min_position, max_position] or null if no valid range found.
      */
-    private int[] calculateSubtreeRange(TreeNode node, int treeIndex) {
+    private int[] calculateSubtreeRanges(TreeNode node, int treeIndex, int[] nextPosition,
+                                         IdentityHashMap<TreeNode, int[]> subtreeRanges) {
         if (node.isLeaf()) {
-            // Find position of this taxon in the ordering
-            int[] ordering = geneTreeTaxaOrdering[treeIndex];
-            for (int i = 0; i < ordering.length; i++) {
-                if (ordering[i] == node.taxon.id) {
-                    return new int[]{i, i};
-                }
+            int position = nextPosition[0]++;
+            if (geneTreeTaxaOrdering[treeIndex][position] != node.taxon.id) {
+                throw new IllegalStateException("Leaf ordering changed while extracting tree " + treeIndex);
             }
-            return null; // Taxon not found
+            int[] range = new int[] {position, position};
+            subtreeRanges.put(node, range);
+            return range;
         }
         
         int minPos = Integer.MAX_VALUE;
@@ -278,7 +282,8 @@ public class MemoryEfficientBipartitionManager {
         
         if (node.childs != null) {
             for (TreeNode child : node.childs) {
-                int[] childRange = calculateSubtreeRange(child, treeIndex);
+                int[] childRange = calculateSubtreeRanges(
+                    child, treeIndex, nextPosition, subtreeRanges);
                 if (childRange != null) {
                     minPos = Math.min(minPos, childRange[0]);
                     maxPos = Math.max(maxPos, childRange[1]);
@@ -290,7 +295,9 @@ public class MemoryEfficientBipartitionManager {
             return null;
         }
         
-        return new int[]{minPos, maxPos};
+        int[] range = new int[] {minPos, maxPos};
+        subtreeRanges.put(node, range);
+        return range;
     }
     
     /**
@@ -491,4 +498,3 @@ public class MemoryEfficientBipartitionManager {
         return prefixXORs;
     }
 }
-

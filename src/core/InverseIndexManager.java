@@ -50,6 +50,38 @@ public class InverseIndexManager {
                          ((long) numTrees * numTaxa * 2 * 4) / (1024 * 1024) + " MB for index arrays");
         System.out.println("==== INVERSE INDEX MANAGER READY ====");
     }
+
+    /**
+     * Build the inverse lookup from leaf orderings already produced during range
+     * extraction. This avoids a redundant traversal of every gene tree.
+     */
+    public InverseIndexManager(int[][] geneTreeOrderings, int realTaxaCount) {
+        System.out.println("==== INITIALIZING INVERSE INDEX MANAGER ====");
+        this.numTrees = geneTreeOrderings.length;
+        this.numTaxa = realTaxaCount;
+        this.geneTreeOrderings = geneTreeOrderings;
+        this.inverseIndex = new int[numTrees][numTaxa];
+
+        long startTime = System.currentTimeMillis();
+        for (int treeIdx = 0; treeIdx < numTrees; treeIdx++) {
+            Arrays.fill(inverseIndex[treeIdx], -1);
+            int[] ordering = geneTreeOrderings[treeIdx];
+            if (ordering == null) continue;
+            for (int pos = 0; pos < ordering.length; pos++) {
+                int taxonId = ordering[pos];
+                if (taxonId < 0 || taxonId >= numTaxa) {
+                    throw new IllegalArgumentException("Invalid taxon ID " + taxonId + " in tree " + treeIdx);
+                }
+                if (inverseIndex[treeIdx][taxonId] != -1) {
+                    throw new IllegalArgumentException("Duplicate taxon ID " + taxonId + " in tree " + treeIdx);
+                }
+                inverseIndex[treeIdx][taxonId] = pos;
+            }
+        }
+        System.out.println("Inverse index construction completed in "
+            + (System.currentTimeMillis() - startTime) + " ms (reused leaf orderings)");
+        System.out.println("==== INVERSE INDEX MANAGER READY ====");
+    }
     
     /**
      * Build inverse index from gene trees using left-to-right leaf ordering.
@@ -274,6 +306,70 @@ public class InverseIndexManager {
         } else {
             totalElementsProcessed += size2;
             return countIntersection(tree2, start2, end2, tree1, start1, end1);
+        }
+    }
+
+    /**
+     * Fill {@code out} with [AA, AB, BA, BB] for two sibling bipartitions.
+     * The method walks the smaller two-side union once; missing taxa retain the
+     * same -1 sentinel semantics as {@link #getRangeIntersectionSize}.
+     */
+    public void getBipartitionIntersections(
+            int tree1, int leftStart1, int leftEnd1, int rightStart1, int rightEnd1,
+            int tree2, int leftStart2, int leftEnd2, int rightStart2, int rightEnd2,
+            int[] out) {
+        if (out == null || out.length < 4) {
+            throw new IllegalArgumentException("Intersection output must contain at least four elements");
+        }
+        Arrays.fill(out, 0, 4, 0);
+        validateBipartitionRanges(tree1, leftStart1, leftEnd1, rightStart1, rightEnd1);
+        validateBipartitionRanges(tree2, leftStart2, leftEnd2, rightStart2, rightEnd2);
+
+        int size1 = (leftEnd1 - leftStart1) + (rightEnd1 - rightStart1);
+        int size2 = (leftEnd2 - leftStart2) + (rightEnd2 - rightStart2);
+        totalIntersectionCalls++;
+        totalElementsProcessed += Math.min(size1, size2);
+        maxRangeSize = Math.max(maxRangeSize, Math.max(size1, size2));
+        minRangeSize = Math.min(minRangeSize, Math.min(size1, size2));
+
+        if (size1 <= size2) {
+            accumulateSide(tree1, leftStart1, leftEnd1, tree2,
+                leftStart2, leftEnd2, rightStart2, rightEnd2, 0, 1, out);
+            accumulateSide(tree1, rightStart1, rightEnd1, tree2,
+                leftStart2, leftEnd2, rightStart2, rightEnd2, 2, 3, out);
+        } else {
+            // Traversing tree2 produces the transpose; slots keep canonical order.
+            accumulateSide(tree2, leftStart2, leftEnd2, tree1,
+                leftStart1, leftEnd1, rightStart1, rightEnd1, 0, 2, out);
+            accumulateSide(tree2, rightStart2, rightEnd2, tree1,
+                leftStart1, leftEnd1, rightStart1, rightEnd1, 1, 3, out);
+        }
+    }
+
+    private void accumulateSide(int sourceTree, int start, int end, int targetTree,
+                                int targetLeftStart, int targetLeftEnd,
+                                int targetRightStart, int targetRightEnd,
+                                int targetLeftSlot, int targetRightSlot, int[] out) {
+        int[] ordering = geneTreeOrderings[sourceTree];
+        for (int pos = start; pos < end; pos++) {
+            int targetPos = inverseIndex[targetTree][ordering[pos]];
+            if (targetPos >= targetLeftStart && targetPos < targetLeftEnd) {
+                out[targetLeftSlot]++;
+            } else if (targetPos >= targetRightStart && targetPos < targetRightEnd) {
+                out[targetRightSlot]++;
+            }
+        }
+    }
+
+    private void validateBipartitionRanges(int tree, int leftStart, int leftEnd,
+                                           int rightStart, int rightEnd) {
+        if (tree < 0 || tree >= numTrees) {
+            throw new IllegalArgumentException("Invalid tree index: " + tree);
+        }
+        int length = geneTreeOrderings[tree].length;
+        if (leftStart < 0 || leftEnd < leftStart || rightStart < 0 || rightEnd < rightStart
+                || leftEnd > length || rightEnd > length) {
+            throw new IllegalArgumentException("Invalid bipartition ranges for tree " + tree);
         }
     }
     

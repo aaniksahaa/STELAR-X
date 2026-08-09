@@ -30,6 +30,14 @@ public class MemoryOptimizedWeightCalculator {
     private final InverseIndexManager inverseIndexManager;
     private final MemoryEfficientBipartitionManager bipartitionManager;
     private final Map<Object, List<RangeBipartition>> hashToBipartitions;
+    private final RangeBipartition[] geneTreeRanges;
+    private final int[] geneTreeRangeFrequencies;
+    private final Map<RangeBipartition, Integer> rangeIndex;
+    private final int bitsetWords;
+    private final long[] leftRangeBits;
+    private final long[] rightRangeBits;
+
+    private static final long CPU_BITSET_MEMORY_CAP = 64L * 1024 * 1024;
     
     // Statistics for performance monitoring
     private long totalScoreCalculations = 0;
@@ -41,18 +49,45 @@ public class MemoryOptimizedWeightCalculator {
         
         this.geneTrees = geneTrees;
         
-        System.out.println("Creating MemoryEfficientBipartitionManager...");
-        this.bipartitionManager = new MemoryEfficientBipartitionManager(
-            geneTrees.geneTrees, geneTrees.realTaxaCount);
-        
-        System.out.println("Processing gene trees to extract range bipartitions...");
-        bipartitionManager.processGeneTreesParallel();
+        System.out.println("Reusing preprocessed range bipartitions...");
+        this.bipartitionManager = geneTrees.getBipartitionManager();
         
         System.out.println("Creating InverseIndexManager...");
         this.inverseIndexManager = new InverseIndexManager(
-            geneTrees.geneTrees, geneTrees.realTaxaCount);
+            bipartitionManager.getGeneTreeTaxaOrdering(), geneTrees.realTaxaCount);
         
         this.hashToBipartitions = bipartitionManager.getHashToBipartitions();
+        this.geneTreeRanges = new RangeBipartition[geneTrees.rangeBipartitions.size()];
+        this.geneTreeRangeFrequencies = new int[geneTreeRanges.length];
+        this.rangeIndex = new HashMap<>(hashMapCapacity(geneTreeRanges.length));
+        int rangeIndex = 0;
+        for (Map.Entry<RangeBipartition, Integer> entry : geneTrees.rangeBipartitions.entrySet()) {
+            geneTreeRanges[rangeIndex] = entry.getKey();
+            geneTreeRangeFrequencies[rangeIndex] = entry.getValue();
+            this.rangeIndex.put(entry.getKey(), rangeIndex);
+            rangeIndex++;
+        }
+
+        int words = (geneTrees.realTaxaCount + Long.SIZE - 1) / Long.SIZE;
+        long bitsetBytes = 2L * geneTreeRanges.length * words * Long.BYTES;
+        double averageUnionSize = averageUnionSize(geneTreeRanges);
+        boolean useBitsets = Config.COMPUTATION_MODE != Config.ComputationMode.GPU_PARALLEL
+            && words > 0
+            && bitsetBytes <= CPU_BITSET_MEMORY_CAP
+            && 4.0 * words <= averageUnionSize;
+        if (useBitsets) {
+            this.bitsetWords = words;
+            this.leftRangeBits = new long[geneTreeRanges.length * words];
+            this.rightRangeBits = new long[geneTreeRanges.length * words];
+            buildRangeBitsets();
+            System.out.println("CPU intersection strategy: bitset popcount ("
+                + (bitsetBytes / 1024) + " KB resident)");
+        } else {
+            this.bitsetWords = 0;
+            this.leftRangeBits = null;
+            this.rightRangeBits = null;
+            System.out.println("CPU intersection strategy: fused inverse-index range walk");
+        }
         
         System.out.println("Memory-optimized weight calculator initialized");
         System.out.println("Range bipartition groups: " + hashToBipartitions.size());
@@ -144,7 +179,7 @@ public class MemoryOptimizedWeightCalculator {
     private Map<RangeBipartition, Double> calculateWeightsMultiThread(List<RangeBipartition> candidates) {
         System.out.println("Starting multi-threaded range-based weight calculation...");
         
-        Map<RangeBipartition, Double> weights = new ConcurrentHashMap<>();
+        double[] scores = new double[candidates.size()];
         int numThreads = Runtime.getRuntime().availableProcessors();
         
         Threading.startThreading(numThreads);
@@ -176,12 +211,7 @@ public class MemoryOptimizedWeightCalculator {
                     
                     for (int j = startIdx; j < endIdx; j++) {
                         RangeBipartition candidate = candidates.get(j);
-                        double totalScore = 0.0;
-                        
-                        // Use traditional BitSet calculation (simple and direct)
-                        totalScore = calculateRangeBasedScore(candidate);
-                        
-                        weights.put(candidate, totalScore);
+                        scores[j] = calculateRangeBasedScore(candidate);
                     }
                     
                     System.out.println("Thread " + threadId + " completed processing " + (endIdx - startIdx) + " candidates");
@@ -201,8 +231,47 @@ public class MemoryOptimizedWeightCalculator {
             Threading.shutdown();
         }
         
+        // Each worker writes to a disjoint score-array slice. Populate the result map
+        // once, serially, instead of contending on ConcurrentHashMap in the hot loop.
+        Map<RangeBipartition, Double> weights = new HashMap<>(hashMapCapacity(candidates.size()));
+        for (int i = 0; i < candidates.size(); i++) {
+            weights.put(candidates.get(i), scores[i]);
+        }
+
         System.out.println("Multi-threaded calculation completed");
         return weights;
+    }
+
+    private static int hashMapCapacity(int expectedSize) {
+        if (expectedSize < 3) return expectedSize + 1;
+        return expectedSize < (1 << 29) ? (int) (expectedSize / 0.75f) + 1 : Integer.MAX_VALUE;
+    }
+
+    private static double averageUnionSize(RangeBipartition[] ranges) {
+        if (ranges.length == 0) return 0.0;
+        long total = 0;
+        for (RangeBipartition range : ranges) {
+            total += range.leftSize() + range.rightSize();
+        }
+        return total / (double) ranges.length;
+    }
+
+    private void buildRangeBitsets() {
+        int[][] orderings = bipartitionManager.getGeneTreeTaxaOrdering();
+        for (int i = 0; i < geneTreeRanges.length; i++) {
+            RangeBipartition range = geneTreeRanges[i];
+            int[] ordering = orderings[range.geneTreeIndex];
+            int base = i * bitsetWords;
+            setRangeBits(leftRangeBits, base, ordering, range.leftStart, range.leftEnd);
+            setRangeBits(rightRangeBits, base, ordering, range.rightStart, range.rightEnd);
+        }
+    }
+
+    private static void setRangeBits(long[] bits, int base, int[] ordering, int start, int end) {
+        for (int pos = start; pos < end; pos++) {
+            int taxon = ordering[pos];
+            bits[base + (taxon >>> 6)] |= 1L << (taxon & 63);
+        }
     }
     
     
@@ -255,19 +324,74 @@ public class MemoryOptimizedWeightCalculator {
      * Uses the memory-optimized range intersection method.
      */
     private double calculateRangeBasedScore(RangeBipartition candidate) {
-        double totalScore = 0.0;
-        
-        // Use the existing gene tree RangeBipartitions from GeneTrees
-        for (Map.Entry<RangeBipartition, Integer> entry : geneTrees.rangeBipartitions.entrySet()) {
-            RangeBipartition geneTreeRange = entry.getKey();
-            int frequency = entry.getValue();
-            
-            double score = calculateRangeScore(candidate, geneTreeRange);
-            totalScore += score * frequency;
-            
-            totalScoreCalculations++;
+        if (bitsetWords != 0) {
+            Integer candidateIndex = rangeIndex.get(candidate);
+            if (candidateIndex != null) {
+                return calculateBitsetScore(candidateIndex);
+            }
         }
+
+        double totalScore = 0.0;
+        int[] intersections = new int[4];
+
+        // Dense arrays avoid Map.Entry iteration in this quadratic hot loop. The
+        // fused call fills AA, AB, BA, BB in one traversal of the smaller union.
+        for (int i = 0; i < geneTreeRanges.length; i++) {
+            RangeBipartition geneTreeRange = geneTreeRanges[i];
+            inverseIndexManager.getBipartitionIntersections(
+                candidate.geneTreeIndex,
+                candidate.leftStart, candidate.leftEnd,
+                candidate.rightStart, candidate.rightEnd,
+                geneTreeRange.geneTreeIndex,
+                geneTreeRange.leftStart, geneTreeRange.leftEnd,
+                geneTreeRange.rightStart, geneTreeRange.rightEnd,
+                intersections);
+
+            int aa = intersections[0];
+            int ab = intersections[1];
+            int ba = intersections[2];
+            int bb = intersections[3];
+            double score = 0.0;
+            int aligned = aa + bb;
+            if (aligned >= 2) score += aa * (double) bb * (aligned - 2) / 2.0;
+            int crossed = ab + ba;
+            if (crossed >= 2) score += ab * (double) ba * (crossed - 2) / 2.0;
+
+            totalScore += score * geneTreeRangeFrequencies[i];
+        }
+        totalScoreCalculations += geneTreeRanges.length;
+        totalIntersectionCalculations += 4L * geneTreeRanges.length;
         
+        return totalScore;
+    }
+
+    private double calculateBitsetScore(int candidateIndex) {
+        double totalScore = 0.0;
+        int candidateBase = candidateIndex * bitsetWords;
+
+        for (int i = 0; i < geneTreeRanges.length; i++) {
+            int geneBase = i * bitsetWords;
+            int aa = 0, ab = 0, ba = 0, bb = 0;
+            for (int word = 0; word < bitsetWords; word++) {
+                long candidateLeft = leftRangeBits[candidateBase + word];
+                long candidateRight = rightRangeBits[candidateBase + word];
+                long geneLeft = leftRangeBits[geneBase + word];
+                long geneRight = rightRangeBits[geneBase + word];
+                aa += Long.bitCount(candidateLeft & geneLeft);
+                ab += Long.bitCount(candidateLeft & geneRight);
+                ba += Long.bitCount(candidateRight & geneLeft);
+                bb += Long.bitCount(candidateRight & geneRight);
+            }
+
+            double score = 0.0;
+            int aligned = aa + bb;
+            if (aligned >= 2) score += aa * (double) bb * (aligned - 2) / 2.0;
+            int crossed = ab + ba;
+            if (crossed >= 2) score += ab * (double) ba * (crossed - 2) / 2.0;
+            totalScore += score * geneTreeRangeFrequencies[i];
+        }
+        totalScoreCalculations += geneTreeRanges.length;
+        totalIntersectionCalculations += 4L * geneTreeRanges.length;
         return totalScore;
     }
     
