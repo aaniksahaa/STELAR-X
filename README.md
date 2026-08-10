@@ -2,7 +2,13 @@
 
 **STELAR-X** is a scalable, statistically consistent summary method for coalescent-based species tree inference from large collections of gene trees. It combines compact bipartition encodings, fast weight precomputation, GPU-accelerated parallelism, and optimized dynamic programming to analyze datasets as large as **100,000 taxa × 1,000 genes in just 8.5 hours using 86 GB RAM**.
 
-🎉 **The paper  STELAR-X has been accepted for presentation at [RECOMB 2026](https://recomb.org/recomb2026/) in Greece.**
+**Presentation video:** [Watch the STELAR-X presentation on YouTube](https://www.youtube.com/watch?v=ET86p5fkAjk)
+
+## Updates
+
+- **Performance optimization:** Implementation-level optimizations targeting constant-factor performance improvements have been finalized and regression-tested.
+- **RECOMB 2026:** The STELAR-X paper has been accepted for presentation at [RECOMB 2026](https://recomb.org/recomb2026/) in Greece.
+- **Large empirical analyses:** STELAR-X successfully analyzed both the 48-taxon avian dataset and the extended avian dataset comprising 363 taxa and approximately 63,000 gene trees.
 
 ## Citation
 
