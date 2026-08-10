@@ -1,0 +1,133 @@
+#!/bin/bash
+#
+# STELAR-X — Species Tree Estimation using Triplet Frequencies
+# ==============================================================
+#
+# Usage:
+#   stelar-x -i <gene_trees> -o <output> [options]
+#
+# Options:
+#   -i, --input <file>     Gene trees file (required)
+#   -o, --output <file>    Output species tree file (required)
+#   -c, --score <tree>     Score-only mode: score gene trees against given species tree
+#   --cpu                  CPU single-threaded mode
+#   --cpu-parallel         CPU parallel mode
+#   --gpu                  GPU parallel mode (default if GPU available)
+#   -m, --mode <mode>      CPU_SINGLE, CPU_PARALLEL, GPU_PARALLEL
+#   -e, --expansion        Enable mixed bipartitions
+#   -s, --support <type>   Branch support: NONE, POSTERIOR, DETAILED, LENGTH, BOTH, PVALUE, ALL
+#   --lambda <val>         Lambda parameter for branch support (default: 0.5)
+#   -v, --verbose          Verbose expansion output
+#   --xms <size>           Java min heap (default: 4g)
+#   --xmx <size>           Java max heap (default: 128g)
+#   --version              Print the installed STELAR-X version
+#   -h, --help             Show this message
+#
+# Examples:
+#   stelar-x -i genes.tre -o species.tre
+#   stelar-x -i genes.tre -o species.tre --cpu-parallel
+#   stelar-x -i genes.tre -o species.tre --gpu --expansion
+#   stelar-x -i genes.tre -c known_species.tre
+
+# ── Resolve install location (works via symlink too) ──
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+  DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+STELAR_HOME="$(cd "$(dirname "$SOURCE")" && pwd)"
+
+# ── Paths ──
+JAR="$STELAR_HOME/lib/stelar-x.jar"
+LIB_DIR="$STELAR_HOME/lib"
+
+if [[ ! -f "$JAR" ]]; then
+  echo "Error: stelar-x.jar not found at $JAR"
+  echo "The installation appears to be incomplete."
+  exit 1
+fi
+
+if [[ "${1:-}" == "--version" ]]; then
+  printf 'STELAR-X %s\n' "$(cat "$STELAR_HOME/VERSION")"
+  exit 0
+fi
+
+# ── Colors ──
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+# ── Help ──
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  sed -n '3,/^$/{ s/^# \{0,1\}//; p }' "${BASH_SOURCE[0]}"
+  exit 0
+fi
+
+# ── Defaults ──
+XMS="${STELAR_XMS:-4g}"
+XMX="${STELAR_XMX:-128g}"
+HAS_CUDA_LIB=false
+[[ -f "$LIB_DIR/libweight_calc.so" ]] && HAS_CUDA_LIB=true
+
+# ── Parse args (separate Java heap opts from program args) ──
+JAVA_PROGRAM_ARGS=()
+MODE_SET=false
+INPUT_FILE=""
+OUTPUT_FILE=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -i|--input)       INPUT_FILE="$2"; JAVA_PROGRAM_ARGS+=("-i" "$2"); shift 2 ;;
+    -o|--output)      OUTPUT_FILE="$2"; JAVA_PROGRAM_ARGS+=("-o" "$2"); shift 2 ;;
+    -c|--score|--species-tree) JAVA_PROGRAM_ARGS+=("-c" "$2"); shift 2 ;;
+    --cpu)            MODE_SET=true; JAVA_PROGRAM_ARGS+=("--cpu"); shift ;;
+    --cpu-parallel)   MODE_SET=true; JAVA_PROGRAM_ARGS+=("--cpu-parallel"); shift ;;
+    --gpu|--gpu-parallel) MODE_SET=true; JAVA_PROGRAM_ARGS+=("--gpu"); shift ;;
+    -m|--mode)        MODE_SET=true; JAVA_PROGRAM_ARGS+=("-m" "$2"); shift 2 ;;
+    -e|--expansion)   JAVA_PROGRAM_ARGS+=("--expansion"); shift ;;
+    -v|--verbose)     JAVA_PROGRAM_ARGS+=("--verbose"); shift ;;
+    -s|--support|--branch-support) JAVA_PROGRAM_ARGS+=("-s" "$2"); shift 2 ;;
+    --lambda)         JAVA_PROGRAM_ARGS+=("--lambda" "$2"); shift 2 ;;
+    --xms|--Xms)      XMS="$2"; shift 2 ;;
+    --xmx|--Xmx)      XMX="$2"; shift 2 ;;
+    *)
+      echo -e "${RED}Error: Unknown option '$1'. Run stelar-x --help for usage.${NC}"
+      exit 1
+      ;;
+  esac
+done
+
+# ── Validate ──
+if [[ -z "$INPUT_FILE" ]]; then
+  echo -e "${RED}Error: --input is required. Run stelar-x --help for usage.${NC}"
+  exit 1
+fi
+
+if [[ ! -f "$INPUT_FILE" ]]; then
+  echo -e "${RED}Error: Input file '$INPUT_FILE' does not exist.${NC}"
+  exit 1
+fi
+
+# ── Auto-detect mode if not set ──
+if [[ "$MODE_SET" == false ]]; then
+  if [[ "$HAS_CUDA_LIB" == true ]] && command -v nvidia-smi &>/dev/null; then
+    JAVA_PROGRAM_ARGS+=("-m" "GPU_PARALLEL")
+  else
+    JAVA_PROGRAM_ARGS+=("-m" "CPU_PARALLEL")
+  fi
+fi
+
+# ── Create output directory if needed ──
+if [[ -n "$OUTPUT_FILE" ]]; then
+  mkdir -p "$(dirname "$OUTPUT_FILE")" 2>/dev/null || true
+fi
+
+# ── Run ──
+exec java \
+  -Xms"${XMS}" -Xmx"${XMX}" \
+  -Djava.library.path="$LIB_DIR" \
+  -Djna.platform.library.path="$LIB_DIR" \
+  -cp "$JAR" \
+  Main "${JAVA_PROGRAM_ARGS[@]}"

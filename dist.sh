@@ -24,7 +24,7 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-VERSION="1.0.0"
+VERSION="$(./project-version.sh)"
 DIST_NAME="stelar-x-${VERSION}"
 DIST_DIR="dist/${DIST_NAME}"
 SKIP_BUILD=false
@@ -47,11 +47,13 @@ echo "╚═══════════════════════�
 echo -e "${NC}"
 
 # ── Step 1: Ensure build exists ──
-JAR_PATH="target/stelar-x-1.0.0-SNAPSHOT.jar"
+JAR_PATH="target/stelar-x-${VERSION}.jar"
 
 if [[ "$SKIP_BUILD" == false ]]; then
   echo -e "${YELLOW}[1/4] Building STELAR-X...${NC}"
   ./install.sh --clean
+  echo -e "${YELLOW}Running regression suite...${NC}"
+  ./mvnw -q test
   echo ""
 elif [[ ! -f "$JAR_PATH" ]]; then
   echo -e "${RED}Error: JAR not found at $JAR_PATH. Run ./install.sh or remove --skip-build.${NC}"
@@ -69,6 +71,11 @@ mkdir -p "$DIST_DIR/lib"
 # Copy the fat JAR (rename to clean name)
 cp "$JAR_PATH" "$DIST_DIR/lib/stelar-x.jar"
 echo "  Copied stelar-x.jar ($(du -h "$DIST_DIR/lib/stelar-x.jar" | cut -f1))"
+
+# Copy release metadata and user documentation
+printf '%s\n' "$VERSION" > "$DIST_DIR/VERSION"
+cp "README.md" "$DIST_DIR/README.md"
+echo "  Added VERSION and README.md"
 
 # Copy CUDA library if available
 if [[ -f "cuda/libweight_calc.so" ]]; then
@@ -113,6 +120,7 @@ cat > "$DIST_DIR/stelar-x" << 'LAUNCHER_EOF'
 #   -v, --verbose          Verbose expansion output
 #   --xms <size>           Java min heap (default: 4g)
 #   --xmx <size>           Java max heap (default: 128g)
+#   --version              Print the installed STELAR-X version
 #   -h, --help             Show this message
 #
 # Examples:
@@ -138,6 +146,11 @@ if [[ ! -f "$JAR" ]]; then
   echo "Error: stelar-x.jar not found at $JAR"
   echo "The installation appears to be incomplete."
   exit 1
+fi
+
+if [[ "${1:-}" == "--version" ]]; then
+  printf 'STELAR-X %s\n' "$(cat "$STELAR_HOME/VERSION")"
+  exit 0
 fi
 
 # ── Colors ──
@@ -227,8 +240,10 @@ echo "  Created stelar-x launcher"
 echo -e "${YELLOW}[4/4] Creating archive...${NC}"
 
 (cd dist && tar czf "${DIST_NAME}.tar.gz" "${DIST_NAME}")
+(cd dist && sha256sum "${DIST_NAME}.tar.gz" > "${DIST_NAME}.tar.gz.sha256")
 
 ARCHIVE="dist/${DIST_NAME}.tar.gz"
+CHECKSUM="${ARCHIVE}.sha256"
 ARCHIVE_SIZE=$(du -h "$ARCHIVE" | cut -f1)
 
 echo ""
@@ -239,9 +254,12 @@ echo "╚═══════════════════════�
 echo -e "${NC}"
 
 echo -e "  Archive:  ${GREEN}${ARCHIVE}${NC} (${ARCHIVE_SIZE})"
+echo -e "  SHA-256: ${GREEN}${CHECKSUM}${NC}"
 echo ""
 echo -e "  Contents:"
 echo "    stelar-x/stelar-x                          (launcher script)"
+echo "    stelar-x/VERSION                           (release version)"
+echo "    stelar-x/README.md                         (documentation)"
 echo "    stelar-x/lib/stelar-x.jar                  (Java application)"
 if [[ -f "$DIST_DIR/lib/libweight_calc.so" ]]; then
   echo "    stelar-x/lib/libweight_calc.so             (CUDA GPU library)"
@@ -260,4 +278,3 @@ echo -e "${BOLD}Optional — add to PATH:${NC}"
 echo ""
 echo "  sudo ln -sf \$(pwd)/stelar-x /usr/local/bin/stelar-x"
 echo "  stelar-x -i gene_trees.tre -o output.tre"
-

@@ -42,19 +42,19 @@
 #  Prerequisites: Java 11+ only. Nothing else.
 #
 #  1. Download and extract the release archive
-       tar xzf stelar-x-1.0.0.tar.gz
+       tar xzf stelar-x-1.1.0.tar.gz
 #
 #  2. Run (that's it!)
-       ./stelar-x-1.0.0/stelar-x -i <gene_trees.tre> -o <output.tre>
-       ./stelar-x-1.0.0/stelar-x -i <gene_trees.tre> -o <output.tre> --cpu-parallel
-       ./stelar-x-1.0.0/stelar-x --help
+       ./stelar-x-1.1.0/stelar-x -i <gene_trees.tre> -o <output.tre>
+       ./stelar-x-1.1.0/stelar-x -i <gene_trees.tre> -o <output.tre> --cpu-parallel
+       ./stelar-x-1.1.0/stelar-x --help
 #
 #  Optional — add to PATH so you can run it from anywhere:
-       sudo ln -sf $(pwd)/stelar-x-1.0.0/stelar-x /usr/local/bin/stelar-x
+       sudo ln -sf $(pwd)/stelar-x-1.1.0/stelar-x /usr/local/bin/stelar-x
        stelar-x -i genes.tre -o out.tre
 #
 #  To build the release archive yourself (from the development install):
-       ./dist.sh                        # produces dist/stelar-x-1.0.0.tar.gz (~3.3 MB)
+       ./dist.sh                        # produces dist/stelar-x-1.1.0.tar.gz (~3.3 MB)
        ./dist.sh --skip-build           # package existing build without rebuilding
 #
 ###############################################################################
@@ -406,6 +406,5 @@ CPU ONLY RUNS
   --aster-opts "-t 32"
 
 ===========================================================================
-
 
 

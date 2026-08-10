@@ -97,7 +97,8 @@ if [[ ! -f "$INPUT_FILE" ]]; then
 fi
 
 # ── Find JAR ──
-JAR="$STELAR_ROOT/target/stelar-x-1.0.0-SNAPSHOT.jar"
+VERSION="$("$STELAR_ROOT/project-version.sh")"
+JAR="$STELAR_ROOT/target/stelar-x-${VERSION}.jar"
 if [[ ! -f "$JAR" ]]; then
   echo -e "${RED}Error: JAR not found at $JAR${NC}"
   echo -e "Run ${YELLOW}./install.sh${NC} first to build STELAR-X."

@@ -153,7 +153,9 @@ if [[ ! -f "$STELAR_ROOT/run.sh" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$STELAR_ROOT/target/stelar-x-1.0.0-SNAPSHOT.jar" ]]; then
+VERSION="$("$STELAR_ROOT/project-version.sh")"
+JAR_PATH="$STELAR_ROOT/target/stelar-x-${VERSION}.jar"
+if [[ ! -f "$JAR_PATH" ]]; then
   echo -e "${RED}Error: JAR not found. Please run ./install.sh first.${NC}"
   exit 1
 fi

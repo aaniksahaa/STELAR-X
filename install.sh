@@ -128,7 +128,8 @@ echo "  Compiling with Maven Wrapper (no Maven installation needed)..."
 ./mvnw -q package -DskipTests 2>&1 | grep -v "^\[INFO\]" | grep -v "^Progress" || true
 
 # Verify JAR was built
-JAR_PATH="target/stelar-x-1.0.0-SNAPSHOT.jar"
+VERSION="$(./project-version.sh)"
+JAR_PATH="target/stelar-x-${VERSION}.jar"
 if [[ ! -f "$JAR_PATH" ]]; then
   echo -e "${RED}Error: JAR build failed. $JAR_PATH not found.${NC}"
   echo "Try running: ./mvnw package  (for detailed output)"
@@ -219,4 +220,3 @@ echo "  ./run.sh -i <gene_trees.tre> -o <output.tre> --cpu-parallel # CPU parall
 echo ""
 echo -e "${BOLD}With monitoring:${NC}"
 echo "  ./run-with-monitor.sh -i <gene_trees.tre> -o <output.tre>"
-

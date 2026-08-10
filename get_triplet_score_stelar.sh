@@ -13,6 +13,9 @@ NC='\033[0m' # No Color
 GENE_TREES_FILE=""
 SPECIES_TREE_FILE=""
 COMPUTATION_MODE="GPU_PARALLEL"
+STELAR_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VERSION="$("$STELAR_ROOT/project-version.sh")"
+JAR_PATH="$STELAR_ROOT/target/stelar-x-${VERSION}.jar"
 
 # Function to display usage
 usage() {
@@ -83,7 +86,7 @@ if [[ ! -f "$SPECIES_TREE_FILE" ]]; then
 fi
 
 # Check if binaries exist
-if [[ ! -f "target/stelar-x-1.0.0-SNAPSHOT.jar" ]]; then
+if [[ ! -f "$JAR_PATH" ]]; then
     echo -e "${RED}Error: JAR file not found. Please run build.sh first.${NC}"
     exit 1
 fi
@@ -99,10 +102,10 @@ echo -e "${YELLOW}Calculating triplet score...${NC}"
 echo
 
 java -Xms4g -Xmx128g \
-    -Djava.library.path="$(pwd)/cuda" \
+    -Djava.library.path="$STELAR_ROOT/cuda" \
     -Djna.debug_load=false \
-    -Djna.platform.library.path="$(pwd)/cuda" \
-    -cp target/stelar-x-1.0.0-SNAPSHOT.jar \
+    -Djna.platform.library.path="$STELAR_ROOT/cuda" \
+    -cp "$JAR_PATH" \
     Main -i "$GENE_TREES_FILE" -c "$SPECIES_TREE_FILE" -m "$COMPUTATION_MODE"
 
 EXIT_CODE=$?
