@@ -1,8 +1,6 @@
 # Scaling coalescent-based species tree inference to 100,000 taxa with STELAR-X
 
-**STELAR-X** is a scalable, statistically consistent summary method for coalescent-based species tree inference from large collections of gene trees. It combines compact bipartition encodings, fast weight precomputation, GPU-accelerated parallelism, and optimized dynamic programming to analyze datasets as large as **100,000 taxa × 1,000 genes in just 8.5 hours using 86 GB RAM**.
-
-This repository is the **Supplemental Code** for the paper. It contains the complete STELAR-X source code (Java + CUDA), pre-built native GPU libraries, the launchers, and every experiment script used for the simulated, A10K, and biological analyses reported in the paper, together with the tooling that records and publishes the exact command behind each result so that every experiment can be reproduced.
+**STELAR-X** is a scalable, statistically consistent summary method for coalescent-based species tree inference from large collections of gene trees. It combines compact bipartition encodings, fast weight precomputation, GPU-accelerated parallelism, and optimized dynamic programming to analyze datasets as large as **100,000 taxa × 1,000 genes in about 34 minutes using 58 GB RAM**.
 
 > **Note:** Although STELAR-X provides a CPU fallback option, GPU-enabled execution is recommended to realize its full computational benefits.
 
