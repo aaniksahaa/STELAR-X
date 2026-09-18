@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$ROOT/src"
 BUILD="$ROOT/build"
 

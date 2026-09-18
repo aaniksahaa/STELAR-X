@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/scripts/a10k-outputs-dir.sh"
+source "${SCRIPT_DIR}/a10k-outputs-dir.sh"
 
 # Propagate terminal color preference to Java subprocesses even when this
 # script's output is piped through tee into the per-run log below.
@@ -24,14 +24,14 @@ REPLICATES_SPEC=""
 START_REP=""
 END_REP=""
 FRESH=false
-STELARX_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STELARX_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STELARX_OPTS="--search-space S2 -vv"
 STELARX_OPTS_LIST_RAW=""
 TIME_MONITOR=true
 GPU_MONITOR=true
 NO_NOTIFY=false
 
-source "${STELARX_ROOT}/experiment-setting-name.sh"
+source "${SCRIPT_DIR}/experiment-setting-name.sh"
 
 csv_get_field() {
   local file="$1"
@@ -92,10 +92,10 @@ Optional:
   --no-notify, -nn     Disable ntfy notifications
 
 Examples:
-  ./run-a10k.sh --data-dir /path/to/10k-astral-dataset --tree-type estimated --opts "--search-space S1 --intersection-method I2 -vv"
-  ./run-a10k.sh --data-dir /path/to/10k-astral-dataset --tree-type "true;estimated" --opts "--search-space S1 --intersection-method I2 -vv"
-  ./run-a10k.sh --data-dir /path/to/10k-astral-dataset --tree-type estimated --opts "--search-space S2 --intersection-method I2 -vv"
-  ./run-a10k.sh --data-dir /path/to/10k-astral-dataset --tree-type estimated --opts-list "--search-space S1 -vv;--search-space S2 -vv;--search-space S3 -vv"
+  ./scripts/run-a10k.sh --data-dir /path/to/10k-astral-dataset --tree-type estimated --opts "--search-space S1 --intersection-method I2 -vv"
+  ./scripts/run-a10k.sh --data-dir /path/to/10k-astral-dataset --tree-type "true;estimated" --opts "--search-space S1 --intersection-method I2 -vv"
+  ./scripts/run-a10k.sh --data-dir /path/to/10k-astral-dataset --tree-type estimated --opts "--search-space S2 --intersection-method I2 -vv"
+  ./scripts/run-a10k.sh --data-dir /path/to/10k-astral-dataset --tree-type estimated --opts-list "--search-space S1 -vv;--search-space S2 -vv;--search-space S3 -vv"
   The first example setting is search-space_S1__intersection-method_I2.
   Verbosity is ignored; other meaningful options are appended to the name.
 
@@ -166,7 +166,7 @@ mirror_results_dir() {
 }
 
 # Complete the command record (out-stelarx.command, written by the wrapper with
-# the exact run.sh invocation) with the outer commands that produced this run.
+# the exact stelarx invocation) with the outer commands that produced this run.
 # Reads the loop variables of the case currently being run.
 append_a10k_command_context() {
   local rf_rate="$1"
@@ -271,12 +271,12 @@ for TREE_TYPE in "${TREE_TYPES[@]}"; do
     GT_FILE="${GT_DIR}/estimatedgenetrees.tre"
     ROOTED_GT="${GT_DIR}/estimatedgenetrees.rooted.tre"
     if [[ ! -f "$ROOTED_GT" ]]; then
-      if [[ ! -x "${STELARX_ROOT%/}/process_unrooted.sh" ]]; then
-        echo "Error: process_unrooted.sh not found or not executable at ${STELARX_ROOT%/}/process_unrooted.sh"
+      if [[ ! -x "${STELARX_ROOT%/}/scripts/process_unrooted.sh" ]]; then
+        echo "Error: process_unrooted.sh not found or not executable at ${STELARX_ROOT%/}/scripts/process_unrooted.sh"
         exit 7
       fi
       echo "Rooting estimated gene trees for ${REPL} with outgroup 0..."
-      "${STELARX_ROOT%/}/process_unrooted.sh" -i "$GT_FILE" -o "$ROOTED_GT" -og "0"
+      "${STELARX_ROOT%/}/scripts/process_unrooted.sh" -i "$GT_FILE" -o "$ROOTED_GT" -og "0"
     fi
     GT_FILE="$ROOTED_GT"
   else
@@ -307,7 +307,7 @@ for TREE_TYPE in "${TREE_TYPES[@]}"; do
 
     mkdir -p "$OUT_DIR"
     rm -f "$RUN_LOG"
-    CMD=("${STELARX_ROOT}/run-stelarx-with-monitor.sh" -i "$GT_FILE" -o "$OUT_FILE" --stelarx-root "$STELARX_ROOT")
+    CMD=("${STELARX_ROOT}/scripts/run-stelarx-with-monitor.sh" -i "$GT_FILE" -o "$OUT_FILE" --stelarx-root "$STELARX_ROOT")
     if [[ "$TIME_MONITOR" == false ]]; then CMD+=(--no-time-monitor); fi
     if [[ "$GPU_MONITOR" == false ]]; then CMD+=(--no-gpu-monitor); fi
     if [[ "$NO_NOTIFY" == true ]]; then CMD+=(--no-notify); fi
@@ -342,7 +342,7 @@ for TREE_TYPE in "${TREE_TYPES[@]}"; do
 
     RF_RATE="NA"
     if [[ -f "$OUT_FILE" && -f "$TRUE_TREE" ]]; then
-      rf_output=$("$PYTHON_BIN" "${STELARX_ROOT}/rf.py" "$OUT_FILE" "$TRUE_TREE" 2>&1) || true
+      rf_output=$("$PYTHON_BIN" "${STELARX_ROOT}/scripts/rf.py" "$OUT_FILE" "$TRUE_TREE" 2>&1) || true
       rf_line=$(echo "$rf_output" | grep -i "Robinson-Foulds distance" | tail -n1 || true)
       if [[ -n "$rf_line" ]]; then
         RF_RATE=$(echo "$rf_line" | grep -Eo '[0-9]+(\.[0-9]+)?' | tail -n1 || echo "NA")

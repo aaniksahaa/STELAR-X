@@ -1,10 +1,11 @@
 param(
-    [string]$OutputDir = (Join-Path $PSScriptRoot "native"),
+    [string]$OutputDir = (Join-Path (Split-Path -Parent $PSScriptRoot) "native"),
     [string]$CudaArch = "all-major"
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+$RepoRoot = Split-Path -Parent $PSScriptRoot
 
 if (-not (Get-Command nvcc -ErrorAction SilentlyContinue)) {
     throw "nvcc was not found. Install a CUDA toolkit or build a CPU-only artifact."
@@ -59,7 +60,7 @@ Write-Host "  Minimum CC  : $MinCudaCc"
 Write-Host "  Output      : $OutputDir"
 
 foreach ($Library in $Libraries) {
-    $Source = Join-Path $PSScriptRoot (Join-Path "src/native" $Library.Source)
+    $Source = Join-Path $RepoRoot (Join-Path "src/native" $Library.Source)
     $Output = Join-Path $OutputDir $Library.Output
     Write-Host "  Building    : $Source -> $Output"
     & nvcc @Common "-o" $Output $Source

@@ -4,8 +4,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/scripts/phylogeny-data-dir.sh"
-source "${SCRIPT_DIR}/scripts/hf-python.sh"
+source "${SCRIPT_DIR}/phylogeny-data-dir.sh"
+source "${SCRIPT_DIR}/hf-python.sh"
 
 DATA_DIR=""
 REPO_ID="imAniksahA/blab"
@@ -48,9 +48,9 @@ Existing current ZIPs are reused. Missing, stale, and invalid ZIPs with a
 matching non-empty source directory are safely built before upload.
 
 Examples:
-  ./upload-bulk-simulated.sh --dry-run
-  ./upload-bulk-simulated.sh
-  ./upload-bulk-simulated.sh --all --remote-dir ph/d/simulated/stelarx-datasets/raw
+  ./scripts/upload-bulk-simulated.sh --dry-run
+  ./scripts/upload-bulk-simulated.sh
+  ./scripts/upload-bulk-simulated.sh --all --remote-dir ph/d/simulated/stelarx-datasets/raw
 EOF
 }
 

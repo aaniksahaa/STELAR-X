@@ -9,7 +9,7 @@ import sys
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "scripts"))
 
 import rf  # noqa: E402
 
@@ -43,7 +43,7 @@ def main() -> int:
             raise AssertionError("RF accepted genuinely different taxon sets")
 
         subprocess.run(
-            [sys.executable, str(ROOT / "root_by_outgroups.py"),
+            [sys.executable, str(ROOT / "scripts" / "root_by_outgroups.py"),
              "-i", str(plain), "-o", str(rooted),
              "-og", "Acanthisitta_chloris", "--num-workers", "1", "-q"],
             cwd=ROOT, check=True,
@@ -53,7 +53,7 @@ def main() -> int:
         assert "'Acanthisitta_chloris'" not in rooted_text
 
         subprocess.run(
-            [sys.executable, str(ROOT / "clean.py"),
+            [sys.executable, str(ROOT / "scripts" / "clean.py"),
              "-i", str(quoted), "-o", str(cleaned),
              "--num-workers", "1", "--deterministic"],
             cwd=ROOT, check=True, stdout=subprocess.DEVNULL,

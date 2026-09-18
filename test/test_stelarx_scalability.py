@@ -20,8 +20,8 @@ import tempfile
 from test_stelarx_differential import oracle_score, parse_newick
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-GENES = ROOT / "all_gt_bs_rooted_37.tre"
-SPECIES = ROOT / "true_37.tre"
+GENES = ROOT / "example" / "all_gt_37.tre"
+SPECIES = ROOT / "example" / "true_37.tre"
 METHODS = ("I1", "I2", "I3", "I4")
 PRESETS = ("S1", "S2", "S3")
 TIME = pathlib.Path("/usr/bin/time")

@@ -29,9 +29,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ $SKIP_BUILD -eq 0 ]]; then
-    bash "$ROOT_DIR/build.sh" >/dev/null
+    bash "$ROOT_DIR/scripts/build.sh" >/dev/null
     if [[ "$COMPUTE_MODE" == "--gpu" ]]; then
-        bash "$ROOT_DIR/build_native.sh" >/dev/null
+        bash "$ROOT_DIR/scripts/build_native.sh" >/dev/null
     fi
 fi
 

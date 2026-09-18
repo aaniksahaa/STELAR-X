@@ -5,7 +5,7 @@
 #   native/libstelarx_dist.so    -- GPU distance matrix kernel (Euler tour + RMQ)
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 if [[ -z "${JAVA_HOME:-}" ]]; then
   JAVAC_BIN="$(command -v javac || true)"
   if [[ -z "$JAVAC_BIN" ]]; then
@@ -90,4 +90,4 @@ echo "  OK"
 
 echo "=== Native build complete ==="
 echo "Run with:"
-echo "  ./run.sh -i <input.tre> -o <output.tre> --gpu --search-space S2 -vv --no-build"
+echo "  ./stelarx -i <input.tre> -o <output.tre> --gpu --search-space S2 -vv --no-build"

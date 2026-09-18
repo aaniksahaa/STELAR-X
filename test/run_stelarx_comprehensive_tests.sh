@@ -25,7 +25,7 @@ done
 started=$SECONDS
 echo "=== STELAR-X comprehensive validation ==="
 echo "Building Java..."
-"${ROOT}/build.sh" >/dev/null
+"${ROOT}/scripts/build.sh" >/dev/null
 
 TEST_CLASSES="${WORK}/classes"
 mkdir -p "$TEST_CLASSES"
@@ -170,7 +170,7 @@ grep -q -- "--intersection-method, --im" "${WORK}/help.log"
 
 if [[ $PACKAGING -eq 1 ]]; then
   echo "Building and smoke-testing a self-contained CPU package..."
-  "${ROOT}/build_portable.sh" --without-cuda --no-archive \
+  "${ROOT}/scripts/build_portable.sh" --without-cuda --no-archive \
     --output-dir "${WORK}/dist" >"${WORK}/portable.log" 2>&1
   grep -q "Portable application ready:" "${WORK}/portable.log"
 fi
@@ -179,7 +179,7 @@ gpu_available=0
 if [[ "$GPU_MODE" != off ]]; then
   if [[ ! -f "${ROOT}/native/libstelarx_weight.so" ]]; then
     echo "Building native CUDA libraries..."
-    "${ROOT}/build_native.sh" >/dev/null
+    "${ROOT}/scripts/build_native.sh" >/dev/null
   fi
   if "${JAVA[@]}" --gpu-strict --diagnose >"${WORK}/gpu-probe.log" 2>&1; then
     gpu_available=1

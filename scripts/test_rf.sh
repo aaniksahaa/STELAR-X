@@ -2,20 +2,20 @@
 # test_rf.sh — Run STELAR-X on a dataset (Mode 1 and Mode 2) and report RF vs true tree.
 #
 # Usage:
-#   bash test_rf.sh 37          # test on 37-taxa dataset
-#   bash test_rf.sh 48          # test on 48-taxa dataset
-#   bash test_rf.sh 200         # test on 200-taxa dataset
-#   bash test_rf.sh all         # test all three datasets in sequence
+#   bash scripts/test_rf.sh 37          # test on 37-taxa dataset
+#   bash scripts/test_rf.sh 48          # test on 48-taxa dataset
+#   bash scripts/test_rf.sh 200         # test on 200-taxa dataset
+#   bash scripts/test_rf.sh all         # test all three datasets in sequence
 
 set -e
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 TAXA="${1:-37}"
 
 run_one() {
     local N="$1"
-    local INPUT="all_gt_bs_rooted_${N}.tre"
-    local TRUE_TREE="true_${N}.tre"
+    local INPUT="example/all_gt_${N}.tre"
+    local TRUE_TREE="example/true_${N}.tre"
     local OUT_M1="/tmp/stelarx_${N}_mode1.newick"
     local OUT_M2="/tmp/stelarx_${N}_mode2.newick"
 
@@ -40,8 +40,8 @@ run_one() {
     TIME_M1=$(( END - START ))
 
     if [ -f "$TRUE_TREE" ]; then
-        RF_M1=$(python3 rf.py "$TRUE_TREE" "$OUT_M1" 2>/dev/null | grep "Robinson-Foulds" | awk '{print $3}')
-        SIM_M1=$(python3 rf.py "$TRUE_TREE" "$OUT_M1" 2>/dev/null | grep "similarity" | awk '{print $3}')
+        RF_M1=$(python3 scripts/rf.py "$TRUE_TREE" "$OUT_M1" 2>/dev/null | grep "Robinson-Foulds" | awk '{print $3}')
+        SIM_M1=$(python3 scripts/rf.py "$TRUE_TREE" "$OUT_M1" 2>/dev/null | grep "similarity" | awk '{print $3}')
         echo "  RF distance : $RF_M1   |   Similarity: $SIM_M1"
     else
         echo "  [SKIP] True tree not found: $TRUE_TREE"
@@ -59,8 +59,8 @@ run_one() {
     TIME_M2=$(( END - START ))
 
     if [ -f "$TRUE_TREE" ]; then
-        RF_M2=$(python3 rf.py "$TRUE_TREE" "$OUT_M2" 2>/dev/null | grep "Robinson-Foulds" | awk '{print $3}')
-        SIM_M2=$(python3 rf.py "$TRUE_TREE" "$OUT_M2" 2>/dev/null | grep "similarity" | awk '{print $3}')
+        RF_M2=$(python3 scripts/rf.py "$TRUE_TREE" "$OUT_M2" 2>/dev/null | grep "Robinson-Foulds" | awk '{print $3}')
+        SIM_M2=$(python3 scripts/rf.py "$TRUE_TREE" "$OUT_M2" 2>/dev/null | grep "similarity" | awk '{print $3}')
         echo "  RF distance : $RF_M2   |   Similarity: $SIM_M2"
     fi
     echo "  Wall time   : ${TIME_M2} ms"

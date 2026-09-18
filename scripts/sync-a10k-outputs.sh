@@ -15,7 +15,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/scripts/a10k-outputs-dir.sh"
+source "${SCRIPT_DIR}/a10k-outputs-dir.sh"
 
 DATA_DIR=""
 OUTPUTS_DIR=""
@@ -46,9 +46,9 @@ Options:
   --help, -h               Show this message
 
 Examples:
-  ./sync-a10k-outputs.sh --dry-run
-  ./sync-a10k-outputs.sh --data-dir \$PHYLOGENY_DATA_DIR/10k-astral-dataset
-  ./sync-a10k-outputs.sh --methods stelarx
+  ./scripts/sync-a10k-outputs.sh --dry-run
+  ./scripts/sync-a10k-outputs.sh --data-dir \$PHYLOGENY_DATA_DIR/10k-astral-dataset
+  ./scripts/sync-a10k-outputs.sh --methods stelarx
 EOF
 }
 

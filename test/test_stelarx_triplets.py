@@ -140,7 +140,7 @@ def verify_root_preserving_completion() -> None:
 
 def main() -> int:
     if os.environ.get("STELARX_SKIP_BUILD") != "1":
-        subprocess.run([str(ROOT / "build.sh")], cwd=ROOT, check=True,
+        subprocess.run([str(ROOT / "scripts" / "build.sh")], cwd=ROOT, check=True,
                        stdout=subprocess.DEVNULL)
     genes = [parse_newick(line) for line in GENES.read_text().splitlines() if line.strip()]
     candidate = parse_newick(CANDIDATE.read_text())

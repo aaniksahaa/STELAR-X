@@ -7,7 +7,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/scripts/phylogeny-data-dir.sh"
+source "${SCRIPT_DIR}/phylogeny-data-dir.sh"
 
 # --------------------------------
 # Parameter lists (edit as needed)
@@ -58,9 +58,9 @@ after validation. Failed downloads and extractions are retained/reported, and
 processing continues with the remaining combinations.
 
 Examples:
-  ./download-bulk-simulated.sh
-  ./download-bulk-simulated.sh --download-only --taxa-list "175000 200000"
-  ./download-bulk-simulated.sh --keep-zip --local-dir ./simphy/data
+  ./scripts/download-bulk-simulated.sh
+  ./scripts/download-bulk-simulated.sh --download-only --taxa-list "175000 200000"
+  ./scripts/download-bulk-simulated.sh --keep-zip --local-dir ./simphy/data
 EOF
 }
 

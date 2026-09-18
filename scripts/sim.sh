@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # sim.sh (new runner for updated run_simulator.sh)
 # Usage examples:
-#   ./sim.sh -t 1000 -g 500
-#   ./sim.sh -t 1000 -g 500 -r R1 --project-root /path/to/checkout --fresh
+#   ./scripts/sim.sh -t 1000 -g 500
+#   ./scripts/sim.sh -t 1000 -g 500 -r R1 --project-root /path/to/checkout --fresh
 
 set -euo pipefail
 
-STELARX_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STELARX_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "${STELARX_ROOT}/scripts/phylogeny-data-dir.sh"
 
 # Defaults
@@ -49,8 +49,8 @@ Optional:
   --help, -h         Show this message
 
 Examples:
-  ./sim.sh -t 1000 -g 500 -rs 5 -r 3    # Generate 5 replicates, analyze replicate 3
-  ./sim.sh -t 1000 -g 500 --fresh       # Generate 10 replicates (default), analyze replicate 1
+  ./scripts/sim.sh -t 1000 -g 500 -rs 5 -r 3    # Generate 5 replicates, analyze replicate 3
+  ./scripts/sim.sh -t 1000 -g 500 --fresh       # Generate 10 replicates (default), analyze replicate 1
 EOF
 }
 

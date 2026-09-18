@@ -7,7 +7,7 @@ cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 
 if [[ "${STELARX_SKIP_BUILD:-0}" != 1 ]]; then
-  "${ROOT}/build.sh" >/dev/null
+  "${ROOT}/scripts/build.sh" >/dev/null
 fi
 python3 "${ROOT}/test/test_stelarx_triplets.py"
 "${ROOT}/test/test_triplet_reporting.sh"

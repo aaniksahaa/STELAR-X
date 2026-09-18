@@ -215,7 +215,7 @@ stelarx_write_a10k_dataset_record() {
 #   <data_dir>/${STELARX_A10K_REPLICATE_ROOT}/<R>/estimatedgenetrees/estimatedgenetrees.rooted.tre
 #
 # The rooted estimated gene trees are derived by run-a10k.sh on first use:
-#   ./process_unrooted.sh -i <...>/estimatedgenetrees.tre -o <...>/estimatedgenetrees.rooted.tre -og 0
+#   ./scripts/process_unrooted.sh -i <...>/estimatedgenetrees.tre -o <...>/estimatedgenetrees.rooted.tre -og 0
 #
 # Per-replicate sizes and modification times of these inputs are recorded in
 # <R>/${STELARX_A10K_INPUTS_RECORD}. Each results directory carries the exact

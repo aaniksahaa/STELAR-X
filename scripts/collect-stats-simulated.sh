@@ -6,14 +6,14 @@
 # Outputs columns in the prescribed order: alg,setting,num-taxa,gene-trees,replicate,sb,spmin,spmax,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb,gt-gt,gt-st
 #
 # Usage:
-#   ./collect-stats-simulated.sh
-#   ./collect-stats-simulated.sh --project-root /path/to/checkout --out /tmp/perf-combined.csv
-#   ./collect-stats-simulated.sh --simphy-dir /path/to/simphy
+#   ./scripts/collect-stats-simulated.sh
+#   ./scripts/collect-stats-simulated.sh --project-root /path/to/checkout --out /tmp/perf-combined.csv
+#   ./scripts/collect-stats-simulated.sh --simphy-dir /path/to/simphy
 
 set -euo pipefail
 
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_ROOT}/scripts/phylogeny-data-dir.sh"
+source "${SCRIPT_ROOT}/phylogeny-data-dir.sh"
 
 # Algorithm configuration - modify this to select which algorithms to collect
 ALGORITHMS=("stelarx")

@@ -19,7 +19,7 @@ OUTPUT="${WORK}/inferred.tre"
 MONITOR_CAPTURE="${WORK}/monitor-ntfy.txt"
 
 PATH="${MOCK_BIN}:${PATH}" NTFY_CAPTURE="$MONITOR_CAPTURE" \
-  "${ROOT}/run-stelarx-with-monitor.sh" \
+  "${ROOT}/scripts/run-stelarx-with-monitor.sh" \
   --input "$GENES" --output "$OUTPUT" \
   --opts "--cpu -q --no-build" --no-time-monitor --no-gpu-monitor \
   > "${WORK}/monitor.log" 2>&1
@@ -35,7 +35,7 @@ grep -Eq "Triplet score:[[:space:]]*${TRIPLET_SCORE}" "$MONITOR_CAPTURE"
 
 SCORE_CAPTURE="${WORK}/score-only-ntfy.txt"
 PATH="${MOCK_BIN}:${PATH}" NTFY_CAPTURE="$SCORE_CAPTURE" NO_COLOR=1 \
-  "${ROOT}/run.sh" --no-build --input "$GENES" \
+  "${ROOT}/scripts/run.sh" --no-build --input "$GENES" \
   --score-species-tree "$CANDIDATE" --cpu -q --xms 64m --xmx 1g \
   > "${WORK}/score-only.log" 2>&1
 

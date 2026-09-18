@@ -15,7 +15,7 @@ NTFY_CHANNEL_NAME="${NTFY_CHANNEL_NAME:-anik-phylo-stx}"
 
 INPUT_FILE=""
 OUTPUT_FILE=""
-STELARX_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STELARX_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TIME_MONITOR=true
 GPU_MONITOR=true
 NO_NOTIFY=false
@@ -34,9 +34,9 @@ Required:
   --output, -o          Path to output species tree file
 
 Optional:
-  --stelarx-root        Path to STELAR-X root directory (default: current directory)
+  --stelarx-root        Path to the STELAR-X checkout (default: the checkout containing this script)
   --stelar-root         Compatibility alias for --stelarx-root
-  --opts "..."          Extra algorithm options passed to run.sh
+  --opts "..."          Extra algorithm options passed to the stelarx launcher
   --alg-opts "..."      Alias for --opts
   --stelarx-opts "..."  Compatibility alias for --opts
   --stelar-opts "..."   Compatibility alias for --opts
@@ -139,8 +139,8 @@ if [[ ! -f "$INPUT_FILE" ]]; then
   echo -e "${RED}Error: input file '$INPUT_FILE' does not exist.${NC}"
   exit 1
 fi
-if [[ ! -x "${STELARX_ROOT}/run.sh" ]]; then
-  echo -e "${RED}Error: run.sh not found or not executable in '$STELARX_ROOT'.${NC}"
+if [[ ! -x "${STELARX_ROOT}/stelarx" ]]; then
+  echo -e "${RED}Error: stelarx launcher not found or not executable in '$STELARX_ROOT'.${NC}"
   exit 1
 fi
 
@@ -259,7 +259,7 @@ write_command_record() {
     fi
     echo "# wrapper:      $(quote_command "${WRAPPER_ARGV[@]}")"
     echo "# exact STELAR-X invocation (run from stelarx_root):"
-    echo "cd $(printf '%q' "$STELARX_ROOT") && $(quote_command ./run.sh --input "$INPUT_FILE" --output "$OUTPUT_FILE" "${STELARX_ARGS[@]}")"
+    echo "cd $(printf '%q' "$STELARX_ROOT") && $(quote_command ./stelarx --input "$INPUT_FILE" --output "$OUTPUT_FILE" "${STELARX_ARGS[@]}")"
   } > "$COMMAND_FILE" 2>/dev/null || echo -e "${YELLOW}Warning: could not write command record to $COMMAND_FILE${NC}"
 }
 write_command_record
@@ -269,12 +269,12 @@ START_NS=$(date +%s%N)
 STELARX_PID=""
 if [[ "$TIME_MONITOR" == true && -n "$TIME_CMD" ]]; then
   (
-    cd "$STELARX_ROOT" && "$TIME_CMD" -v ./run.sh --input "$INPUT_FILE" --output "$OUTPUT_FILE" "${STELARX_ARGS[@]}" < /dev/null 2>&1 | tee "$TIME_TMP"
+    cd "$STELARX_ROOT" && "$TIME_CMD" -v ./stelarx --input "$INPUT_FILE" --output "$OUTPUT_FILE" "${STELARX_ARGS[@]}" < /dev/null 2>&1 | tee "$TIME_TMP"
   ) &
   STELARX_PID=$!
 else
   (
-    cd "$STELARX_ROOT" && ./run.sh --input "$INPUT_FILE" --output "$OUTPUT_FILE" "${STELARX_ARGS[@]}" < /dev/null 2>&1 | tee "$TIME_TMP"
+    cd "$STELARX_ROOT" && ./stelarx --input "$INPUT_FILE" --output "$OUTPUT_FILE" "${STELARX_ARGS[@]}" < /dev/null 2>&1 | tee "$TIME_TMP"
   ) &
   STELARX_PID=$!
 fi
@@ -330,7 +330,7 @@ RF_RATE="NA"
 if [[ -n "$REFERENCE_SPECIES_TREE" && -f "$OUTPUT_FILE" ]]; then
   REFERENCE_SPECIES_TREE="$(realpath "$REFERENCE_SPECIES_TREE")"
   if [[ -f "$REFERENCE_SPECIES_TREE" ]]; then
-    rf_output=$(cd "$STELARX_ROOT" && "$PYTHON_BIN" rf.py "$OUTPUT_FILE" "$REFERENCE_SPECIES_TREE" 2>&1) || true
+    rf_output=$(cd "$STELARX_ROOT" && "$PYTHON_BIN" scripts/rf.py "$OUTPUT_FILE" "$REFERENCE_SPECIES_TREE" 2>&1) || true
     rf_line=$(echo "$rf_output" | grep -i "Robinson-Foulds distance" | tail -n1 || true)
     if [[ -n "$rf_line" ]]; then
       RF_RATE=$(echo "$rf_line" | grep -Eo '[0-9]+(\.[0-9]+)?' | tail -n1 || echo "NA")

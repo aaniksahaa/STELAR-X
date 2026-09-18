@@ -7,10 +7,10 @@ cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 
 if [[ "${STELARX_SKIP_BUILD:-0}" != 1 ]]; then
-  "${ROOT}/build.sh" >/dev/null
+  "${ROOT}/scripts/build.sh" >/dev/null
 fi
 if [[ ! -f "${ROOT}/native/libstelarx_weight.so" ]]; then
-  "${ROOT}/build_native.sh" >/dev/null
+  "${ROOT}/scripts/build_native.sh" >/dev/null
 fi
 
 JAVA=(java -Djava.library.path="${ROOT}/native" -cp "${ROOT}/build" stelarx.Main)
@@ -43,7 +43,7 @@ for method in I1 I2 I3 I4; do
   score_gpu "${ROOT}/test/input/child_only_dedup_incomplete.tre" \
     "${ROOT}/test/input/child_only_candidate_7taxa.tre" "$method" 40 \
     "${WORK}/child-only-${method}.log"
-  score_gpu "${ROOT}/all_gt_bs_rooted_37.tre" "${ROOT}/true_37.tre" \
+  score_gpu "${ROOT}/example/all_gt_37.tre" "${ROOT}/example/true_37.tre" \
     "$method" 1390544 "${WORK}/large-${method}.log"
 done
 

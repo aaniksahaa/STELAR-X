@@ -6,8 +6,9 @@
 set -euo pipefail
 
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_ROOT}/scripts/phylogeny-data-dir.sh"
-source "${SCRIPT_ROOT}/scripts/simphy-outputs-dir.sh"
+REPO_ROOT="$(cd "${SCRIPT_ROOT}/.." && pwd)"
+source "${SCRIPT_ROOT}/phylogeny-data-dir.sh"
+source "${SCRIPT_ROOT}/simphy-outputs-dir.sh"
 
 # Propagate terminal color preference to Java subprocesses even when stderr is
 # piped through tee further down the call chain.
@@ -21,7 +22,7 @@ SCRIPT_ARGV=("$0" "$@")
 TAXA_NUM=""
 GENE_TREES=""
 REPLICATE="R1"
-BASE_DIR="$SCRIPT_ROOT"
+BASE_DIR="$REPO_ROOT"
 SIMPHY_DIR=""
 SIMPHY_DIR_SET=false
 SIMPHY_DATA_DIR=""
@@ -110,7 +111,7 @@ Optional:
                        (appends _incomplete to the dataset directory name;
                         generate with sim_incomplete.sh first)
   If the expected simulated dataset is missing, this script will first invoke
-  ./sim.sh with matching parameters to generate the required replicate.
+  ./scripts/sim.sh with matching parameters to generate the required replicate.
   --fresh              Force rerun even if stat-stelarx.csv exists
   Results are written to <data>/<dataset>/<replicate>/stelarx_outputs/<setting>
   as before and mirrored (with the dataset's SimPhy .command/.params files) to
@@ -121,8 +122,8 @@ Optional:
   --debug              Enable shell tracing
 
 Examples:
-  ./test-stelarx-simulated.sh -t 100 -g 100 -r R1 --fresh
-  ./test-stelarx-simulated.sh -t 100 -g 100 -r R1 --fresh --opts "--search-space S1 --intersection-method I2 -vv"
+  ./scripts/test-stelarx-simulated.sh -t 100 -g 100 -r R1 --fresh
+  ./scripts/test-stelarx-simulated.sh -t 100 -g 100 -r R1 --fresh --opts "--search-space S1 --intersection-method I2 -vv"
   The example setting is named search-space_S1__intersection-method_I2.
   Verbosity is ignored; other meaningful options are appended to the name.
 EOF
@@ -164,7 +165,7 @@ if [[ "$SIMPHY_DIR_SET" == false ]]; then
   SIMPHY_DIR="${BASE_DIR%/}/simphy"
 fi
 if [[ "$STELARX_ROOT_SET" == false ]]; then
-  STELARX_ROOT="$SCRIPT_ROOT"
+  STELARX_ROOT="$REPO_ROOT"
 fi
 SIMPHY_DIR="$(realpath "$SIMPHY_DIR")"
 SIMPHY_DATA_DIR="$(stelarx_prepare_simphy_data_dir "$SIMPHY_DATA_DIR")"
@@ -245,14 +246,14 @@ if [[ ! -f "$ALL_GT_FILE" ]]; then
 
   if [[ "$INCOMPLETE" == true ]]; then
     echo "Incomplete gene-tree file not found at $ALL_GT_FILE"
-    echo "==> Bootstrapping missing incomplete dataset via ./sim_incomplete.sh"
+    echo "==> Bootstrapping missing incomplete dataset via ./scripts/sim_incomplete.sh"
 
     REPLICATE_COUNT=1
     if [[ "$REPLICATE" =~ ^R([0-9]+)$ ]]; then
       REPLICATE_COUNT="${BASH_REMATCH[1]}"
     fi
 
-    SIM_INC_CMD=("${STELARX_ROOT}/sim_incomplete.sh" -t "$TAXA_NUM" -g "$GENE_TREES" -rs "$REPLICATE_COUNT" --sb "$SB" --spmin "$SPMIN" --spmax "$SPMAX")
+    SIM_INC_CMD=("${STELARX_ROOT}/scripts/sim_incomplete.sh" -t "$TAXA_NUM" -g "$GENE_TREES" -rs "$REPLICATE_COUNT" --sb "$SB" --spmin "$SPMIN" --spmax "$SPMAX")
     if [[ "$SIMPHY_DIR_SET" == true ]];      then SIM_INC_CMD+=(--simphy-dir      "$SIMPHY_DIR");      fi
     SIM_INC_CMD+=(--simphy-data-dir "$SIMPHY_DATA_DIR")
     if [[ "$FRESH" == true ]];               then SIM_INC_CMD+=(--fresh-inc);                          fi
@@ -265,7 +266,7 @@ if [[ ! -f "$ALL_GT_FILE" ]]; then
     fi
   else
     echo "Gene-tree file not found at $ALL_GT_FILE"
-    echo "==> Bootstrapping missing simulated dataset via ./sim.sh"
+    echo "==> Bootstrapping missing simulated dataset via ./scripts/sim.sh"
 
     REPLICATE_COUNT=1
     if [[ "$REPLICATE" =~ ^R([0-9]+)$ ]]; then
@@ -285,7 +286,7 @@ if [[ ! -f "$ALL_GT_FILE" ]]; then
       STATS_SIDE_FILE="${OUT_STELARX%.tre}_stats.csv"
     fi
 
-    SIM_CMD=("${STELARX_ROOT}/sim.sh" -t "$TAXA_NUM" -g "$GENE_TREES" -r "$REPLICATE" -rs "$REPLICATE_COUNT" --sb "$SB" --spmin "$SPMIN" --spmax "$SPMAX")
+    SIM_CMD=("${STELARX_ROOT}/scripts/sim.sh" -t "$TAXA_NUM" -g "$GENE_TREES" -r "$REPLICATE" -rs "$REPLICATE_COUNT" --sb "$SB" --spmin "$SPMIN" --spmax "$SPMAX")
     if [[ "$SIMPHY_DIR_SET" == true ]];      then SIM_CMD+=(--simphy-dir      "$SIMPHY_DIR");      fi
     SIM_CMD+=(--simphy-data-dir "$SIMPHY_DATA_DIR")
     if [[ "$FRESH" == true ]];               then SIM_CMD+=(--fresh);                              fi
@@ -315,7 +316,7 @@ echo "  output tree:    $OUT_STELARX"
 echo "  stat file:      $STAT_FILE"
 echo
 
-CMD=("${STELARX_ROOT}/run-stelarx-with-monitor.sh" -i "$ALL_GT_FILE" -o "$OUT_STELARX" --stelarx-root "$STELARX_ROOT" --no-notify)
+CMD=("${STELARX_ROOT}/scripts/run-stelarx-with-monitor.sh" -i "$ALL_GT_FILE" -o "$OUT_STELARX" --stelarx-root "$STELARX_ROOT" --no-notify)
 if [[ "$TIME_MONITOR" == false ]]; then CMD+=(--no-time-monitor); fi
 if [[ "$GPU_MONITOR" == false ]]; then CMD+=(--no-gpu-monitor); fi
 if [[ "$DEBUG" == 1 ]]; then CMD+=(--debug); fi
@@ -343,7 +344,7 @@ fi
 
 RF_RATE="NA"
 if [[ -f "$OUT_STELARX" && -f "$TRUE_SPECIES_TREE" ]]; then
-  rf_output=$("$PYTHON_BIN" "${STELARX_ROOT}/rf.py" "$OUT_STELARX" "$TRUE_SPECIES_TREE" 2>&1) || true
+  rf_output=$("$PYTHON_BIN" "${STELARX_ROOT}/scripts/rf.py" "$OUT_STELARX" "$TRUE_SPECIES_TREE" 2>&1) || true
   rf_line=$(echo "$rf_output" | grep -i "Robinson-Foulds distance" | tail -n1 || true)
   if [[ -n "$rf_line" ]]; then
     RF_RATE=$(echo "$rf_line" | grep -Eo '[0-9]+(\.[0-9]+)?' | tail -n1 || echo "NA")

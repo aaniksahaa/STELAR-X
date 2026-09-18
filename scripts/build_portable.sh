@@ -4,7 +4,7 @@
 # is optional; an unusable/missing driver falls back to CPU at runtime.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIST_DIR="${ROOT}/dist"
 CUDA_MODE="auto"          # auto | off | required
 CUDA_ARCH_VALUE="all-major"
@@ -14,7 +14,7 @@ FORCE=false
 
 usage() {
   cat <<'EOF'
-Usage: ./build_portable.sh [options]
+Usage: ./scripts/build_portable.sh [options]
 
 Options:
   --without-cuda          Build without CUDA libraries
@@ -119,7 +119,7 @@ echo "  Platform     : ${PLATFORM_OS}-${PLATFORM_ARCH}"
 echo "  CUDA bundle  : $INCLUDE_CUDA"
 echo "  Artifact     : $ARTIFACT"
 
-"${ROOT}/build.sh"
+"${ROOT}/scripts/build.sh"
 
 APP_INPUT="${WORK}/input"
 RUNTIME="${WORK}/runtime"
@@ -133,7 +133,7 @@ jar --create --file "${APP_INPUT}/stelarx.jar" \
     --manifest "$JAR_MANIFEST" -C "${ROOT}/build" .
 
 if [[ "$INCLUDE_CUDA" == true ]]; then
-  NATIVE_OUT_DIR="$APP_INPUT" CUDA_ARCH="$CUDA_ARCH_VALUE" "${ROOT}/build_native.sh"
+  NATIVE_OUT_DIR="$APP_INPUT" CUDA_ARCH="$CUDA_ARCH_VALUE" "${ROOT}/scripts/build_native.sh"
 fi
 
 # The code depends only on java.base. A trimmed runtime removes the target
@@ -187,8 +187,8 @@ fi
 
 EXAMPLE_DIR="${IMAGE}/example"
 mkdir -p "$EXAMPLE_DIR"
-cp "${ROOT}/all_gt_bs_rooted_37.tre" "${EXAMPLE_DIR}/all_gt_37.tre"
-cp "${ROOT}/true_37.tre" "${EXAMPLE_DIR}/true_37.tre"
+cp "${ROOT}/example/all_gt_37.tre" "${EXAMPLE_DIR}/all_gt_37.tre"
+cp "${ROOT}/example/true_37.tre" "${EXAMPLE_DIR}/true_37.tre"
 
 cat > "${IMAGE}/README.txt" <<EOF
 STELAR-X ${VERSION} — self-contained ${PLATFORM_OS}-${PLATFORM_ARCH} build

@@ -2,7 +2,7 @@
 # Prepare and verify a Linux STELAR-X development checkout.
 set -euo pipefail
 
-STELARX_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STELARX_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="${STELARX_ROOT}/.venv"
 CPU_ONLY=false
 CHECK_ONLY=false
@@ -12,7 +12,7 @@ CUDA_ARCH_VALUE="all-major"
 
 usage() {
   cat <<'EOF'
-Usage: ./setup_dev.sh [options]
+Usage: ./scripts/setup_dev.sh [options]
 
 Options:
   --cpu-only          Skip CUDA compilation
@@ -22,7 +22,7 @@ Options:
   --check             Only verify the current environment; change nothing
   -h, --help          Show this help
 
-The script creates .venv, installs requirements-dev.txt, builds Java, builds
+The script creates .venv, installs scripts/requirements-dev.txt, builds Java, builds
 CUDA libraries when nvcc is available, and runs the CPU tests. System packages
 (JDK, Python, CUDA toolkit) are checked but never installed with sudo.
 EOF
@@ -114,11 +114,11 @@ if [[ "$CHECK_ONLY" == true ]]; then
   if "$PYTHON_BIN" -c 'import dendropy' >/dev/null 2>&1; then
     ok "Python dependency: DendroPy"
   else
-    fail "DendroPy is missing; run ./setup_dev.sh"
+    fail "DendroPy is missing; run ./scripts/setup_dev.sh"
   fi
-  if [[ -f "${STELARX_ROOT}/build/stelarx/Main.class" ]]; then ok "Java build output"; else warn "Java build output is absent; run ./setup_dev.sh"; fi
+  if [[ -f "${STELARX_ROOT}/build/stelarx/Main.class" ]]; then ok "Java build output"; else warn "Java build output is absent; run ./scripts/setup_dev.sh"; fi
   if [[ "$CPU_ONLY" != true && -x "$(command -v nvcc 2>/dev/null || true)" ]]; then
-    if [[ -f "${STELARX_ROOT}/native/libstelarx_weight.so" ]]; then ok "CUDA native libraries"; else warn "CUDA libraries are absent; run ./setup_dev.sh"; fi
+    if [[ -f "${STELARX_ROOT}/native/libstelarx_weight.so" ]]; then ok "CUDA native libraries"; else warn "CUDA libraries are absent; run ./scripts/setup_dev.sh"; fi
   fi
   echo
   (( failures == 0 )) || exit 1
@@ -135,13 +135,13 @@ if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
   fi
 fi
 PYTHON_BIN="${VENV_DIR}/bin/python"
-"$PYTHON_BIN" -m pip install --disable-pip-version-check -r "${STELARX_ROOT}/requirements-dev.txt"
+"$PYTHON_BIN" -m pip install --disable-pip-version-check -r "${STELARX_ROOT}/scripts/requirements-dev.txt"
 
 if [[ "$BUILD_PROJECT" == true ]]; then
-  "${STELARX_ROOT}/build.sh"
+  "${STELARX_ROOT}/scripts/build.sh"
   if [[ "$CPU_ONLY" != true ]]; then
     if command -v nvcc >/dev/null 2>&1; then
-      CUDA_ARCH="$CUDA_ARCH_VALUE" "${STELARX_ROOT}/build_native.sh"
+      CUDA_ARCH="$CUDA_ARCH_VALUE" "${STELARX_ROOT}/scripts/build_native.sh"
     else
       warn "Skipping CUDA build because nvcc is unavailable"
     fi
@@ -154,6 +154,6 @@ fi
 
 echo
 echo "Developer setup complete."
-echo "  Check later : ./setup_dev.sh --check"
+echo "  Check later : ./scripts/setup_dev.sh --check"
 echo "  Run         : ./stelarx -i rooted_gene_trees.tre -o species_tree.tre --search-space S1"
-echo "  Monitor     : ./run-stelarx-with-monitor.sh -i gene_trees.tre -o species_tree.tre --search-space S1"
+echo "  Monitor     : ./scripts/run-stelarx-with-monitor.sh -i gene_trees.tre -o species_tree.tre --search-space S1"

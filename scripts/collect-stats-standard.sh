@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Stat Collection Script for Standard Dataset Processing
 # Collects all stat-*.csv files from dataset directories and merges them
-# Usage: ./collect-stats-standard.sh [--base-dir /path/to/base] [--dataset-dir /path/to/datasets]
+# Usage: ./scripts/collect-stats-standard.sh [--base-dir /path/to/base] [--dataset-dir /path/to/datasets]
 #   --base-dir, -b    Optional base directory (defaults to value below)
 #   --dataset-dir, -d Optional dataset directory (defaults to BASE_DIR/datasets/standard)
 

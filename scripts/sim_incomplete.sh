@@ -20,15 +20,16 @@
 #   --fresh-inc     Regenerate incomplete trees even if they already exist
 #
 # Usage examples:
-#   ./sim_incomplete.sh -t 1000 -g 500
-#   ./sim_incomplete.sh -t 1000 -g 500 --fraction 0.5 --seed 7
-#   ./sim_incomplete.sh -t 1000 -g 500 -rs 5 -r R2 --fraction 0.3 --fresh-inc
+#   ./scripts/sim_incomplete.sh -t 1000 -g 500
+#   ./scripts/sim_incomplete.sh -t 1000 -g 500 --fraction 0.5 --seed 7
+#   ./scripts/sim_incomplete.sh -t 1000 -g 500 -rs 5 -r R2 --fraction 0.3 --fresh-inc
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/scripts/phylogeny-data-dir.sh"
-PYTHON_BIN="${STELARX_PYTHON:-${SCRIPT_DIR}/.venv/bin/python}"
+STELARX_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+source "${SCRIPT_DIR}/phylogeny-data-dir.sh"
+PYTHON_BIN="${STELARX_PYTHON:-${STELARX_ROOT}/.venv/bin/python}"
 [[ -x "$PYTHON_BIN" ]] || PYTHON_BIN="python3"
 
 # ── Incomplete-specific defaults ──────────────────────────────────────────────
@@ -42,7 +43,7 @@ TAXA_NUM=""
 GENE_TREES=""
 REPLICATE="R1"
 REPLICATES="10"
-BASE_DIR="$SCRIPT_DIR"
+BASE_DIR="$STELARX_ROOT"
 SIMPHY_DIR=""
 SIMPHY_DIR_SET=false
 SIMPHY_DATA_DIR=""
@@ -69,9 +70,9 @@ Incomplete trees are stored in:
   <sim_output_dir>_incomplete/<replicate>/all_gt.tre
 
 Examples:
-  ./sim_incomplete.sh -t 1000 -g 500
-  ./sim_incomplete.sh -t 1000 -g 500 --fraction 0.5 --seed 7 --fresh-inc
-  ./sim_incomplete.sh -t 1000 -g 500 -rs 5 --fraction 0.3
+  ./scripts/sim_incomplete.sh -t 1000 -g 500
+  ./scripts/sim_incomplete.sh -t 1000 -g 500 --fraction 0.5 --seed 7 --fresh-inc
+  ./scripts/sim_incomplete.sh -t 1000 -g 500 -rs 5 --fraction 0.3
 EOF
 }
 
@@ -134,7 +135,7 @@ echo "  Complete dir:   ${COMPLETE_DIR}"
 echo "  Incomplete dir: ${INCOMPLETE_DIR}"
 echo
 
-GEN_SCRIPT="${SCRIPT_DIR}/test/gen_incomplete.py"
+GEN_SCRIPT="${STELARX_ROOT}/test/gen_incomplete.py"
 if [[ ! -f "$GEN_SCRIPT" ]]; then
   echo "Error: gen_incomplete.py not found at ${GEN_SCRIPT}"
   exit 1

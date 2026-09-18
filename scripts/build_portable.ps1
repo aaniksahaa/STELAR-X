@@ -4,13 +4,14 @@ param(
     [switch]$WithCuda,
     [string]$CudaArch = "all-major",
     [string]$Version = "",
-    [string]$OutputDir = (Join-Path $PSScriptRoot "dist"),
+    [string]$OutputDir = (Join-Path (Split-Path -Parent $PSScriptRoot) "dist"),
     [switch]$NoArchive,
     [switch]$Force
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+$RepoRoot = Split-Path -Parent $PSScriptRoot
 
 $DisableCuda = $CpuOnly -or $WithoutCuda
 if ($DisableCuda -and $WithCuda) {
@@ -31,7 +32,7 @@ if ([int]$Matches[1] -lt 21) {
     throw "JDK 21 or newer is required; found $JavacVersion."
 }
 
-$VersionSource = Get-Content (Join-Path $PSScriptRoot "src/stelarx/Version.java") -Raw
+$VersionSource = Get-Content (Join-Path $RepoRoot "src/stelarx/Version.java") -Raw
 if ($VersionSource -notmatch 'DEFAULT\s*=\s*"([^"]+)"') {
     throw "Could not determine the STELAR-X source version."
 }
@@ -88,9 +89,9 @@ try {
     Write-Host "  CUDA bundle  : $IncludeCuda"
     Write-Host "  Artifact     : $Artifact"
 
-    $Sources = Get-ChildItem (Join-Path $PSScriptRoot "src") -Recurse -Filter *.java |
+    $Sources = Get-ChildItem (Join-Path $RepoRoot "src") -Recurse -Filter *.java |
         ForEach-Object { $_.FullName }
-    & javac -d $Build -sourcepath (Join-Path $PSScriptRoot "src") @Sources
+    & javac -d $Build -sourcepath (Join-Path $RepoRoot "src") @Sources
     if ($LASTEXITCODE -ne 0) { throw "javac failed (exit $LASTEXITCODE)" }
 
     $JarPath = Join-Path $InputDir "stelarx.jar"
@@ -126,9 +127,9 @@ try {
     $Image = Join-Path $JpackageOut "stelarx"
     $ExampleDir = Join-Path $Image "example"
     New-Item -ItemType Directory -Force -Path $ExampleDir | Out-Null
-    Copy-Item (Join-Path $PSScriptRoot "all_gt_bs_rooted_37.tre") `
+    Copy-Item (Join-Path $RepoRoot "example/all_gt_37.tre") `
         (Join-Path $ExampleDir "all_gt_37.tre")
-    Copy-Item (Join-Path $PSScriptRoot "true_37.tre") `
+    Copy-Item (Join-Path $RepoRoot "example/true_37.tre") `
         (Join-Path $ExampleDir "true_37.tre")
 
     $Readme = @"
@@ -172,7 +173,7 @@ which you launch STELAR-X. Set STELARX_CRASH_DIR to override Java report storage
         $BuildInfo += "cuda_arch=$CudaArch"
     }
     if (Get-Command git -ErrorAction SilentlyContinue) {
-        $Commit = (& git -C $PSScriptRoot rev-parse HEAD 2>$null)
+        $Commit = (& git -C $RepoRoot rev-parse HEAD 2>$null)
         if (-not $Commit) { $Commit = "unknown" }
         $BuildInfo += "git_commit=$Commit"
     }

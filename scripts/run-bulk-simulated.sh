@@ -5,15 +5,15 @@
 # over all combinations of parameter lists.
 #
 # Usage:
-#   ./run-bulk-simulated.sh -m stelar
-#   ./run-bulk-simulated.sh --project-root /path/to/checkout
+#   ./scripts/run-bulk-simulated.sh -m stelar
+#   ./scripts/run-bulk-simulated.sh --project-root /path/to/checkout
 
 set -euo pipefail
 
-STELARX_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STELARX_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "${STELARX_ROOT}/scripts/phylogeny-data-dir.sh"
 source "${STELARX_ROOT}/scripts/simphy-outputs-dir.sh"
-source "${STELARX_ROOT}/experiment-setting-name.sh"
+source "${STELARX_ROOT}/scripts/experiment-setting-name.sh"
 
 BASE_DIR=""
 BASE_DIR_PROVIDED=false
@@ -108,9 +108,9 @@ Options:
   --help, -h        Show this message
 
 Examples:
-  ./run-bulk-simulated.sh --opts "--search-space S2 -vv"
-  ./run-bulk-simulated.sh --taxa-list "10,20" --genes-list "10,50" --num-replicates 3
-  ./run-bulk-simulated.sh --opts-list "--search-space S1 -vv;--search-space S2 -vv;--search-space S3 -vv"
+  ./scripts/run-bulk-simulated.sh --opts "--search-space S2 -vv"
+  ./scripts/run-bulk-simulated.sh --taxa-list "10,20" --genes-list "10,50" --num-replicates 3
+  ./scripts/run-bulk-simulated.sh --opts-list "--search-space S1 -vv;--search-space S2 -vv;--search-space S3 -vv"
 EOF
 }
 
@@ -325,7 +325,7 @@ for DATASET_SPEC in "${PLAN_DATASETS[@]}"; do
 
   echo ">>> Running: t=$t g=$g sb=$sb spmin=$spmin spmax=$spmax (method=$METHOD)"
 
-  ./sim.sh -rs "$NUM_REPLICATES" "${BASE_DIR_ARGS[@]}" "${SIM_DATA_ARGS[@]}" -t "$t" -g "$g" --sb "$sb" --spmin "$spmin" --spmax "$spmax" "${FRESH_ARGS[@]}"
+  ./scripts/sim.sh -rs "$NUM_REPLICATES" "${BASE_DIR_ARGS[@]}" "${SIM_DATA_ARGS[@]}" -t "$t" -g "$g" --sb "$sb" --spmin "$spmin" --spmax "$spmax" "${FRESH_ARGS[@]}"
 
   # Run replicates
   for ((i=1; i<=NUM_REPLICATES; i++)); do
@@ -339,7 +339,7 @@ for DATASET_SPEC in "${PLAN_DATASETS[@]}"; do
 
     for STELARX_OPTS_ITEM in "${STELARX_OPTS_LIST[@]}"; do
       echo "  >>> t_${t}_g_${g}_sb_${sb}_spmin_${spmin}_spmax_${spmax} / ${REPLICATE_NAME} / $(build_setting_name_from_opts "$STELARX_OPTS_ITEM")"
-      TEST_CMD=("${STELARX_ROOT}/test-stelarx-simulated.sh" -r "$REPLICATE_NAME" "${BASE_DIR_ARGS[@]}" "${SHARED_TEST_ARGS[@]}" -t "$t" -g "$g" --sb "$sb" --spmin "$spmin" --spmax "$spmax" "${FRESH_ARGS[@]}")
+      TEST_CMD=("${STELARX_ROOT}/scripts/test-stelarx-simulated.sh" -r "$REPLICATE_NAME" "${BASE_DIR_ARGS[@]}" "${SHARED_TEST_ARGS[@]}" -t "$t" -g "$g" --sb "$sb" --spmin "$spmin" --spmax "$spmax" "${FRESH_ARGS[@]}")
       if [[ -n "$STELARX_OPTS_ITEM" ]]; then
         TEST_CMD+=(--opts "$STELARX_OPTS_ITEM")
       fi
@@ -390,7 +390,7 @@ echo "All runs finished."
 
 #           echo ">>> Running: t=$t g=$g sb=$sb spmin=$spmin spmax=$spmax (method=$METHOD)"
           
-#           ./sim.sh -rs "$NUM_REPLICATES" "${BASE_DIR_ARGS[@]}" "${SIM_DATA_ARGS[@]}" -t "$t" -g "$g" --sb "$sb" --spmin "$spmin" --spmax "$spmax" "${FRESH_ARGS[@]}"
+#           ./scripts/sim.sh -rs "$NUM_REPLICATES" "${BASE_DIR_ARGS[@]}" "${SIM_DATA_ARGS[@]}" -t "$t" -g "$g" --sb "$sb" --spmin "$spmin" --spmax "$spmax" "${FRESH_ARGS[@]}"
           
 #           # Run replicates
 #           for ((i=1; i<=NUM_REPLICATES; i++)); do
@@ -403,7 +403,7 @@ echo "All runs finished."
 #             echo "  Running replicate $REPLICATE_NAME with $METHOD"
             
 #             for STELARX_OPTS_ITEM in "${STELARX_OPTS_LIST[@]}"; do
-#               TEST_CMD=("${STELARX_ROOT}/test-stelarx-simulated.sh" -r "$REPLICATE_NAME" "${BASE_DIR_ARGS[@]}" "${SHARED_TEST_ARGS[@]}" -t "$t" -g "$g" --sb "$sb" --spmin "$spmin" --spmax "$spmax" "${FRESH_ARGS[@]}")
+#               TEST_CMD=("${STELARX_ROOT}/scripts/test-stelarx-simulated.sh" -r "$REPLICATE_NAME" "${BASE_DIR_ARGS[@]}" "${SHARED_TEST_ARGS[@]}" -t "$t" -g "$g" --sb "$sb" --spmin "$spmin" --spmax "$spmax" "${FRESH_ARGS[@]}")
 #               if [[ -n "$STELARX_OPTS_ITEM" ]]; then
 #                 TEST_CMD+=(--opts "$STELARX_OPTS_ITEM")
 #               fi

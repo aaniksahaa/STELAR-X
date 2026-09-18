@@ -15,9 +15,9 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/scripts/phylogeny-data-dir.sh"
-source "${SCRIPT_DIR}/scripts/hf-python.sh"
-source "${SCRIPT_DIR}/scripts/simphy-outputs-dir.sh"
+source "${SCRIPT_DIR}/phylogeny-data-dir.sh"
+source "${SCRIPT_DIR}/hf-python.sh"
+source "${SCRIPT_DIR}/simphy-outputs-dir.sh"
 
 OUTPUTS_DIR=""
 DATA_DIR=""
@@ -51,7 +51,7 @@ Options:
                             (default: \$PHYLOGENY_DATA_DIR/outputs/simphy)
   --simphy-outputs-dir PATH
                            Alias for --outputs-dir
-  --sync                   Run ./sync-simulated-outputs.sh first so the mirror
+  --sync                   Run ./scripts/sync-simulated-outputs.sh first so the mirror
                            reflects every result in the data tree
   --data-dir PATH          Data tree used by --sync
                             (default: \$PHYLOGENY_DATA_DIR/simphy/data)
@@ -79,11 +79,11 @@ Re-running is cheap: files already present on the Hub are skipped by the
 uploader, so this doubles as an incremental sync of the outputs mirror.
 
 Examples:
-  ./upload-bulk-simulated-outputs.sh --dry-run
-  ./upload-bulk-simulated-outputs.sh --sync
-  ./upload-bulk-simulated-outputs.sh --min-taxa 1000
-  ./upload-bulk-simulated-outputs.sh --method aster
-  ./upload-bulk-simulated-outputs.sh --method all
+  ./scripts/upload-bulk-simulated-outputs.sh --dry-run
+  ./scripts/upload-bulk-simulated-outputs.sh --sync
+  ./scripts/upload-bulk-simulated-outputs.sh --min-taxa 1000
+  ./scripts/upload-bulk-simulated-outputs.sh --method aster
+  ./scripts/upload-bulk-simulated-outputs.sh --method all
 EOF
 }
 
@@ -296,7 +296,7 @@ fi
 
 if [[ ${#SELECTED[@]} -eq 0 ]]; then
   echo "No <method>_outputs/<dataset> directories matched the selection under $OUTPUTS_DIR."
-  echo "Run ./sync-simulated-outputs.sh (or this tool with --sync) to populate the mirror."
+  echo "Run ./scripts/sync-simulated-outputs.sh (or this tool with --sync) to populate the mirror."
   exit 0
 fi
 
@@ -354,7 +354,7 @@ done
 echo
 if (( blocked > 0 )); then
   echo "Error: $blocked selected dataset director(ies) cannot be uploaded safely." >&2
-  echo "Fix the blocked entries above (./sync-simulated-outputs.sh restores missing .command files), then rerun." >&2
+  echo "Fix the blocked entries above (./scripts/sync-simulated-outputs.sh restores missing .command files), then rerun." >&2
   echo "Nothing was uploaded." >&2
   exit 1
 fi

@@ -67,7 +67,7 @@ def main() -> int:
     parser.add_argument("--no-build", action="store_true")
     args = parser.parse_args()
     if not args.no_build:
-        subprocess.run([str(ROOT / "build.sh")], cwd=ROOT, check=True,
+        subprocess.run([str(ROOT / "scripts" / "build.sh")], cwd=ROOT, check=True,
                        stdout=subprocess.DEVNULL)
     compute = "--gpu-strict" if args.gpu else "--cpu"
     executions = 0

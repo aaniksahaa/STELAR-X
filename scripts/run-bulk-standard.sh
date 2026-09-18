@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Multi-Algorithm Dataset Runner Script (updated)
 # Supports STELAR-X and optional baseline algorithms
-# Usage: ./run-bulk-standard.sh [--base-dir /path/to/base] [--dataset-dir /path/to/datasets] [--fresh]
+# Usage: ./scripts/run-bulk-standard.sh [--base-dir /path/to/base] [--dataset-dir /path/to/datasets] [--fresh]
 #   --base-dir, -b    Optional base directory (defaults to value below)
 #   --dataset-dir, -d Optional dataset directory (defaults to BASE_DIR/datasets)
 #   --fresh           Force re-run even if stat-<alg>.csv exists
@@ -336,8 +336,8 @@ validate_algorithm_binaries() {
               echo -e "${RED}Error: STELAR-X monitor wrapper not found: $RUN_WITH_MONITOR_SCRIPT${NC}"
               errors_found=true
             fi
-            if [[ ! -x "${STELAR_X_ROOT}/run.sh" ]]; then
-              echo -e "${RED}Error: STELAR-X run.sh not found in project root.${NC}"
+            if [[ ! -x "${STELAR_X_ROOT}/stelarx" ]]; then
+              echo -e "${RED}Error: STELAR-X launcher (stelarx) not found in project root.${NC}"
               errors_found=true
             fi
             ;;
@@ -539,9 +539,9 @@ run_algorithm_and_write_stats() {
     local RF_RATE="NA"
     if [[ -f "$OUT_FILE" ]]; then
       # Prefer rf.py inside STELAR_X_ROOT if present
-      if [[ -f "${STELAR_X_ROOT%/}/rf.py" && -x "$PYTHON_BIN" ]]; then
-        echo "      Calculating RF using ${STELAR_X_ROOT%/}/rf.py"
-        rf_output=$("$PYTHON_BIN" "${STELAR_X_ROOT%/}/rf.py" "$OUT_FILE" "$TRUE_SPECIES_TREE" 2>&1) || rf_output="$rf_output"
+      if [[ -f "${STELAR_X_ROOT%/}/scripts/rf.py" && -x "$PYTHON_BIN" ]]; then
+        echo "      Calculating RF using ${STELAR_X_ROOT%/}/scripts/rf.py"
+        rf_output=$("$PYTHON_BIN" "${STELAR_X_ROOT%/}/scripts/rf.py" "$OUT_FILE" "$TRUE_SPECIES_TREE" 2>&1) || rf_output="$rf_output"
         
         echo "$rf_output"
         
@@ -819,7 +819,7 @@ fi
 
 # derive STELAR_X_ROOT from script location if not set
 if [[ -z "${STELAR_X_ROOT}" ]]; then
-  STELAR_X_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  STELAR_X_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fi
 
 PYTHON_BIN="${STELARX_PYTHON:-${STELAR_X_ROOT%/}/.venv/bin/python}"
@@ -868,7 +868,7 @@ fi
 
 # derive monitor wrappers from STELAR_X_ROOT
 if [[ -z "${RUN_WITH_MONITOR_SCRIPT}" ]]; then
-  RUN_WITH_MONITOR_SCRIPT="${STELAR_X_ROOT%/}/run-stelarx-with-monitor.sh"
+  RUN_WITH_MONITOR_SCRIPT="${STELAR_X_ROOT%/}/scripts/run-stelarx-with-monitor.sh"
 fi
 if [[ -z "${RUN_BASELINE_WITH_MONITOR_SCRIPT}" ]]; then
   RUN_BASELINE_WITH_MONITOR_SCRIPT="${STELAR_X_ROOT%/}/baselines/run-baseline-with-monitor.sh"
@@ -938,7 +938,7 @@ for folder in "${folders[@]}"; do
 
             #     # ALL_GT_FILE="${DATASET_DIR%/}/$folder/$GT_FOLDER/gt-cleaned"
 
-            #     # ./process_unrooted.sh -i ${ALL_GT_FILE} -o ${ALL_GT_FILE}-rooted-og-0.tre -ogs "0"
+            #     # ./scripts/process_unrooted.sh -i ${ALL_GT_FILE} -o ${ALL_GT_FILE}-rooted-og-0.tre -ogs "0"
 
             #     ALL_GT_FILE="${DATASET_DIR%/}/$folder/$GT_FOLDER/gt-cleaned-rooted-og-0.tre"
 

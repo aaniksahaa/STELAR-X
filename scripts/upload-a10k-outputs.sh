@@ -15,8 +15,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/scripts/hf-python.sh"
-source "${SCRIPT_DIR}/scripts/a10k-outputs-dir.sh"
+source "${SCRIPT_DIR}/hf-python.sh"
+source "${SCRIPT_DIR}/a10k-outputs-dir.sh"
 
 OUTPUTS_DIR=""
 DATA_DIR=""
@@ -48,7 +48,7 @@ Options:
   --outputs-dir PATH       Outputs mirror to upload
                             (default: \$PHYLOGENY_DATA_DIR/outputs/10k-astral-dataset)
   --a10k-outputs-dir PATH  Alias for --outputs-dir
-  --sync                   Run ./sync-a10k-outputs.sh first so the mirror
+  --sync                   Run ./scripts/sync-a10k-outputs.sh first so the mirror
                            reflects every result in the data tree
   --data-dir PATH          A10K dataset root used by --sync
                             (default: \$PHYLOGENY_DATA_DIR/10k-astral-dataset)
@@ -60,7 +60,7 @@ Options:
                             (default: all replicates in the mirror)
   --allow-missing-command  Upload methods whose ${STELARX_A10K_DATASET_RECORD}
                            is absent (they are otherwise blocked as not
-                           reproducible; ./sync-a10k-outputs.sh restores it)
+                           reproducible; ./scripts/sync-a10k-outputs.sh restores it)
   --repo-id ID             Hugging Face repository (default: ${REPO_ID})
   --repo-type TYPE         dataset, model, or space (default: ${REPO_TYPE})
   --remote-dir PATH        Destination directory inside the repository
@@ -76,10 +76,10 @@ Re-running is cheap: files already present on the Hub are skipped by the
 uploader, so this doubles as an incremental sync of the outputs mirror.
 
 Examples:
-  ./upload-a10k-outputs.sh --dry-run
-  ./upload-a10k-outputs.sh --sync
-  ./upload-a10k-outputs.sh --replicates 1-10
-  ./upload-a10k-outputs.sh --method all
+  ./scripts/upload-a10k-outputs.sh --dry-run
+  ./scripts/upload-a10k-outputs.sh --sync
+  ./scripts/upload-a10k-outputs.sh --replicates 1-10
+  ./scripts/upload-a10k-outputs.sh --method all
 EOF
 }
 
@@ -313,7 +313,7 @@ fi
 
 if [[ ${#SELECTED[@]} -eq 0 ]]; then
   echo "No <method>_outputs/<replicate> directories matched the selection under $OUTPUTS_DIR."
-  echo "Run ./sync-a10k-outputs.sh (or this tool with --sync) to populate the mirror."
+  echo "Run ./scripts/sync-a10k-outputs.sh (or this tool with --sync) to populate the mirror."
   exit 0
 fi
 
@@ -376,7 +376,7 @@ done
 echo
 if (( blocked > 0 )); then
   echo "Error: $blocked selected entr(ies) cannot be uploaded safely." >&2
-  echo "Fix the blocked entries above (./sync-a10k-outputs.sh restores the dataset record), then rerun." >&2
+  echo "Fix the blocked entries above (./scripts/sync-a10k-outputs.sh restores the dataset record), then rerun." >&2
   echo "Nothing was uploaded." >&2
   exit 1
 fi

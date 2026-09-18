@@ -14,7 +14,7 @@ SUPPORTED_METHODS=(stelarx stelar aster astral treeqmc wqfmtree supertriplets st
 
 show_usage() {
   cat <<'EOF'
-Usage: ./clear-bulk-standard.sh --method METHOD [options]
+Usage: ./scripts/clear-bulk-standard.sh --method METHOD [options]
 
 Remove generated files for one method, or all methods, from the bulk-standard
 dataset tree.
@@ -39,11 +39,11 @@ Modes:
   --help, -h            Show this help
 
 Examples:
-  ./clear-bulk-standard.sh --method stelarx --dry-run
-  ./clear-bulk-standard.sh --method stelar --yes
-  ./clear-bulk-standard.sh --method all --dry-run
-  ./clear-bulk-standard.sh --method stelarx
-  ./clear-bulk-standard.sh --method stelarx --yes
+  ./scripts/clear-bulk-standard.sh --method stelarx --dry-run
+  ./scripts/clear-bulk-standard.sh --method stelar --yes
+  ./scripts/clear-bulk-standard.sh --method all --dry-run
+  ./scripts/clear-bulk-standard.sh --method stelarx
+  ./scripts/clear-bulk-standard.sh --method stelarx --yes
 EOF
 }
 

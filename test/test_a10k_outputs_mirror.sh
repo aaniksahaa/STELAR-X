@@ -55,7 +55,7 @@ make_results() {
   local results="$1" tag="$2"
   mkdir -p "$results"
   printf '((a,b),(c,d));\n' > "${results}/out-stelarx.tre"
-  printf '# STELAR-X run command\ncd /x && ./run.sh --input i --output o\n' > "${results}/out-stelarx.command"
+  printf '# STELAR-X run command\ncd /x && ./stelarx --input i --output o\n' > "${results}/out-stelarx.command"
   printf 'algorithm\nstelar-x\n' > "${results}/out-stelarx_stats.csv"
   printf 'alg,setting\nstelarx,%s\n' "$tag" > "${results}/stat-stelarx.csv"
   printf 'log %s\n' "$tag" > "${results}/.stelarx_run.log"
@@ -83,7 +83,7 @@ fi
   fail "expected 5 results directories in the data tree"
 
 # ------------------------------------------------------------- back-fill ---
-SYNC="${ROOT}/sync-a10k-outputs.sh"
+SYNC="${ROOT}/scripts/sync-a10k-outputs.sh"
 "$SYNC" --data-dir "$DATA" --dry-run >"${TMP}/sync-dry.out" 2>&1 || fail "dry run failed: $(cat "${TMP}/sync-dry.out")"
 grep -q "would mirror=5" "${TMP}/sync-dry.out" || fail "dry run did not plan 5 leaves: $(cat "${TMP}/sync-dry.out")"
 [[ ! -e "${OUTPUTS}/stelarx_outputs/R1" ]] || fail "dry run wrote to the mirror"
@@ -144,7 +144,7 @@ grep -q "A10K input data" "${TMP}/forbidden.err" || fail "the refusal message wa
 rm -f "${BAD}/s_tree.trees"
 
 # ------------------------------------------------------ uploader dry run ---
-UP="${ROOT}/upload-a10k-outputs.sh"
+UP="${ROOT}/scripts/upload-a10k-outputs.sh"
 "$SYNC" --data-dir "$DATA" --quiet >/dev/null 2>&1 || fail "pre-upload sync failed"
 PHYLOGENY_DATA_DIR="$BASE" "$UP" --dry-run --uploader /bin/true --python /bin/true >"${TMP}/up.out" 2>&1 || \
   fail "uploader dry run failed: $(cat "${TMP}/up.out")"
@@ -198,7 +198,7 @@ mkdir -p "${RUN_DATA}/10k-simphy/R1"
 printf '((a,b),(c,d));\n' > "${RUN_DATA}/10k-simphy/R1/truegenetrees"
 printf '((a,b),(c,d));\n' > "${RUN_DATA}/10k-simphy/R1/s_tree.trees"
 
-"${ROOT}/run-a10k.sh" --data-dir "$RUN_DATA" --tree-type true --replicates R1 \
+"${ROOT}/scripts/run-a10k.sh" --data-dir "$RUN_DATA" --tree-type true --replicates R1 \
   --opts '--search-space S1 --cpu -q' --no-time-monitor --no-gpu-monitor --no-notify \
   >"${TMP}/run1.out" 2>&1 || fail "run-a10k.sh failed: $(tail -20 "${TMP}/run1.out")"
 
@@ -213,10 +213,10 @@ diff -r "$RUN_SRC" "$RUN_LEAF" >/dev/null || fail "mirror leaf differs from the 
 [[ -s "${RUN_OUTPUTS}/stelarx_outputs/${STELARX_A10K_DATASET_RECORD}" ]] || fail "run did not write the dataset record"
 [[ -s "${RUN_OUTPUTS}/stelarx_outputs/R1/${STELARX_A10K_INPUTS_RECORD}" ]] || fail "run did not write the input fingerprints"
 
-# The command record carries the exact run.sh line plus the A10K context.
+# The command record carries the exact stelarx line plus the A10K context.
 RUN_CMD_FILE="${RUN_LEAF}/out-stelarx.command"
 [[ -s "$RUN_CMD_FILE" ]] || fail "run command record was not mirrored"
-grep -q "&& ./run.sh --input .*truegenetrees --output .*out-stelarx.tre --search-space S1 --cpu -q\$" "$RUN_CMD_FILE" ||   fail "command record lacks the exact run.sh invocation: $(cat "$RUN_CMD_FILE")"
+grep -q "&& ./stelarx --input .*truegenetrees --output .*out-stelarx.tre --search-space S1 --cpu -q\$" "$RUN_CMD_FILE" ||   fail "command record lacks the exact stelarx invocation: $(cat "$RUN_CMD_FILE")"
 grep -q "^# git_commit: " "$RUN_CMD_FILE" || fail "command record lacks the git commit"
 grep -q "^# exit_code:    0$" "$RUN_CMD_FILE" || fail "command record lacks the exit code"
 grep -q "^# tree type:    true$" "$RUN_CMD_FILE" || fail "command record lacks the tree type"
@@ -225,7 +225,7 @@ grep -q "^# invoked as: .*run-a10k.sh" "$RUN_CMD_FILE" || fail "command record l
 
 # The skip path rebuilds a deleted mirror for free.
 rm -rf "$RUN_OUTPUTS"
-"${ROOT}/run-a10k.sh" --data-dir "$RUN_DATA" --tree-type true --replicates R1 \
+"${ROOT}/scripts/run-a10k.sh" --data-dir "$RUN_DATA" --tree-type true --replicates R1 \
   --opts '--search-space S1 --cpu -q' --no-time-monitor --no-gpu-monitor --no-notify \
   >"${TMP}/run2.out" 2>&1 || fail "second run-a10k.sh failed"
 grep -q "SKIPPING:" "${TMP}/run2.out" || fail "second run did not skip"
@@ -233,24 +233,24 @@ grep -q "SKIPPING:" "${TMP}/run2.out" || fail "second run did not skip"
 
 # --no-outputs-mirror leaves the mirror untouched; an explicit dir is honored.
 rm -rf "$RUN_OUTPUTS"
-"${ROOT}/run-a10k.sh" --data-dir "$RUN_DATA" --tree-type true --replicates R1 --no-outputs-mirror \
+"${ROOT}/scripts/run-a10k.sh" --data-dir "$RUN_DATA" --tree-type true --replicates R1 --no-outputs-mirror \
   --opts '--search-space S1 --cpu -q' --no-time-monitor --no-gpu-monitor --no-notify \
   >"${TMP}/run3.out" 2>&1 || fail "run-a10k.sh --no-outputs-mirror failed"
 [[ ! -e "$RUN_OUTPUTS" ]] || fail "--no-outputs-mirror still wrote a mirror"
-"${ROOT}/run-a10k.sh" --data-dir "$RUN_DATA" --tree-type true --replicates R1 \
+"${ROOT}/scripts/run-a10k.sh" --data-dir "$RUN_DATA" --tree-type true --replicates R1 \
   --a10k-outputs-dir "${TMP}/explicit outputs" \
   --opts '--search-space S1 --cpu -q' --no-time-monitor --no-gpu-monitor --no-notify \
   >"${TMP}/run4.out" 2>&1 || fail "run-a10k.sh --a10k-outputs-dir failed"
 [[ -s "${TMP}/explicit outputs/stelarx_outputs/R1/true/search-space_S1__cpu_true/out-stelarx.tre" ]] || \
   fail "explicit --a10k-outputs-dir was not used"
-if "${ROOT}/run-a10k.sh" --data-dir "$RUN_DATA" --tree-type true --replicates R1 \
+if "${ROOT}/scripts/run-a10k.sh" --data-dir "$RUN_DATA" --tree-type true --replicates R1 \
   --a10k-outputs-dir "${RUN_DATA}/outputs" --no-time-monitor --no-gpu-monitor --no-notify \
   >"${TMP}/run5.out" 2>&1; then
   fail "an outputs dir inside the data dir was accepted by the runner"
 fi
 
 # collect-scores-a10k.sh puts the merged summary in the mirror too.
-"${ROOT}/collect-scores-a10k.sh" --data-dir "$RUN_DATA" --start-rep 1 --end-rep 1 \
+"${ROOT}/scripts/collect-scores-a10k.sh" --data-dir "$RUN_DATA" --start-rep 1 --end-rep 1 \
   >"${TMP}/collect.out" 2>&1 || fail "collect-scores-a10k.sh failed: $(cat "${TMP}/collect.out")"
 [[ -s "${RUN_OUTPUTS}/stelarx_outputs/a10k_stelarx_scores_merged.csv" ]] || \
   fail "the merged summary was not mirrored"
@@ -258,9 +258,9 @@ cmp -s "${RUN_DATA}/a10k_stelarx_scores_merged.csv" "${RUN_OUTPUTS}/stelarx_outp
   fail "the mirrored merged summary differs from the data-tree one"
 
 # ------------------------------------------------------ runner integration ---
-grep -q -- '--a10k-outputs-dir' "${ROOT}/run-a10k.sh" || fail "run-a10k.sh lacks --a10k-outputs-dir"
-grep -q -- '--no-outputs-mirror' "${ROOT}/run-a10k.sh" || fail "run-a10k.sh lacks --no-outputs-mirror"
-grep -q 'mirror_results_dir' "${ROOT}/run-a10k.sh" || fail "run-a10k.sh does not mirror its results"
-grep -q -- '--no-outputs-mirror' "${ROOT}/collect-scores-a10k.sh" || fail "collect-scores-a10k.sh lacks --no-outputs-mirror"
+grep -q -- '--a10k-outputs-dir' "${ROOT}/scripts/run-a10k.sh" || fail "run-a10k.sh lacks --a10k-outputs-dir"
+grep -q -- '--no-outputs-mirror' "${ROOT}/scripts/run-a10k.sh" || fail "run-a10k.sh lacks --no-outputs-mirror"
+grep -q 'mirror_results_dir' "${ROOT}/scripts/run-a10k.sh" || fail "run-a10k.sh does not mirror its results"
+grep -q -- '--no-outputs-mirror' "${ROOT}/scripts/collect-scores-a10k.sh" || fail "collect-scores-a10k.sh lacks --no-outputs-mirror"
 
 echo "PASS: A10K outputs mirror"

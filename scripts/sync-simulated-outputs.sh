@@ -15,8 +15,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/scripts/phylogeny-data-dir.sh"
-source "${SCRIPT_DIR}/scripts/simphy-outputs-dir.sh"
+source "${SCRIPT_DIR}/phylogeny-data-dir.sh"
+source "${SCRIPT_DIR}/simphy-outputs-dir.sh"
 
 DATA_DIR=""
 OUTPUTS_DIR=""
@@ -45,9 +45,9 @@ Options:
   --help, -h                 Show this message
 
 Examples:
-  ./sync-simulated-outputs.sh --dry-run
-  ./sync-simulated-outputs.sh
-  ./sync-simulated-outputs.sh --methods stelarx
+  ./scripts/sync-simulated-outputs.sh --dry-run
+  ./scripts/sync-simulated-outputs.sh
+  ./scripts/sync-simulated-outputs.sh --methods stelarx
 EOF
 }
 

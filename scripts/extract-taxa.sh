@@ -3,7 +3,7 @@
 
 set -euo pipefail
 
-STELARX_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STELARX_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INPUT_FILE=""
 OUTPUT_FILE=""
 SET_MODE="union"
@@ -65,10 +65,10 @@ if [[ -n "$OUTPUT_FILE" ]]; then
 fi
 
 if [[ "$BUILD_FIRST" == true ]]; then
-  "$STELARX_ROOT/build.sh"
+  "$STELARX_ROOT/scripts/build.sh"
 fi
 if [[ ! -f "$STELARX_ROOT/build/stelarx/Main.class" ]]; then
-  echo "Error: compiled STELAR-X classes are missing; run ./build.sh first." >&2
+  echo "Error: compiled STELAR-X classes are missing; run ./scripts/build.sh first." >&2
   exit 2
 fi
 

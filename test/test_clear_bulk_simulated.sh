@@ -10,7 +10,7 @@ fail() {
   exit 1
 }
 
-CLEAR_SCRIPT="${ROOT}/clear-bulk-simulated.sh"
+CLEAR_SCRIPT="${ROOT}/scripts/clear-bulk-simulated.sh"
 
 "$CLEAR_SCRIPT" --help >"${WORK}/help.out"
 grep -Fq '$PHYLOGENY_DATA_DIR/simphy/data' "${WORK}/help.out" || \

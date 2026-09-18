@@ -10,7 +10,7 @@ ASSUME_YES=false
 
 show_usage() {
   cat <<'EOF'
-Usage: ./clear-a10k.sh --data-dir DIR [options]
+Usage: ./scripts/clear-a10k.sh --data-dir DIR [options]
 
 Remove all STELAR-X A10K results beneath:
   DIR/10k-simphy/R*/stelarx_outputs
@@ -20,7 +20,7 @@ Input gene trees, rooted gene trees, species trees, and all other dataset files
 are preserved.
 
 The reproducibility mirror (by default DIR/../outputs/<dataset>) is NOT touched,
-so results wiped here survive there. Run ./sync-a10k-outputs.sh before clearing
+so results wiped here survive there. Run ./scripts/sync-a10k-outputs.sh before clearing
 if you want the mirror to be complete first.
 
 Required:
@@ -32,8 +32,8 @@ Options:
   --help, -h       Show this help
 
 Examples:
-  ./clear-a10k.sh --data-dir /path/to/10k-astral-dataset --dry-run
-  ./clear-a10k.sh --data-dir /path/to/10k-astral-dataset --yes
+  ./scripts/clear-a10k.sh --data-dir /path/to/10k-astral-dataset --dry-run
+  ./scripts/clear-a10k.sh --data-dir /path/to/10k-astral-dataset --yes
 
 Do not run this cleaner while run-a10k.sh is active on the same dataset.
 EOF

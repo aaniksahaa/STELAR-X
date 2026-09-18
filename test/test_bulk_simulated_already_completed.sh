@@ -10,7 +10,7 @@ fail() {
 
 # Source mode loads only the uppercase already-completed list and its predicate;
 # run-bulk-simulated.sh must not start any simulation or inference work.
-source "${ROOT}/run-bulk-simulated.sh"
+source "${ROOT}/scripts/run-bulk-simulated.sh"
 
 # The committed list ships empty: every replicate of every configuration runs.
 [[ ${#ALREADY_COMPLETED_SIMULATED_CONFIGS[@]} -eq 0 ]] || \

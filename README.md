@@ -49,11 +49,11 @@ java -version
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/aaniksahaa/STELAR-X-2.git
-cd STELAR-X-2
+git clone https://github.com/aaniksahaa/STELAR-X.git
+cd STELAR-X
 
-# 2. Compile the Java sources (a few seconds)
-./build.sh
+# 2. Compile the Java sources (a few seconds; ./stelarx also does this automatically)
+./scripts/build.sh
 
 # 3. Run on the included example (37-taxon dataset, 200 rooted gene trees)
 ./stelarx -i example/all_gt_37.tre -o example/out_37.tre
@@ -101,13 +101,13 @@ stelarx -i gene_trees.tre -o output.tre    # works from anywhere
 - Gene trees may be **incomplete** (missing taxa) and may contain **polytomies**. Polytomies are resolved deterministically during inference by default; the final triplet score always respects the input topology. Use `--keep-polytomy-during-inference` to keep them during inference as well.
 - Branch lengths and support values are accepted and ignored. Quoted taxon labels are supported.
 
-If your gene trees are unrooted, `process_unrooted.sh` roots them by a clustered outgroup (with fallbacks) and strips branch lengths and internal labels:
+If your gene trees are unrooted, `scripts/process_unrooted.sh` roots them by a clustered outgroup (with fallbacks) and strips branch lengths and internal labels:
 
 ```bash
-./process_unrooted.sh -i unrooted_gene_trees.tre -o rooted_gene_trees.tre -ogf outgroup_taxa.txt
+./scripts/process_unrooted.sh -i unrooted_gene_trees.tre -o rooted_gene_trees.tre -ogf outgroup_taxa.txt
 ```
 
-Run `./process_unrooted.sh --help` and `python3 root_by_outgroups.py --help` for every rooting option.
+Run `./scripts/process_unrooted.sh --help` and `python3 scripts/root_by_outgroups.py --help` for every rooting option.
 
 ---
 
@@ -125,10 +125,10 @@ Run `./process_unrooted.sh --help` and `python3 root_by_outgroups.py --help` for
 ### Java
 
 ```bash
-./build.sh
+./scripts/build.sh
 ```
 
-`build.sh` compiles every file under `src/stelarx/` into `build/` with plain `javac`. Re-run it after editing any Java source (the `./stelarx` launcher also does this automatically unless `--no-build` is given).
+`scripts/build.sh` compiles every file under `src/stelarx/` into `build/` with plain `javac`. Re-run it after editing any Java source (the `./stelarx` launcher also does this automatically unless `--no-build` is given).
 
 ### CUDA libraries
 
@@ -144,9 +144,9 @@ The four native libraries are already built and committed under `native/`:
 Rebuild them only if you change `src/native/*.cu` or need a different architecture set:
 
 ```bash
-./build_native.sh                  # all major GPU generations of the installed toolkit (portable)
-CUDA_ARCH=native ./build_native.sh # only the GPU in this machine (fast developer build)
-CUDA_ARCH=sm_86 ./build_native.sh  # one explicit architecture
+./scripts/build_native.sh                  # all major GPU generations of the installed toolkit (portable)
+CUDA_ARCH=native ./scripts/build_native.sh # only the GPU in this machine (fast developer build)
+CUDA_ARCH=sm_86 ./scripts/build_native.sh  # one explicit architecture
 ```
 
 The library records the oldest compute capability it covers. At start-up, STELAR-X probes the GPU, driver, and library; if any of them is unusable it explains why and selects the CPU implementation. Use `--gpu-strict` to turn that fallback into an immediate failure.
@@ -168,25 +168,25 @@ nvcc --version
 ### Development environment (optional)
 
 ```bash
-./setup_dev.sh              # creates .venv, installs DendroPy, builds Java (+CUDA if nvcc exists), runs CPU tests
-./setup_dev.sh --cpu-only   # skip CUDA compilation
-./setup_dev.sh --check      # only verify the environment; change nothing
+./scripts/setup_dev.sh              # creates .venv, installs DendroPy, builds Java (+CUDA if nvcc exists), runs CPU tests
+./scripts/setup_dev.sh --cpu-only   # skip CUDA compilation
+./scripts/setup_dev.sh --check      # only verify the environment; change nothing
 ```
 
 ### Self-contained release archive
 
 ```bash
-./build_portable.sh                 # Linux image with bundled Java runtime and CUDA libraries, CPU fallback included
-./build_portable.sh --without-cuda  # CPU-only image
+./scripts/build_portable.sh                 # Linux image with bundled Java runtime and CUDA libraries, CPU fallback included
+./scripts/build_portable.sh --without-cuda  # CPU-only image
 ```
 
-Artifacts, SHA-256 checksums, and a JSON manifest (version, platform, capability, minimum glibc) are written under `dist/<version>/`. Target machines need neither Java nor CUDA. Run the script on each target platform (`build_portable.ps1` on Windows); macOS builds are CPU-only because CUDA is unavailable there.
+Artifacts, SHA-256 checksums, and a JSON manifest (version, platform, capability, minimum glibc) are written under `dist/<version>/`. Target machines need neither Java nor CUDA. Run the script on each target platform (`scripts/build_portable.ps1` on Windows); macOS builds are CPU-only because CUDA is unavailable there.
 
 ---
 
 ## Usage
 
-All commands below use the `./stelarx` launcher (`./run.sh` is the same script; `./run-stelarx.sh` is an alias).
+All commands below use the `./stelarx` launcher at the repository root. It forwards to `scripts/run.sh`; every other script lives under `scripts/` and the bundled inputs under `example/`.
 
 ### Inference Mode (default)
 
@@ -218,7 +218,7 @@ The machine-readable result is printed as `TRIPLET_SCORE: N`.
 Records running time, peak CPU RAM, peak GPU VRAM, the triplet score, and (optionally) the RF rate against a reference tree, and writes a `<output>_stats.csv` and a `<output>.command` file beside the output tree:
 
 ```bash
-./run-stelarx-with-monitor.sh -i <gene_trees.tre> -o <output.tre> [--reference-species-tree <true_tree.tre>] [--opts "<stelarx options>"]
+./scripts/run-stelarx-with-monitor.sh -i <gene_trees.tre> -o <output.tre> [--reference-species-tree <true_tree.tre>] [--opts "<stelarx options>"]
 ```
 
 ### Examples
@@ -246,10 +246,10 @@ Records running time, peak CPU RAM, peak GPU VRAM, the triplet score, and (optio
 ./stelarx -i large_dataset.tre -o out.tre --xms 8g --xmx 256g --log-file run.log
 
 # Monitored run with RF rate against the true tree
-./run-stelarx-with-monitor.sh -i example/all_gt_37.tre -o out-37.tre --reference-species-tree example/true_37.tre
+./scripts/run-stelarx-with-monitor.sh -i example/all_gt_37.tre -o out-37.tre --reference-species-tree example/true_37.tre
 ```
 
-Three larger rooted biological/benchmark inputs used during development are also included at the repository root together with their reference trees: `all_gt_bs_rooted_37.tre`, `all_gt_bs_rooted_48.tre`, and `all_gt_bs_rooted_200.tre` (`true_37.tre`, `true_48.tre`, `true_200.tre`). `bash test_rf.sh 37|48|200|all` runs both DP search modes on them and reports RF distances.
+Two larger rooted biological/benchmark inputs used during development are also included under `example/` together with their reference trees: `all_gt_48.tre` / `true_48.tre` and `all_gt_200.tre` / `true_200.tre`. `bash scripts/test_rf.sh 37|48|200|all` runs both DP search modes on them and reports RF distances.
 
 ---
 
@@ -297,7 +297,7 @@ Three larger rooted biological/benchmark inputs used during development are also
 | `-q`, `-v`, `-vv`, `-vvv` | | Quiet / info / debug / trace logging | info |
 | | `--xms <size>` | Java minimum heap size | `256m` |
 | | `--xmx <size>` | Java maximum heap size | `128g` |
-| | `--no-build` | Skip the automatic `build.sh` before running | build |
+| | `--no-build` | Skip the automatic `scripts/build.sh` before running | build |
 | `-nn` | `--no-notify` | Disable the optional push notification after score-only runs | — |
 | | `--diagnose` | Print runtime/backend diagnostics and exit | — |
 | | `--version` | Print the STELAR-X version and exit | — |
@@ -337,32 +337,32 @@ We use [SimPhy](https://github.com/adamallo/SimPhy) (binary included under `simp
 
 ```bash
 # Generate a dataset (100 taxa, 200 gene trees, 1 replicate)
-./sim.sh -t 100 -g 200 --sb 0.000001 --spmin 100000 --spmax 200000 -rs 1
+./scripts/sim.sh -t 100 -g 200 --sb 0.000001 --spmin 100000 --spmax 200000 -rs 1
 
 # Run STELAR-X on replicate R1 of that dataset (generates it first if missing)
-./test-stelarx-simulated.sh -t 100 -g 200 --sb 0.000001 --spmin 100000 --spmax 200000 -r R1 \
+./scripts/test-stelarx-simulated.sh -t 100 -g 200 --sb 0.000001 --spmin 100000 --spmax 200000 -r R1 \
     --opts "--search-space S1 --intersection-method I2 -vv"
 ```
 
 Results are written to `<data>/<dataset>/<replicate>/stelarx_outputs/<setting>/` where `<setting>` is derived from the options (for example `search-space_S1__intersection-method_I2`). Each result directory contains `out-stelarx.tre`, `out-stelarx.command`, `stat-stelarx.csv` (RF rate, triplet score, time, peak RAM/VRAM), `out-stelarx_stats.csv`, and the run log.
 
-**Bulk sweeps.** `run-bulk-simulated.sh` runs the Cartesian product of parameter lists × replicates × settings, prints the complete plan (one line per `<dataset> / <replicates> / <setting>`), asks for confirmation, and skips already-completed runs unless `--fresh` is given:
+**Bulk sweeps.** `scripts/run-bulk-simulated.sh` runs the Cartesian product of parameter lists × replicates × settings, prints the complete plan (one line per `<dataset> / <replicates> / <setting>`), asks for confirmation, and skips already-completed runs unless `--fresh` is given:
 
 ```bash
-./run-bulk-simulated.sh --taxa-list "1000,5000" --genes-list "1000" --num-replicates 5 \
+./scripts/run-bulk-simulated.sh --taxa-list "1000,5000" --genes-list "1000" --num-replicates 5 \
     --opts-list "--search-space S1 -vv;--search-space S2 -vv;--search-space S3 -vv" --dry-run   # show the plan only
-./run-bulk-simulated.sh --taxa-list "1000,5000" --genes-list "1000" --num-replicates 5 \
+./scripts/run-bulk-simulated.sh --taxa-list "1000,5000" --genes-list "1000" --num-replicates 5 \
     --opts-list "--search-space S1 -vv;--search-space S2 -vv;--search-space S3 -vv" --yes
 ```
 
-The parameter lists used in the paper are kept at the top of the script for reference. Generating a 100,000-taxon dataset takes a long time; the exact datasets used in the paper are therefore published (as ZIPs) in the Hugging Face dataset repository and can be fetched with `./download-bulk-simulated.sh` (see its `--help`).
+The parameter lists used in the paper are kept at the top of the script for reference. Generating a 100,000-taxon dataset takes a long time; the exact datasets used in the paper are therefore published (as ZIPs) in the Hugging Face dataset repository and can be fetched with `./scripts/download-bulk-simulated.sh` (see its `--help`).
 
-**Incomplete gene trees.** `sim_incomplete.sh` derives an `<dataset>_incomplete` variant by randomly pruning taxa from a complete dataset; run it with `test-stelarx-simulated.sh --incomplete`.
+**Incomplete gene trees.** `scripts/sim_incomplete.sh` derives an `<dataset>_incomplete` variant by randomly pruning taxa from a complete dataset; run it with `scripts/test-stelarx-simulated.sh --incomplete`.
 
 **Collecting statistics.**
 
 ```bash
-./collect-stats-simulated.sh --out perf-combined.csv
+./scripts/collect-stats-simulated.sh --out perf-combined.csv
 ```
 
 merges every `stat-stelarx.csv` under the data root into one CSV (`alg, setting, num-taxa, gene-trees, replicate, sb, spmin, spmax, rf-rate, optimal-triplet-score, running-time-s, max-cpu-mb, max-gpu-mb, …`).
@@ -370,9 +370,9 @@ merges every `stat-stelarx.csv` under the data root into one CSV (`alg, setting,
 ### A10K dataset (10,000-taxon SimPhy dataset with true and estimated gene trees)
 
 ```bash
-./run-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --tree-type "true;estimated" --replicates 1-20 \
+./scripts/run-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --tree-type "true;estimated" --replicates 1-20 \
     --opts "--search-space S1 --intersection-method I2 -vv"
-./collect-scores-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --start-rep 1 --end-rep 20
+./scripts/collect-scores-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --start-rep 1 --end-rep 20
 ```
 
 `--data-dir` must contain the dataset's `10k-simphy/R*/` directories. Results go to `10k-simphy/<R>/stelarx_outputs/<tree-type>/<setting>/`, and the collector writes `a10k_stelarx_scores_merged.csv`.
@@ -382,11 +382,11 @@ merges every `stat-stelarx.csv` under the data root into one CSV (`alg, setting,
 Biological gene trees are analysed with the same launcher, typically through the monitored wrapper so that time, memory, score and the command record are captured:
 
 ```bash
-./run-stelarx-with-monitor.sh -i all_gt_bs_rooted_48.tre -o out-48.tre --reference-species-tree true_48.tre \
+./scripts/run-stelarx-with-monitor.sh -i example/all_gt_48.tre -o out-48.tre --reference-species-tree example/true_48.tre \
     --opts "--search-space S1 --intersection-method I2 -vv"
 ```
 
-`run-bulk-standard.sh` and `collect-stats-standard.sh` drive the same runs (and the baseline methods, when their binaries are placed under `baselines/`) across a directory of standard datasets; see `--help` on each.
+`scripts/run-bulk-standard.sh` and `scripts/collect-stats-standard.sh` drive the same runs (and the baseline methods, when their binaries are placed under `baselines/`) across a directory of standard datasets; see `--help` on each.
 
 ### Reproducibility mirror of run outputs
 
@@ -402,12 +402,12 @@ $PHYLOGENY_DATA_DIR/outputs/10k-astral-dataset/stelarx_outputs/R1/<tree-type>/<s
 Simulated inputs are never copied. The mirrors can be back-filled from existing results and published to the Hugging Face dataset repository (outputs and command records only):
 
 ```bash
-./sync-simulated-outputs.sh --dry-run && ./sync-simulated-outputs.sh
-./upload-bulk-simulated-outputs.sh --dry-run
-./upload-bulk-simulated-outputs.sh --sync
+./scripts/sync-simulated-outputs.sh --dry-run && ./scripts/sync-simulated-outputs.sh
+./scripts/upload-bulk-simulated-outputs.sh --dry-run
+./scripts/upload-bulk-simulated-outputs.sh --sync
 
-./sync-a10k-outputs.sh --dry-run && ./sync-a10k-outputs.sh
-./upload-a10k-outputs.sh --dry-run
+./scripts/sync-a10k-outputs.sh --dry-run && ./scripts/sync-a10k-outputs.sh
+./scripts/upload-a10k-outputs.sh --dry-run
 ```
 
 A dataset whose mirror lacks its provenance record, or that contains simulated input data, is refused before anything is uploaded. Both mirrors share their primitives in `scripts/outputs-mirror-common.sh`; the regression tests `test/test_simulated_outputs_mirror.sh` and `test/test_a10k_outputs_mirror.sh` pin down the layout and the refusal rules.
@@ -415,9 +415,9 @@ A dataset whose mirror lacks its provenance record, or that contains simulated i
 ### Cleaning up
 
 ```bash
-./clear-bulk-simulated.sh --dry-run     # preview: removes $PHYLOGENY_DATA_DIR/simphy/data completely
-./clear-bulk-simulated.sh --yes
-./clear-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --dry-run   # removes only STELAR-X results, keeps inputs
+./scripts/clear-bulk-simulated.sh --dry-run     # preview: removes $PHYLOGENY_DATA_DIR/simphy/data completely
+./scripts/clear-bulk-simulated.sh --yes
+./scripts/clear-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --dry-run   # removes only STELAR-X results, keeps inputs
 ```
 
 ### Optional tools
@@ -425,11 +425,11 @@ A dataset whose mirror lacks its provenance record, or that contains simulated i
 These are not required for STELAR-X itself, but are used by the evaluation scripts:
 
 ```bash
-pip install dendropy        # RF distance (rf.py, analyze-dataset.py, RF rates in the monitor script)
+pip install dendropy        # RF distance (scripts/rf.py, scripts/analyze-dataset.py, RF rates in the monitor script)
 sudo apt install -y time    # GNU time for peak-RSS monitoring (run-stelarx-with-monitor.sh)
 ```
 
-`rf.py` computes the normalized Robinson-Foulds distance between two trees; `analyze-dataset.py` reports average gene-tree/gene-tree and gene-tree/species-tree RF distances of a dataset.
+`scripts/rf.py` computes the normalized Robinson-Foulds distance between two trees; `scripts/analyze-dataset.py` reports average gene-tree/gene-tree and gene-tree/species-tree RF distances of a dataset.
 
 ---
 
@@ -468,12 +468,12 @@ python3 test/test_stelarx_scalability.py --require-gpu
 
 | Problem | Possible Cause | Solution |
 |---------|---------------|----------|
-| `build/` missing or `ClassNotFoundException` | Project not built | Run `./build.sh` (or drop `--no-build`) |
+| `build/` missing or `ClassNotFoundException` | Project not built | Run `./scripts/build.sh` (or drop `--no-build`) |
 | `javac: command not found` / unsupported class version | JDK missing or older than 21 | `sudo apt install -y openjdk-21-jdk` |
 | Run says CPU mode although a GPU is present | Driver, CUDA runtime, or `native/libstelarx_*.so` unusable | Run `./stelarx --diagnose`; see below |
 | `OutOfMemoryError` | Dataset too large for the default heap | Increase heap: `--xms 8g --xmx 256g` |
 | GPU out of memory | Batches too large for the VRAM | Lower `--gpu-vram-occupancy-factor`, set `--gpu-batch-size`, or use `--cpu` |
-| Input rejected as unrooted | Top-level node has ≠ 2 children | Root the trees first (`process_unrooted.sh`) |
+| Input rejected as unrooted | Top-level node has ≠ 2 children | Root the trees first (`scripts/process_unrooted.sh`) |
 | Unexpected Java failure | — | See the report written under `crash_logs/` (or `$STELARX_CRASH_DIR`) |
 
 ### `nvidia-smi` works, but STELAR-X selects CPU mode
@@ -487,20 +487,16 @@ ls -l native/libstelarx_*.so
 git status --short -- native/                       # a deleted library shows as "D native/..."
 ```
 
-If a library is missing, restore the committed one with `git restore native/` or rebuild with `./build_native.sh` (needs `nvcc`). If the GPU is older than the minimum compute capability embedded in the library, rebuild for that GPU, for example `CUDA_ARCH=sm_75 ./build_native.sh`. Use `--gpu-strict` when a silent CPU fallback is unacceptable.
+If a library is missing, restore the committed one with `git restore native/` or rebuild with `./scripts/build_native.sh` (needs `nvcc`). If the GPU is older than the minimum compute capability embedded in the library, rebuild for that GPU, for example `CUDA_ARCH=sm_75 ./scripts/build_native.sh`. Use `--gpu-strict` when a silent CPU fallback is unacceptable.
 
 ---
 
 ## Project Structure
 
 ```
-STELAR-X-2/
-├── stelarx, run.sh, run-stelarx.sh   # Launcher (auto-builds, selects GPU/CPU, sets heap and library path)
-├── run-stelarx-with-monitor.sh       # Launcher with time / RAM / VRAM monitoring, RF rate, stats CSV and command record
-├── build.sh                          # Compile Java sources into build/
-├── build_native.sh (.ps1)            # Rebuild the CUDA JNI libraries into native/
-├── build_portable.sh (.ps1)          # Self-contained release image with bundled Java runtime (+ CUDA)
-├── setup_dev.sh                      # Development environment: .venv, DendroPy, build, CPU tests
+STELAR-X/
+├── stelarx                           # Launcher (auto-builds, selects GPU/CPU, sets heap and library path)
+├── README.md, cmd.txt                # Documentation and the research command sheet
 ├── src/
 │   ├── stelarx/                      # Java sources (package stelarx)
 │   │   ├── Main.java, Config.java, CliPresets.java  # CLI, configuration, S1–S3 / I1–I4 presets
@@ -513,18 +509,27 @@ STELAR-X-2/
 │   │   └── util/                     # Threading, 128-bit arithmetic, progress bars
 │   └── native/                       # CUDA kernels: stelarx_weight.cu, stelarx_dp.cu, stelarx_dist.cu, stelarx_similarity.cu
 ├── native/                           # Pre-built CUDA libraries (libstelarx_weight/dp/dist/sim.so)
-├── example/                          # 37-taxon example: all_gt_37.tre (200 rooted gene trees), true_37.tre
-├── all_gt_bs_rooted_{37,48,200}.tre, true_{37,48,200}.tre   # Additional rooted inputs with reference trees
-├── sim.sh, sim_incomplete.sh, simphy/            # SimPhy simulation (binary and helpers)
-├── test-stelarx-simulated.sh, run-bulk-simulated.sh          # Single and bulk simulated experiments
-├── run-a10k.sh, collect-scores-a10k.sh                       # A10K experiments
-├── run-bulk-standard.sh, collect-stats-standard.sh           # Standard/biological datasets (and baselines)
-├── collect-stats-simulated.sh                                # Merge simulated statistics
-├── sync-*-outputs.sh, upload-*-outputs.sh                    # Reproducibility mirrors and Hugging Face publication
-├── download-bulk-simulated.sh, upload-bulk-simulated.sh      # Fetch / publish the simulated datasets themselves
-├── clear-bulk-simulated.sh, clear-a10k.sh, clear-bulk-standard.sh   # Cleanup (always with --dry-run)
-├── scripts/                          # Shared helpers (data-dir resolution, mirror primitives, setting names)
-├── rf.py, analyze-dataset.py, clean.py, root_by_outgroups.py, process_unrooted.sh, extract-taxa.sh   # Tree utilities
+├── example/                          # Rooted inputs with reference trees: all_gt_{37,48,200}.tre, true_{37,48,200}.tre
+├── scripts/
+│   ├── run.sh                        # Core runner behind ./stelarx
+│   ├── run-stelarx-with-monitor.sh   # Runner with time / RAM / VRAM monitoring, RF rate, stats CSV and command record
+│   ├── build.sh                      # Compile Java sources into build/
+│   ├── build_native.sh (.ps1)        # Rebuild the CUDA JNI libraries into native/
+│   ├── build_portable.sh (.ps1)      # Self-contained release image with bundled Java runtime (+ CUDA)
+│   ├── setup_dev.sh, requirements-dev.txt   # Development environment: .venv, DendroPy, build, CPU tests
+│   ├── sim.sh, sim_incomplete.sh     # SimPhy simulation drivers
+│   ├── test-stelarx-simulated.sh, run-bulk-simulated.sh   # Single and bulk simulated experiments
+│   ├── run-a10k.sh, collect-scores-a10k.sh                # A10K experiments
+│   ├── run-bulk-standard.sh, collect-stats-standard.sh    # Standard/biological datasets (and baselines)
+│   ├── collect-stats-simulated.sh    # Merge simulated statistics
+│   ├── sync-*-outputs.sh, upload-*-outputs.sh             # Reproducibility mirrors and Hugging Face publication
+│   ├── download-bulk-simulated.sh, upload-bulk-simulated.sh   # Fetch / publish the simulated datasets themselves
+│   ├── clear-bulk-simulated.sh, clear-a10k.sh, clear-bulk-standard.sh   # Cleanup (always with --dry-run)
+│   ├── rf.py, analyze-dataset.py, clean.py, root_by_outgroups.py, process_unrooted.sh, extract-taxa.sh, test_rf.sh   # Tree utilities
+│   └── experiment-setting-name.sh, phylogeny-data-dir.sh, simphy-outputs-dir.sh, a10k-outputs-dir.sh,
+│       outputs-mirror-common.sh, hf-python.sh   # Shared helpers sourced by the scripts above
+├── simphy/                           # SimPhy binary and helpers
 ├── test/                             # Regression, oracle, GPU, scalability and script tests (see Testing)
-└── packaging/                        # Portable launcher used by build_portable.sh
+├── packaging/                        # Portable launcher used by build_portable.sh
+└── docs/                             # Supplementary notes
 ```

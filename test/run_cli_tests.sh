@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/stelarx-cli-tests.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
-"${ROOT}/build.sh" >/dev/null
+"${ROOT}/scripts/build.sh" >/dev/null
 
 [[ -f "${ROOT}/build/stelarx/Main.class" ]]
 [[ "$(find "${ROOT}/build" -mindepth 1 -maxdepth 1 -type d -printf '%f\n')" == "stelarx" ]]

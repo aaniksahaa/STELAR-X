@@ -142,11 +142,11 @@ printf "  mode: %s  search: %s\n\n" "$COMPUTE_MODE" "$SEARCH_MODE"
 # ── Build ─────────────────────────────────────────────────────────────────────
 if [[ $SKIP_BUILD -eq 0 ]]; then
     echo "  Building Java..."
-    bash "$ROOT_DIR/build.sh" > /dev/null \
+    bash "$ROOT_DIR/scripts/build.sh" > /dev/null \
         && echo "  Build Java   OK" \
         || { echo -e "  ${RED}Build Java   FAILED${NC}"; exit 1; }
     echo "  Building native (CUDA)..."
-    bash "$ROOT_DIR/build_native.sh" > /dev/null \
+    bash "$ROOT_DIR/scripts/build_native.sh" > /dev/null \
         && echo "  Build native OK" \
         || { echo -e "  ${RED}Build native FAILED${NC}"; exit 1; }
     echo

@@ -244,7 +244,7 @@ def main() -> int:
     if args.cases < 0:
         parser.error("--cases must be non-negative")
     if not args.no_build:
-        subprocess.run([str(ROOT / "build.sh")], cwd=ROOT, check=True,
+        subprocess.run([str(ROOT / "scripts" / "build.sh")], cwd=ROOT, check=True,
                        stdout=subprocess.DEVNULL)
 
     cases = fixed_cases() + generated_cases(args.cases, args.seed)

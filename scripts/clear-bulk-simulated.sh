@@ -9,7 +9,7 @@ ASSUME_YES=false
 
 show_usage() {
   cat <<'EOF'
-Usage: ./clear-bulk-simulated.sh [options]
+Usage: ./scripts/clear-bulk-simulated.sh [options]
 
 Permanently remove the complete SimPhy data directory:
 
@@ -25,9 +25,9 @@ Options:
   --help, -h      Show this help
 
 Examples:
-  ./clear-bulk-simulated.sh --dry-run
-  ./clear-bulk-simulated.sh
-  ./clear-bulk-simulated.sh --yes
+  ./scripts/clear-bulk-simulated.sh --dry-run
+  ./scripts/clear-bulk-simulated.sh
+  ./scripts/clear-bulk-simulated.sh --yes
 EOF
 }
 

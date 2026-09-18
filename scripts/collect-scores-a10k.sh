@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/scripts/a10k-outputs-dir.sh"
+source "${SCRIPT_DIR}/a10k-outputs-dir.sh"
 
 DATA_DIR=""
 START_REP=""

@@ -2,7 +2,7 @@
 #
 # STELAR-X runner
 # ===============
-# Usage: ./run.sh -i <gene_trees> -o <output> [options]
+# Usage: ./stelarx -i <gene_trees> -o <output> [options]
 #
 # Core options are forwarded to stelarx.Main. This wrapper centralizes the
 # working classpath/library-path invocation so higher-level scripts do not need
@@ -17,7 +17,7 @@ if [[ -t 1 || -t 2 ]]; then
   export FORCE_COLOR="${FORCE_COLOR:-1}"
 fi
 
-STELARX_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STELARX_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${STELARX_ROOT}/build"
 NATIVE_DIR="${STELARX_ROOT}/native"
 CRASH_DIR="${STELARX_CRASH_DIR:-${STELARX_ROOT}/crash_logs}"
@@ -95,14 +95,14 @@ Optional:
   -v|-vv|-vvv        Verbosity
   --xms SIZE         Java min heap (default: ${XMS})
   --xmx SIZE         Java max heap (default: ${XMX})
-  --no-build         Skip build.sh before running
+  --no-build         Skip scripts/build.sh before running
   --no-notify, -nn   Disable ntfy notification for score-only mode
   --version          Print the STELAR-X version and exit
   --diagnose         Print runtime/backend diagnostics and exit
   --help, -h         Show this message
 
 Compatibility:
-  Positional form './run.sh <input> <output> ...' is also accepted.
+  Positional form './stelarx <input> <output> ...' is also accepted.
 
 Crash reports:
   Java and JVM fatal-error logs are stored in ${CRASH_DIR}.
@@ -120,7 +120,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   exit 0
 fi
 
-# Backward-compatible positional form: ./run.sh input output [opts...]
+# Backward-compatible positional form: ./stelarx input output [opts...]
 if [[ "${1:-}" != -* ]]; then
   INPUT_FILE="$1"
   shift
@@ -270,7 +270,7 @@ if [[ -n "$SCORE_SPECIES_TREE" ]]; then
 fi
 
 if [[ "$BUILD_FIRST" == true ]]; then
-  "${STELARX_ROOT}/build.sh"
+  "${STELARX_ROOT}/scripts/build.sh"
 fi
 
 # Create the target before JVM startup so both Java exception reports and
