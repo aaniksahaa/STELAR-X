@@ -6,6 +6,10 @@ This repository is the **Supplemental Code** for the paper. It contains the comp
 
 > **Note:** Although STELAR-X provides a CPU fallback option, GPU-enabled execution is recommended to realize its full computational benefits.
 
+## 🎉 Updates
+
+- **2026-09-18 — v2.0.0 released.** Implementation-level optimizations make STELAR-X much faster and leaner: the 100,000-taxon × 1,000-gene dataset now runs in ~34 minutes using 58 GB RAM, down from ~8.5 hours and 86 GB. Self-contained release archives (no Java or CUDA installation needed) are available on the [Releases](https://github.com/aaniksahaa/STELAR-X/releases) page.
+
 ## Citation
 
 If you use **STELAR-X**, its source code, or results produced by it in your research, please cite our paper:
