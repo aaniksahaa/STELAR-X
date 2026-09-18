@@ -1,0 +1,25 @@
+=== Phase 4 Tripartition Extraction Verification ===
+Taxa: 5  Trees: 4  Seeds: 2
+Unique tripartitions: 9
+
+Expected total (sum of n-2 per tree): 12
+
+
+--- Summary ---
+ALL ASSERTIONS PASSED
+
+--- part3 size distribution (complement size) ---
+  part3_size=  1 : 2 tripartitions
+  part3_size=  2 : 3 tripartitions
+  part3_size=  3 : 4 tripartitions
+
+--- All tripartitions (small input) ---
+  freq=1  {C} | {D} | {A,B,E}
+  freq=1  {A} | {C} | {B,D,E}
+  freq=2  {D} | {E} | {A,B,C}
+  freq=3  {A} | {B} | {C,D,E}
+  freq=1  {C} | {D,E} | {A,B}
+  freq=1  {B} | {D,E} | {A,C}
+  freq=1  {A,B} | {C,D} | {E}
+  freq=1  {A,B} | {C} | {D,E}
+  freq=1  {A,B,C} | {D} | {E}

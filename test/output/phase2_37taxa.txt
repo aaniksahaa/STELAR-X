@@ -1,0 +1,45 @@
+=== Phase 2 Hash Verification ===
+Taxa: 37  Trees: 200  Seeds: 2
+
+--- Taxon hashes (first seed only) ---
+  MON    id=0   h0=7268ff9af371c5ca
+  MAC    id=1   h0=95f7f0fc9a4a7d4f
+  TUR    id=2   h0=cf3322ef5dcc8126
+  BOS    id=3   h0=87ecab1c52a9eeb6
+  SUS    id=4   h0=b4034b5e9fd37164
+  VIC    id=5   h0=e11c1b2836518ac9
+  FEL    id=6   h0=9908b69b1342cb38
+  CAN    id=7   h0=825f18e55453216c
+  EQU    id=8   h0=877c73d2539f3f54
+  MYO    id=9   h0=b7edf2d66a4d64fd
+  PTE    id=10  h0=c1ee48239a1f01b0
+  SOR    id=11  h0=af1c27e1ff6fd672
+  ERI    id=12  h0=b7dfee7ae7c6e5bb
+  CAV    id=13  h0=c25114f8e19a9b03
+  RAT    id=14  h0=402ede450fbef3ce
+  MUS    id=15  h0=90bda12d79a2a0be
+  CAL    id=16  h0=4d461542612ce829
+  TAR    id=17  h0=5c7660c60db4df64
+  NEW    id=18  h0=2384e0f5721a1a5f
+  PAN    id=19  h0=2caee7a0483c750d
+  HOM    id=20  h0=b520f5ebd72370b3
+  GOR    id=21  h0=a8dfc8d311dd05e0
+  PON    id=22  h0=b7e04e2cf91ba638
+  MIC    id=23  h0=4d4b4684ba9f9db2
+  OTO    id=24  h0=b489a92dbd82e048
+  TUP    id=25  h0=de52875ead5814d2
+  SPE    id=26  h0=e2f7fd965bb2f411
+  DIP    id=27  h0=6d13bced4fc2284f
+  ORY    id=28  h0=1225d86242e6af77
+  OCH    id=29  h0=2a03d10edc0a0426
+  CHO    id=30  h0=70cd3ed286086a20
+  DAS    id=31  h0=ccb292ba5e6f22ae
+  PRO    id=32  h0=3e4aaa08cd94b16b
+  LOX    id=33  h0=8a8245cce488f0e0
+  ECH    id=34  h0=cfed390a66eefd00
+  ORN    id=35  h0=7f4faa37571ddcf4
+  GAL    id=36  h0=edc9aa1a22f909e3
+
+
+--- Summary ---
+ALL ASSERTIONS PASSED across all trees and seeds.

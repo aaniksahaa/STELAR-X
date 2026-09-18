@@ -1,0 +1,42 @@
+=== Phase 6 Weight Calculation Verification ===
+Taxa: 5  Scored splits: 15
+Max score:   18
+Total score: 156
+
+Check 1 (non-negative): PASSED
+
+Root splits and their scores:
+  score=    16  {C,D,E} | {A,B}
+  score=    18  {A,C} | {B,D,E}
+  score=     8  {A,B,C,D} | {E}
+
+--- Score distribution ---
+  score=    18 : 1 splits
+  score=    16 : 1 splits
+  score=    15 : 2 splits
+  score=    13 : 3 splits
+  score=    10 : 1 splits
+  score=     9 : 1 splits
+  score=     8 : 2 splits
+  score=     6 : 1 splits
+  score=     4 : 3 splits
+
+--- Summary ---
+ALL ASSERTIONS PASSED
+
+--- All splits ranked by score (small input) ---
+  score=  18  {A,C} | {B,D,E}
+  score=  16  {C,D,E} | {A,B}
+  score=  15  {A,C} | {B}
+  score=  15  {C,D} | {A,B}
+  score=  13  {C} | {D,E}
+  score=  13  {A,B} | {C}
+  score=  13  {A,B,C} | {D}
+  score=  10  {B} | {A}
+  score=   9  {B} | {D,E}
+  score=   8  {A,B,C,D} | {E}
+  score=   8  {C,D} | {E}
+  score=   6  {E} | {D}
+  score=   4  {E} | {A,B}
+  score=   4  {A} | {C}
+  score=   4  {C} | {D}

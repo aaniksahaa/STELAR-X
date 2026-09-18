@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# Portable Unix entry point. With --log-file, duplicate the process-level
+# stdout/stderr stream so JNI/CUDA diagnostics are logged while transient
+# carriage-return progress repaints remain terminal-only.
+set -uo pipefail
+
+LAUNCHER_SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$LAUNCHER_SOURCE" ]]; do
+  SOURCE_DIR="$(cd "$(dirname "$LAUNCHER_SOURCE")" && pwd -P)"
+  LAUNCHER_SOURCE="$(readlink "$LAUNCHER_SOURCE")"
+  [[ "$LAUNCHER_SOURCE" == /* ]] || LAUNCHER_SOURCE="${SOURCE_DIR}/${LAUNCHER_SOURCE}"
+done
+LAUNCHER_DIR="$(cd "$(dirname "$LAUNCHER_SOURCE")" && pwd -P)"
+if [[ -x "${LAUNCHER_DIR}/bin/stelarx" ]]; then
+  REAL_LAUNCHER="${LAUNCHER_DIR}/bin/stelarx"
+elif [[ -x "${LAUNCHER_DIR}/stelarx.app/Contents/MacOS/stelarx" ]]; then
+  REAL_LAUNCHER="${LAUNCHER_DIR}/stelarx.app/Contents/MacOS/stelarx"
+else
+  echo "Error: the bundled STELAR-X launcher could not be found." >&2
+  exit 1
+fi
+
+# Java exception reports use this absolute directory. The packaged JVM's
+# -XX:ErrorFile points at the same default relative crash_logs directory.
+CRASH_DIR="${STELARX_CRASH_DIR:-${PWD}/crash_logs}"
+if ! mkdir -p "$CRASH_DIR" 2>/dev/null; then
+  CRASH_DIR="${TMPDIR:-/tmp}/stelarx-crash_logs"
+  mkdir -p "$CRASH_DIR" 2>/dev/null || {
+    echo "Error: cannot create a crash-log directory." >&2
+    exit 1
+  }
+fi
+STELARX_CRASH_DIR="$(cd "$CRASH_DIR" && pwd -P)"
+export STELARX_CRASH_DIR
+
+LOG_FILE=""
+INPUT_FILE=""
+OUTPUT_FILE=""
+ARGS=("$@")
+for ((i = 0; i < ${#ARGS[@]}; i++)); do
+  case "${ARGS[$i]}" in
+    --log-file)
+      if ((i + 1 >= ${#ARGS[@]})); then
+        exec "$REAL_LAUNCHER" "$@"
+      fi
+      LOG_FILE="${ARGS[$((++i))]}"
+      ;;
+    --log-file=*) LOG_FILE="${ARGS[$i]#--log-file=}" ;;
+    -i|--input)
+      ((i + 1 < ${#ARGS[@]})) && INPUT_FILE="${ARGS[$((++i))]}"
+      ;;
+    -o|--output)
+      ((i + 1 < ${#ARGS[@]})) && OUTPUT_FILE="${ARGS[$((++i))]}"
+      ;;
+  esac
+done
+
+if [[ -z "$LOG_FILE" ]]; then
+  exec "$REAL_LAUNCHER" "$@"
+fi
+
+LOG_PARENT="$(dirname "$LOG_FILE")"
+if ! mkdir -p "$LOG_PARENT"; then
+  echo "Error: cannot create the log directory '$LOG_PARENT'." >&2
+  exit 1
+fi
+if realpath -m . >/dev/null 2>&1; then
+  LOG_FILE="$(realpath -m "$LOG_FILE")"
+else
+  LOG_FILE="$(cd "$LOG_PARENT" && pwd -P)/$(basename "$LOG_FILE")"
+fi
+
+canonical_data_path() {
+  local path="$1" parent
+  if realpath -m . >/dev/null 2>&1; then
+    realpath -m "$path"
+    return
+  fi
+  parent="$(dirname "$path")"
+  if [[ -d "$parent" ]]; then
+    printf '%s/%s\n' "$(cd "$parent" && pwd -P)" "$(basename "$path")"
+  else
+    case "$path" in
+      /*) printf '%s\n' "$path" ;;
+      *)  printf '%s/%s\n' "$PWD" "$path" ;;
+    esac
+  fi
+}
+
+for data_file in "$INPUT_FILE" "$OUTPUT_FILE"; do
+  if [[ -n "$data_file" && "$LOG_FILE" == "$(canonical_data_path "$data_file")" ]]; then
+    echo "Error: --log-file must differ from the input and output files: $LOG_FILE" >&2
+    exit 2
+  fi
+done
+
+if [[ -t 1 || -t 2 ]]; then
+  export FORCE_COLOR="${FORCE_COLOR:-1}"
+fi
+
+# Progress bars repaint one terminal line with carriage returns.  Keep that raw
+# stream on screen, but omit those repaint records from the persistent log.
+filter_terminal_log() {
+  local line
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" == *$'\r'* ]] && continue
+    printf '%s\n' "$line"
+  done
+}
+
+FILTER_DIR="$(mktemp -d "${TMPDIR:-/tmp}/stelarx-log-filter.XXXXXX")" || {
+  echo "Error: cannot create temporary state for --log-file." >&2
+  exit 1
+}
+FILTER_PIPE="${FILTER_DIR}/stream"
+if ! mkfifo "$FILTER_PIPE"; then
+  rmdir "$FILTER_DIR" 2>/dev/null || true
+  echo "Error: cannot initialize --log-file filtering." >&2
+  exit 1
+fi
+cleanup_filter() {
+  rm -f "$FILTER_PIPE"
+  rmdir "$FILTER_DIR" 2>/dev/null || true
+}
+trap cleanup_filter EXIT
+
+filter_terminal_log < "$FILTER_PIPE" > "$LOG_FILE" &
+FILTER_PID=$!
+set +e
+STELARX_LOG_CAPTURED=1 "$REAL_LAUNCHER" "$@" 2>&1 | tee "$FILTER_PIPE"
+PIPE_STATUS=("${PIPESTATUS[@]}")
+wait "$FILTER_PID"
+FILTER_STATUS=$?
+set -e
+if ((PIPE_STATUS[0] != 0)); then
+  exit "${PIPE_STATUS[0]}"
+fi
+if ((PIPE_STATUS[1] != 0)); then
+  exit "${PIPE_STATUS[1]}"
+fi
+exit "$FILTER_STATUS"

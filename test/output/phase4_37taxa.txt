@@ -1,0 +1,46 @@
+=== Phase 4 Tripartition Extraction Verification ===
+Taxa: 37  Trees: 200  Seeds: 2
+Unique tripartitions: 1072
+
+Expected total (sum of n-2 per tree): 7000
+
+
+--- Summary ---
+ALL ASSERTIONS PASSED
+
+--- part3 size distribution (complement size) ---
+  part3_size=  1 : 21 tripartitions
+  part3_size=  2 : 18 tripartitions
+  part3_size=  3 : 11 tripartitions
+  part3_size=  4 : 25 tripartitions
+  part3_size=  5 : 6 tripartitions
+  part3_size=  6 : 10 tripartitions
+  part3_size=  7 : 8 tripartitions
+  part3_size=  8 : 9 tripartitions
+  part3_size=  9 : 44 tripartitions
+  part3_size= 10 : 5 tripartitions
+  part3_size= 11 : 8 tripartitions
+  part3_size= 12 : 10 tripartitions
+  part3_size= 13 : 5 tripartitions
+  part3_size= 14 : 5 tripartitions
+  part3_size= 15 : 7 tripartitions
+  part3_size= 16 : 9 tripartitions
+  part3_size= 17 : 14 tripartitions
+  part3_size= 18 : 9 tripartitions
+  part3_size= 19 : 13 tripartitions
+  part3_size= 20 : 46 tripartitions
+  part3_size= 21 : 22 tripartitions
+  part3_size= 22 : 13 tripartitions
+  part3_size= 23 : 12 tripartitions
+  part3_size= 24 : 14 tripartitions
+  part3_size= 25 : 17 tripartitions
+  part3_size= 26 : 62 tripartitions
+  part3_size= 27 : 42 tripartitions
+  part3_size= 28 : 62 tripartitions
+  part3_size= 29 : 66 tripartitions
+  part3_size= 30 : 75 tripartitions
+  part3_size= 31 : 68 tripartitions
+  part3_size= 32 : 81 tripartitions
+  part3_size= 33 : 95 tripartitions
+  part3_size= 34 : 95 tripartitions
+  part3_size= 35 : 65 tripartitions

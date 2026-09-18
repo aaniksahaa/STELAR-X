@@ -1,0 +1,39 @@
+=== Phase 5 DP Search Space Verification ===
+Taxa: 5  Trees: 4  Clusters in X: 18
+Clusters with splits: 10
+Unique splits total:  15
+Transitions emitted:  22 (before dedup)
+
+Root splits: 3
+Check 2 (size consistency): PASSED
+Check 3 (cluster membership): PASSED
+
+Expected Type1 transitions (incl. root): 16
+Expected Type2 transitions: 6
+Total emitted (Type1+Type2): 22  (expected 22)
+Check 4 (transition count): PASSED
+
+--- Summary ---
+ALL ASSERTIONS PASSED
+
+--- Splits-per-cluster distribution ---
+  splits= 1 : 6 clusters
+  splits= 2 : 3 clusters
+  splits= 3 : 1 clusters
+
+--- All DP transitions (small input) ---
+  {C,D} -> {C} | {D}
+  {A,C} -> {A} | {C}
+  {D,E} -> {E} | {D}
+  {A,B} -> {B} | {A}
+  {C,D,E} -> {C} | {D,E}
+  {C,D,E} -> {C,D} | {E}
+  {A,B,C} -> {A,B} | {C}
+  {A,B,C} -> {A,C} | {B}
+  {B,D,E} -> {B} | {D,E}
+  {A,B,E} -> {E} | {A,B}
+  {A,B,C,D} -> {C,D} | {A,B}
+  {A,B,C,D} -> {A,B,C} | {D}
+  {(root)} -> {C,D,E} | {A,B}
+  {(root)} -> {A,C} | {B,D,E}
+  {(root)} -> {A,B,C,D} | {E}

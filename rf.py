@@ -58,7 +58,11 @@ def load_tree_from_file(filename: str, taxon_namespace=None) -> dendropy.Tree:
             tree = dendropy.Tree.get(
                 data=newick,
                 schema="newick",
-                taxon_namespace=taxon_namespace
+                taxon_namespace=taxon_namespace,
+                # Project taxon identifiers conventionally contain literal
+                # underscores. This also makes quoted and unquoted forms of the
+                # same identifier resolve to one Taxon object.
+                preserve_underscores=True,
             )
             return tree
             
@@ -84,12 +88,22 @@ def robinson_foulds_distance(tree1: dendropy.Tree, tree2: dendropy.Tree) -> floa
     # Ensure trees have the same taxon namespace
     if tree1.taxon_namespace is not tree2.taxon_namespace:
         raise ValueError("Trees must have the same taxon namespace for comparison")
+
+    taxa1 = {leaf.taxon.label for leaf in tree1.leaf_node_iter() if leaf.taxon}
+    taxa2 = {leaf.taxon.label for leaf in tree2.leaf_node_iter() if leaf.taxon}
+    if taxa1 != taxa2:
+        only1 = sorted(taxa1 - taxa2)
+        only2 = sorted(taxa2 - taxa1)
+        raise ValueError(
+            "Trees have different taxon sets; "
+            f"only in first tree: {only1}; only in second tree: {only2}"
+        )
     
     # Calculate Robinson-Foulds distance using dendropy
     rf_distance = treecompare.symmetric_difference(tree1, tree2)
     
     # Calculate maximum possible RF distance
-    n_taxa = len(tree1.taxon_namespace)
+    n_taxa = len(taxa1)
     if n_taxa <= 3:
         return 0.0  # Trees with 3 or fewer taxa have no internal branches
     
@@ -103,7 +117,7 @@ def robinson_foulds_distance(tree1: dendropy.Tree, tree2: dendropy.Tree) -> floa
 
 def get_tree_info(tree: dendropy.Tree) -> Dict:
     """Get basic information about a tree."""
-    leaves = [taxon.label for taxon in tree.taxon_namespace]
+    leaves = [leaf.taxon.label for leaf in tree.leaf_node_iter() if leaf.taxon]
     internal_nodes = [node for node in tree.internal_nodes()]
     
     return {
@@ -279,4 +293,4 @@ The Robinson-Foulds distance is normalized to [0, 1]:
 
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    sys.exit(main())

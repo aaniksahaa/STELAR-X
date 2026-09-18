@@ -1,0 +1,5 @@
+(A,B,C,D,E);
+(A,F,G,H,I);
+(B,F,J,C,D);
+(C,G,J,E,H);
+(D,I,J,F,H);

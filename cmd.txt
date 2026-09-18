@@ -1,63 +1,275 @@
+#### SETUP PHYLOGENY DATA DIR 
+
+echo 'export PHYLOGENY_DATA_DIR="/absolute/path/to/phylogeny-data"' >> ~/.bashrc
+source ~/.bashrc
+
+
+# setting as normally inside 
+
+mkdir -p ~/phylogeny/STELAR-X-2/simphy/data
+echo 'export PHYLOGENY_DATA_DIR="~/phylogeny/STELAR-X-2/simphy/data"' >> ~/.bashrc
+source ~/.bashrc
+echo $PHYLOGENY_DATA_DIR
 
 
 
 
-###############################################################################
-#  STELAR-X  —  Installation & Usage Quick Reference
-###############################################################################
+# SIMULATED OUTPUTS MIRROR (reproducibility fingerprint)
 #
-#  There are TWO ways to get STELAR-X running, depending on your needs.
+# Every simulated run still writes into $PHYLOGENY_DATA_DIR/simphy/data/<dataset>/<R>/stelarx_outputs/<setting>
+# and additionally mirrors the small outputs + the SimPhy .command/.params into
+#   $PHYLOGENY_DATA_DIR/outputs/simphy/stelarx_outputs/<dataset>/<R>/<setting>/
+# (never all_gt.tre / s_tree.trees / *.db)
+
+# back-fill the mirror for results produced before it existed
+./sync-simulated-outputs.sh --dry-run
+./sync-simulated-outputs.sh
+
+# upload the mirror to HF: ph/d/simulated/outputs/<method>_outputs/<dataset>/...
+./upload-bulk-simulated-outputs.sh --dry-run
+./upload-bulk-simulated-outputs.sh --sync
+./upload-bulk-simulated-outputs.sh --methods stelarx --min-taxa 1000
+
+# download the mirror (or one method / dataset) with the generic folder downloader
+~/utils/hf-data-transfer/hf_download.sh \
+  --repo-id imAniksahA/blab \
+  --path-in-repo ph/d/simulated/outputs/stelarx_outputs \
+  --local-path $PHYLOGENY_DATA_DIR/outputs/simphy/stelarx_outputs
+
+
+
+
+# A10K OUTPUTS MIRROR (reproducibility fingerprint)
 #
-# ─────────────────────────────────────────────────────────────────────────────
-#  OPTION A:  Full Development Install  (edit code, rebuild, experiment)
-# ─────────────────────────────────────────────────────────────────────────────
+# Same idea for the 10k-astral-dataset. Every A10K run still writes into
+#   <data-dir>/10k-simphy/<R>/stelarx_outputs/<tree_type>/<setting>
+# and additionally mirrors the small outputs + a dataset record + per-replicate
+# input fingerprints into
+#   $PHYLOGENY_DATA_DIR/outputs/10k-astral-dataset/stelarx_outputs/<R>/<tree_type>/<setting>/
+# (never truegenetrees / estimatedgenetrees* / s_tree.trees)
+
+# back-fill the mirror for results produced before it existed
+./sync-a10k-outputs.sh --dry-run
+./sync-a10k-outputs.sh
+
+# upload the mirror to HF: ph/d/a10k/outputs/<method>_outputs/<R>/...
+./upload-a10k-outputs.sh --dry-run
+./upload-a10k-outputs.sh --sync
+./upload-a10k-outputs.sh --replicates 1-10
+
+# download it back
+~/utils/hf-data-transfer/hf_download.sh \
+  --repo-id imAniksahA/blab \
+  --path-in-repo ph/d/a10k/outputs/stelarx_outputs \
+  --local-path $PHYLOGENY_DATA_DIR/outputs/10k-astral-dataset/stelarx_outputs
+
+
+
+
+# STELAR-X research command sheet
 #
-#  Prerequisites: Java 11+ (JDK), and optionally CUDA toolkit (for GPU)
-#  (Maven is NOT needed — the bundled Maven Wrapper handles it automatically)
-#
-#  1. Clone the repo
-       git clone <repo-url> && cd STELAR-X
-#
-#  2. Build everything (one command)
-       ./install.sh                     # auto-detects CUDA; builds JAR + CUDA lib
-       ./install.sh --no-cuda           # skip CUDA (CPU-only)
-       ./install.sh --clean             # clean rebuild from scratch
-#
-#  3. Run
-       ./run.sh -i <gene_trees.tre> -o <output.tre>                 # default (GPU if available, else CPU)
-       ./run.sh -i <gene_trees.tre> -o <output.tre> --cpu-parallel  # force CPU parallel
-       ./run.sh -i <gene_trees.tre> -o <output.tre> --gpu -e        # GPU + expansion
-       ./run.sh -i <gene_trees.tre> -c <species.tre>                # score-only mode
-#
-#  4. Run with monitoring (time, memory, GPU stats)
-       ./run-with-monitor.sh -i <gene_trees.tre> -o <output.tre>
-#
-#  After editing code, just re-run:
-       ./install.sh                     # rebuilds everything
-#
-# ─────────────────────────────────────────────────────────────────────────────
-#  OPTION B:  Precompiled Release  (just use it, no source code needed)
-# ─────────────────────────────────────────────────────────────────────────────
-#
-#  Prerequisites: Java 11+ only. Nothing else.
-#
-#  1. Download and extract the release archive
-       tar xzf stelar-x-1.1.0.tar.gz
-#
-#  2. Run (that's it!)
-       ./stelar-x-1.1.0/stelar-x -i <gene_trees.tre> -o <output.tre>
-       ./stelar-x-1.1.0/stelar-x -i <gene_trees.tre> -o <output.tre> --cpu-parallel
-       ./stelar-x-1.1.0/stelar-x --help
-#
-#  Optional — add to PATH so you can run it from anywhere:
-       sudo ln -sf $(pwd)/stelar-x-1.1.0/stelar-x /usr/local/bin/stelar-x
-       stelar-x -i genes.tre -o out.tre
-#
-#  To build the release archive yourself (from the development install):
-       ./dist.sh                        # produces dist/stelar-x-1.1.0.tar.gz (~3.3 MB)
-       ./dist.sh --skip-build           # package existing build without rebuilding
-#
-###############################################################################
+# Notes:
+# - Use generic algorithm option flags everywhere: --opts / --opts-list
+# - For STELAR-X, result-affecting settings are stored under:
+#     stelarx_outputs/<setting>/...
+#   or for A10K:
+#     stelarx_outputs/<tree_type>/<setting>/...
+# - Verbosity flags such as -v / -vv do not affect the setting name
+# - Common setting names:
+#     --opts "--search-mode local"  -> search-mode_local
+#     --opts "--search-mode full"   -> search-mode_full
+
+
+
+
+
+
+
+./run-stelarx-with-monitor.sh -i $PHYLOGENY_DATA_DIR/1kp-og-rhodophyta.tre -o $PHYLOGENY_DATA_DIR/out-1kp-og-rhodophyta.tre --opts "--search-mode local -vv" --reference-species-tree $PHYLOGENY_DATA_DIR/1kp-st-5-astral.tre
+
+
+
+
+./run-stelarx-with-monitor.sh -i $PHYLOGENY_DATA_DIR/avian-14k-og-strca.tre -o $PHYLOGENY_DATA_DIR/out-stelarx-avian-14k-og-strca-complete-full.tre --opts "--search-mode full -vv --autocomplete-incomplete-gene-trees"
+
+
+
+# angio complete full with consensus
+./run-stelarx-with-monitor.sh -i $PHYLOGENY_DATA_DIR/all_gt_angio.tre -o $PHYLOGENY_DATA_DIR/out-stelarx-angio-complete-full.tre --opts "--search-mode full -vv --autocomplete-incomplete-gene-trees --consensus-experimental" --reference-species-tree $PHYLOGENY_DATA_DIR/s_tree_angio.tre
+
+
+
+
+############ angio 
+
+# complete local
+./run-stelarx-with-monitor.sh -i $PHYLOGENY_DATA_DIR/all_gt_angio.tre -o $PHYLOGENY_DATA_DIR/out-stelarx-angio-complete-local.tre --opts "--search-mode local -vv --autocomplete-incomplete-gene-trees" --reference-species-tree $PHYLOGENY_DATA_DIR/s_tree_angio.tre
+
+# complete full
+./run-stelarx-with-monitor.sh -i $PHYLOGENY_DATA_DIR/all_gt_angio.tre -o $PHYLOGENY_DATA_DIR/out-stelarx-angio-complete-full.tre --opts "--search-mode full -vv --autocomplete-incomplete-gene-trees" --reference-species-tree $PHYLOGENY_DATA_DIR/s_tree_angio.tre
+
+# incomplete local
+./run-stelarx-with-monitor.sh -i $PHYLOGENY_DATA_DIR/all_gt_angio.tre -o $PHYLOGENY_DATA_DIR/out-stelarx-angio-incomplete-local.tre --opts "--search-mode local -vv" --reference-species-tree $PHYLOGENY_DATA_DIR/s_tree_angio.tre
+
+# incomplete full
+./run-stelarx-with-monitor.sh -i $PHYLOGENY_DATA_DIR/all_gt_angio.tre -o $PHYLOGENY_DATA_DIR/out-stelarx-angio-incomplete-full.tre --opts "--search-mode full -vv" --reference-species-tree $PHYLOGENY_DATA_DIR/s_tree_angio.tre
+
+
+
+# angio complete full with consensus, prefix sum and anchor 
+./run-stelarx-with-monitor.sh -i $PHYLOGENY_DATA_DIR/angio/all_gt_angio.tre -o $PHYLOGENY_DATA_DIR/angio/out-stelarx-angio-complete-full.tre --opts "--search-mode full -vv --autocomplete-incomplete-gene-trees --consensus-experimental --stepb-quadratic-nn-balls --stepb-random-leftover-resolution --stepb-process-large-polytomies" --reference-species-tree $PHYLOGENY_DATA_DIR/angio/s_tree_angio.tre
+
+
+
+# angio complete full with consensus and anchor and simple-tree-walk 
+./run-stelarx-with-monitor.sh -i $PHYLOGENY_DATA_DIR/angio/all_gt_angio.tre -o $PHYLOGENY_DATA_DIR/angio/out-stelarx-angio-complete-full.tre --opts "--search-mode full -vv --autocomplete-incomplete-gene-trees --consensus-experimental --stepb-quadratic-nn-balls --stepb-random-leftover-resolution --stepb-process-large-polytomies --weight-intersection-method simple-tree-walk" --reference-species-tree $PHYLOGENY_DATA_DIR/angio/s_tree_angio.tre
+
+
+
+
+
+
+############ avian-48
+
+# complete local
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-48/avian-14k-og-strca.tre \
+  -o $PHYLOGENY_DATA_DIR/avian-48/out-stelarx-avian-48-complete-local.tre \
+  --opts "--search-mode local -vv --autocomplete-incomplete-gene-trees" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-48/avian14k_astral.tre
+
+# complete full
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-48/avian-14k-og-strca.tre \
+  -o $PHYLOGENY_DATA_DIR/avian-48/out-stelarx-avian-48-complete-full.tre \
+  --opts "--search-mode full -vv --autocomplete-incomplete-gene-trees" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-48/avian14k_astral.tre
+
+
+# complete full
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-48/avian-14k-og-strca.tre \
+  -o $PHYLOGENY_DATA_DIR/avian-48/out-stelarx-avian-48-complete-full.tre \
+  --opts "--search-mode full -vv --autocomplete-incomplete-gene-trees" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-48/avian14k_astral.tre
+
+
+
+# complete full
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-48/avian-14k-og-strca.tre \
+  -o $PHYLOGENY_DATA_DIR/avian-48/out-stelarx-avian-48-complete-full.tre \
+  --opts "--search-mode full -vv --autocomplete-incomplete-gene-trees" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-48/avian14k_astral.tre
+
+
+
+# complete full
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-48/avian-14k-og-strca.tre \
+  -o $PHYLOGENY_DATA_DIR/avian-48/out-stelarx-avian-48-complete-full.tre \
+  --opts "--search-mode full -vv --autocomplete-incomplete-gene-trees --weight-intersection-method smaller-side-traversal" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-48/avian14k_astral.tre
+
+
+# complete full
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-48/avian-14k-og-strca.tre \
+  -o $PHYLOGENY_DATA_DIR/avian-48/out-stelarx-avian-48-complete-full.tre \
+  --opts "--search-mode full -vv --autocomplete-incomplete-gene-trees --weight-intersection-method bitset" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-48/avian14k_astral.tre
+
+
+# complete full with bitset - 3 mins - best Q score 
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-48/avian-14k-og-strca.tre \
+  -o $PHYLOGENY_DATA_DIR/avian-48/out-stelarx-avian-48-complete-full.tre \
+  --opts "--search-mode full -vv --autocomplete-incomplete-gene-trees --weight-intersection-method bitset" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-48/avian14k_astral.tre
+
+
+
+# incomplete local
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-48/avian-14k-og-strca.tre \
+  -o $PHYLOGENY_DATA_DIR/avian-48/out-stelarx-avian-48-incomplete-local.tre \
+  --opts "--search-mode local -vv" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-48/avian14k_astral.tre
+
+
+
+# incomplete local with anchor outgroup 
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-48/avian-14k-og-strca.tre \
+  -o $PHYLOGENY_DATA_DIR/avian-48/out-stelarx-avian-48-incomplete-local.tre \
+  --opts "--search-mode local -vv" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-48/avian14k_astral.tre
+
+
+
+# incomplete full
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-48/avian-14k-og-strca.tre \
+  -o $PHYLOGENY_DATA_DIR/avian-48/out-stelarx-avian-48-incomplete-full.tre \
+  --opts "--search-mode full -vv" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-48/avian14k_astral.tre
+
+
+
+# incomplete full with anchor outgroup 
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-48/avian-14k-og-strca.tre \
+  -o $PHYLOGENY_DATA_DIR/avian-48/out-stelarx-avian-48-incomplete-full.tre \
+  --opts "--search-mode full -vv" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-48/avian14k_astral.tre
+
+
+
+
+# incomplete full with anchor outgroup 
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-48/avian-14k-og-strca.tre \
+  -o $PHYLOGENY_DATA_DIR/avian-48/out-stelarx-avian-48-incomplete-full.tre \
+  --opts "--search-mode full -vv --weight-intersection-method smaller-side-traversal" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-48/avian14k_astral.tre
+
+
+
+
+
+
+
+############ avian-363
+
+# complete local
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-363/63430.gene.trees \
+  -o $PHYLOGENY_DATA_DIR/avian-363/out-stelarx-avian-363-complete-local.tre \
+  --opts "--search-mode local -vv --autocomplete-incomplete-gene-trees" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-363/ref-paper-st-63K.tre
+
+
+# complete local - with prefix sum and anchoring 
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-363/63430.gene.trees \
+  -o $PHYLOGENY_DATA_DIR/avian-363/out-stelarx-avian-363-complete-local.tre \
+  --opts "--search-mode local -vv --autocomplete-incomplete-gene-trees" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-363/ref-paper-st-63K.tre
+
+
+# complete local - with simple tree walk 
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-363/63430.gene.trees \
+  -o $PHYLOGENY_DATA_DIR/avian-363/out-stelarx-avian-363-complete-local.tre \
+  --opts "--search-mode local -vv --autocomplete-incomplete-gene-trees --weight-intersection-method simple-tree-walk" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-363/ref-paper-st-63K.tre
+
+# complete local - with simple tree walk and anchoring 
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-363/63430.gene.trees \
+  -o $PHYLOGENY_DATA_DIR/avian-363/out-stelarx-avian-363-complete-local.tre \
+  --opts "--search-mode local -vv --autocomplete-incomplete-gene-trees --weight-intersection-method simple-tree-walk" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-363/ref-paper-st-63K.tre
 
 
 
@@ -66,322 +278,655 @@
 
 
 
-baselines/ASTRID/ASTRID1 -i all_gt_bs_rooted_37.tre -o out-37-as1.tre
-baselines/ASTRID/ASTRID2 -i all_gt_bs_rooted_37.tre -o out-37-as2.tre
 
-baselines/ASTRID/ASTRID2 -i all_gt_bs_rooted_100.tre -o out-100-as2.tre
+# complete full
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-363/63430.gene.trees \
+  -o $PHYLOGENY_DATA_DIR/avian-363/out-stelarx-avian-363-complete-full.tre \
+  --opts "--search-mode full -vv --autocomplete-incomplete-gene-trees" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-363/ref-paper-st-63K.tre
 
-baselines/ASTRID/ASTRID2 -i all_gt_bs_rooted_200.tre -o out-200-as2.tre
+
+# complete full
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-363/63430.gene.trees \
+  -o $PHYLOGENY_DATA_DIR/avian-363/out-stelarx-avian-363-complete-full.tre \
+  --opts "--search-mode full -vv --autocomplete-incomplete-gene-trees" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-363/ref-paper-st-63K.tre
 
 
+# complete full with simple tree walk and anchor outgroup 
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-363/63430.gene.trees \
+  -o $PHYLOGENY_DATA_DIR/avian-363/out-stelarx-avian-363-complete-full.tre \
+  --opts "--search-mode full -vv --autocomplete-incomplete-gene-trees --weight-intersection-method simple-tree-walk" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-363/ref-paper-st-63K.tre
+
+
+
+
+
+# incomplete local
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-363/63430.gene.trees \
+  -o $PHYLOGENY_DATA_DIR/avian-363/out-stelarx-avian-363-incomplete-local.tre \
+  --opts "--search-mode local -vv" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-363/ref-paper-st-63K.tre
+
+
+
+
+# incomplete full
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-363/63430.gene.trees \
+  -o $PHYLOGENY_DATA_DIR/avian-363/out-stelarx-avian-363-incomplete-full.tre \
+  --opts "--search-mode full -vv --weight-intersection-method bitset" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-363/ref-paper-st-63K.tre
+
+
+--weight-intersection-method simple-tree-walk
+
+
+
+# incomplete full
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-363/63430.gene.trees \
+  -o $PHYLOGENY_DATA_DIR/avian-363/out-stelarx-avian-363-incomplete-full.tre \
+  --opts "--search-mode full -vv --weight-intersection-method simple-tree-walk" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-363/ref-paper-st-63K.tre
+
+
+
+# incomplete full - simple tree walk with anchor (maybe around 6 hrs)
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-363/63430.gene.trees \
+  -o $PHYLOGENY_DATA_DIR/avian-363/out-stelarx-avian-363-incomplete-full.tre \
+  --opts "--search-mode full -vv --weight-intersection-method simple-tree-walk" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-363/ref-paper-st-63K.tre
+
+
+
+
+# incomplete full
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/avian-363/63430.gene.trees \
+  -o $PHYLOGENY_DATA_DIR/avian-363/out-stelarx-avian-363-incomplete-full.tre \
+  --opts "--search-mode full -vv" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/avian-363/ref-paper-st-63K.tre
+
+
+
+############ 1kp
+
+# complete local
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/1kp/Best.33.FAA_cleaned-og-33.tre \
+  -o $PHYLOGENY_DATA_DIR/1kp/out-stelarx-1kp-33-complete-local.tre \
+  --opts "--search-mode local -vv --autocomplete-incomplete-gene-trees" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/1kp/1kp-st-33-astral.tre
+
+# complete full
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/1kp/Best.33.FAA_cleaned-og-33.tre \
+  -o $PHYLOGENY_DATA_DIR/1kp/out-stelarx-1kp-33-complete-full.tre \
+  --opts "--search-mode full -vv --autocomplete-incomplete-gene-trees" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/1kp/1kp-st-33-astral.tre
+
+
+# incomplete local
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/1kp/Best.33.FAA_cleaned-og-33.tre \
+  -o $PHYLOGENY_DATA_DIR/1kp/out-stelarx-1kp-33-incomplete-local.tre \
+  --opts "--search-mode local -vv" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/1kp/1kp-st-33-astral.tre
+
+# incomplete full
+./run-stelarx-with-monitor.sh \
+  -i $PHYLOGENY_DATA_DIR/1kp/Best.33.FAA_cleaned-og-33.tre \
+  -o $PHYLOGENY_DATA_DIR/1kp/out-stelarx-1kp-33-incomplete-full.tre \
+  --opts "--search-mode full -vv" \
+  --reference-species-tree $PHYLOGENY_DATA_DIR/1kp/1kp-st-33-astral.tre
+
+
+
+==========================================================================================
+### RUNNING ASTER on Biological Datasets
+==========================================================================================
+
+## avian-48
+
+./run-baseline-with-monitor.sh \
+  -m aster \
+  -i ./data/avian-48/avian-14k-og-strca.tre \
+  -o ./data/avian-48/out-aster-avian-48.tre \
+  --aster-opts "-t 32"
+
+## avian-363
+
+./run-baseline-with-monitor.sh \
+  -m aster \
+  -i ./data/avian-363/63430.gene.trees \
+  -o ./data/avian-363/out-aster-avian-363.tre \
+  --aster-opts "-t 32"
+
+==========================================================================================
+
+
+==========================================================================================
+### RUNNING ASTRAL-MP on Biological Datasets
+==========================================================================================
 
 
 ./run-baseline-with-monitor.sh \
   -m astral \
-  -i all_gt_bs_rooted_37.tre \
-  -o out-37.tre \
+  -i ./data/avian-363/63430.gene.trees \
+  -o ./data/avian-363/out-astralmp-avian-363.tre \
   --astral-opts "-T 32 -t 4"
 
-
-
-
-
-
-
-
-## SETUP ASTER
-
-conda deactivate
-
-cd baselines/ASTER
-make
-make astral_int128
-
-conda activate main
-
-cd ../..
-
-baselines/ASTER/bin/astral4 all_gt_bs_rooted_37.tre
-
-
-
-baselines/ASTER/bin/astral4 -C -i all_gt_bs_rooted_200.tre -o out.tre -t 8
-
-baselines/ASTER/bin/astral4_int128 -i all_gt_bs_rooted_37.tre -o out-37.tre
-
-./run-baseline-with-monitor.sh -m aster -i all_gt_bs_rooted_37.tre -o data/out-astral-37.tre --astral-opts "-T 32"
-
-
-
-
-
-
-
-
-./run-with-monitor.sh -h
-
-./run-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out-37.tre -e 
-
-./run-with-monitor.sh -i all_gt_bs_rooted_48.tre -o out-48.tre
-
-./run-with-monitor.sh -i all_gt_bs_rooted_200.tre -o out-200.tre
-
-./run-aster-with-monitor.sh -i all_gt_bs_rooted_200.tre -o out.tre -t 16 -C
-
-
-## SETTING UP ASTRAL-MP
-
-cd baselines/ASTRAL
-chmod +x compile_astral.sh run_astral.sh setup_gpu_astral.sh
-./setup_gpu_astral.sh
-./compile_astral.sh
-./run_astral.sh -i ../inputs/in200.tr -o ./out.tr 
-
-
-./run_astral.sh -i ../inputs/in200.tr -o ./out.tr -T 32
-
-# --> make sure that GPU being used
-
-
-./run-baseline-with-monitor.sh -m astral -i all_gt_bs_rooted_37.tre -o data/out-astral-37.tre --astral-opts "-T 32"
-
-
-./run-baseline-with-monitor.sh \
-  -m astral \
-  -i all_gt_bs_rooted_37.tre \
-  -o data/out-astral-37.tre \
-  --astral-opts "-T 32"
-
-
-
-## Unified baseline runner (with monitoring)
-./run-baseline-with-monitor.sh -m aster -i all_gt_bs_rooted_37.tre -o data/out-aster.tre --aster-opts "-t 16 -C"
-./run-baseline-with-monitor.sh -m astral -i all_gt_bs_rooted_37.tre -o data/out-astral.tre --astral-opts "-t 8"
-./run-baseline-with-monitor.sh -m treeqmc -i all_gt_bs_rooted_37.tre -o data/out-treeqmc.tre
-./run-baseline-with-monitor.sh -m wqfmtree -i all_gt_bs_rooted_37.tre -o data/out-wqfm.tre
-./run-baseline-with-monitor.sh -m supertriplets -i all_gt_bs_rooted_37.tre -o data/out-supertriplets.tre
-./run-baseline-with-monitor.sh -m tmc -i all_gt_bs_rooted_37.tre -o data/out-tmc.tre --tmc-opts "--nd 1000"
-
-./run-bulk-simulated.sh -m stelar
-
-./run-bulk-simulated.sh -m aster --aster-opts "-t 32"
-./run-bulk-simulated.sh -m astral --astral-opts "-t 8" --astral-Xms 8g --astral-Xmx 64g
-./run-bulk-simulated.sh -m treeqmc
-./run-bulk-simulated.sh -m wqfmtree
-./run-bulk-simulated.sh -m supertriplets
-./run-bulk-simulated.sh -m tmc
-
-
-
-
-./run-bulk-standard.sh -m "astral" -f "500-taxon;1000-taxon" --fresh
-
-
-
-==============================================================================
-# Standard Dataset Download 
-==============================================================================
-
-~/utils/hf-data-transfer/hf_download.sh \
-  --repo-id imAniksahA/blab \
-  --path-in-repo ph/d/standard/500-taxon.zip \
-  --local-path ~/phylogeny/datasets/standard/500-taxon.zip
-  
-~/utils/hf-data-transfer/hf_download.sh \
-  --repo-id imAniksahA/blab \
-  --path-in-repo ph/d/standard/1000-taxon.zip \
-  --local-path ~/phylogeny/datasets/standard/1000-taxon.zip
-
-
-if needed to move with python:
-
-python3 - <<'PY'
-import os
-src = "1000-taxon.zip"
-dst_dir = os.path.expanduser("~/phylogeny/datasets/standard")
-os.makedirs(dst_dir, exist_ok=True)
-os.rename(src, os.path.join(dst_dir, src))
-print("moved")
-PY
-
-
-cd ~/phylogeny/datasets/standard
-
-unzip 500-taxon.zip
-unzip 1000-taxon.zip
-
-==============================================================================
-
-
-
-
-# Run Bulk Standard 
-====================
-
-# must have datasets at base-dir/datasets/standard
-./run-bulk-standard.sh 
-
-./run-bulk-standard.sh 
-
-./run-bulk-standard.sh -m "stelar;astral;aster" -f "37-taxon;48-taxon" --fresh
-
-## Bulk standard runner (multiple methods/folders)
-./run-bulk-standard.sh -m "stelar;astral;aster" -f "37-taxon;48-taxon"
-./run-bulk-standard.sh -m "treeqmc;wqfmtree;supertriplets;tmc" -f "500-taxon;1000-taxon"
-./run-bulk-standard.sh -m "stelar;stp-nni" -f "37-taxon" --fresh
-./run-bulk-standard.sh -m "aster;astral" -f "500-taxon;1000-taxon" --base-dir "$HOME/phylogeny" --dataset-dir "$HOME/phylogeny/datasets/standard"
-./run-bulk-standard.sh -m "stelar;aster;astral" -f "37-taxon;500-taxon" --no-notify
-./run-bulk-standard.sh -m "supertriplets;tmc;stp-nni" -f "37-taxon;48-taxon" --fresh --no-notify
-
-## Bulk standard runner (method opts override examples)
-./run-bulk-standard.sh -m "stelar" -f "37-taxon" --stelar-opts "--cpu --xms 8g --xmx 64g"
-./run-bulk-standard.sh -m "aster" -f "37-taxon;48-taxon" --aster-opts "-t 32 -C"
-./run-bulk-standard.sh -m "astral" -f "500-taxon;1000-taxon" --astral-opts "-t 8"
-./run-bulk-standard.sh -m "treeqmc;wqfmtree" -f "37-taxon" --treeqmc-opts "" --wqfm-opts ""
-./run-bulk-standard.sh -m "supertriplets;stp-nni" -f "37-taxon;48-taxon" --supertriplets-opts ""
-./run-bulk-standard.sh -m "tmc" -f "500-taxon" --tmc-opts "--nd 1000"
-
-## Bulk standard runner (combined multi-method + per-method opts)
-./run-bulk-standard.sh -m "stelar;aster;astral;tmc" -f "37-taxon;500-taxon" --stelar-opts "--cpu" --aster-opts "-t 16 -C" --astral-opts "-t 8" --tmc-opts "--nd 1000"
-./run-bulk-standard.sh -m "treeqmc;wqfmtree;supertriplets" -f "48-taxon;1000-taxon" --treeqmc-opts "" --wqfm-opts "" --supertriplets-opts "" --fresh
-./run-bulk-standard.sh -m "stelar;stp-nni" -f "37-taxon;48-taxon" --stelar-opts "--cpu --xms 8g --xmx 64g" --supertriplets-opts "" --fresh --no-notify
-
-## You can pass opts for methods not in -m; they are ignored safely
-./run-bulk-standard.sh -m "stelar;astral" -f "37-taxon" --stelar-opts "--cpu" --aster-opts "-t 64 -C" --tmc-opts "--nd 2000"
-
-
-
-./run-bulk-standard.sh -m "stelar" -f "37-taxon" --stelar-opts "-e"
-
-./run-bulk-standard.sh -m "stelar" -f "500-taxon"
-
-./run-bulk-standard.sh -m "stelar" -f "500-taxon" --stelar-opts "-e"
-
-./run-bulk-standard.sh -m "stelar" -f "1000-taxon"
-
-./run-bulk-standard.sh -m "stelar" -f "1000-taxon" --stelar-opts "-e"
-
-
-
-## Java memory options (STELAR / ASTRAL)
-./run.sh -i all_gt_bs_rooted_200.tre -o out-200.tre --Xms 8g --Xmx 64g
-STELAR_XMS=8g STELAR_XMX=64g ./run.sh -i all_gt_bs_rooted_200.tre -o out-200.tre
-ASTRAL_XMS=8g ASTRAL_XMX=64g ./baselines/ASTRAL/run_astral.sh -i all_gt_bs_rooted_200.tre -o out-astral.tre
-./baselines/ASTRAL/run_astral.sh -i all_gt_bs_rooted_200.tre -o out-astral.tre --Xms 8g --Xmx 64g
-
-
-==========================================================================================
-# a10k dataset download 
 ==========================================================================================
 
-rsync -av --exclude='.git/' ~/utils/ vast1:~/
-
-mkdir -p data
-
-cd data 
-
-~/utils/hf-data-transfer/hf_download.sh \
-  --repo-id imAniksahA/blab \
-  --path-in-repo ph/d/10k-astral-dataset.zip \
-  --local-path ~/phylogeny/STELAR-X/data/10k-astral-dataset.zip
-
-unzip 10k-astral-dataset.zip
-
-cd ..
-
-./run-a10k.sh -m stelar --data-dir data/10k-astral-dataset --tree-type true
-
-./run-a10k.sh -m astral -sr 1 -er 10 --data-dir data/10k-astral-dataset --tree-type true --astral-opts "-T 32"
-
-./run-a10k.sh -m astral -sr 3 -er 10 --data-dir data/10k-astral-dataset --tree-type estimated --astral-opts "-T 32"
-
-
-========================================================================================================================
-
-
-
-
-/home/aaniksahaa/Desktop/a10k/10k-astral-dataset
-
-./run-a10k.sh -m stelar --data-dir /home/aaniksahaa/Desktop/a10k/10k-astral-dataset --tree-type estimated
-
-./run-a10k.sh -m stelar --data-dir /home/aaniksahaa/Desktop/a10k/10k-astral-dataset --tree-type estimated -sr 2 -er 2
-
-./run-a10k.sh -m astral --data-dir /home/aaniksahaa/Desktop/a10k/10k-astral-dataset --tree-type estimated -sr 2 -er 2
 
 
 
 
 
-## A10K dataset runner (10k-astral-dataset layout)
-./run-a10k.sh -m stelar --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated --stelar-opts "--threads 16"
-./run-a10k.sh -m aster --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated --aster-opts "-t 32"
-./run-a10k.sh -m astral --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated --astral-opts "-t 8" --astral-Xms 8g --astral-Xmx 64g
-./run-a10k.sh -m treeqmc --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated
-./run-a10k.sh -m wqfmtree --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated
-./run-a10k.sh -m supertriplets --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated
-./run-a10k.sh -m tmc --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated --tmc-opts "--nd 1000"
+###############################################################################
+# A10K runs
+###############################################################################
 
-## A10K runner with --replicates (examples)
-./run-a10k.sh -m stelar --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated --replicates "1-5" --stelar-opts "--threads 16"
-./run-a10k.sh -m aster --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated --replicates "R1,R3,R5" --aster-opts "-t 32"
-./run-a10k.sh -m astral --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type true --replicates "2-4" --astral-opts "-t 8" --astral-Xms 8g --astral-Xmx 64g
-
-## A10K runner with --start-rep/--end-rep (examples)
-./run-a10k.sh -m stelar --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated --start-rep 4 --end-rep 15 --stelar-opts "--threads 16"
-./run-a10k.sh -m aster --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated -sr 1 -er 20 --aster-opts "-t 32"
-./run-a10k.sh -m astral --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type true -sr 7 -er 9 --astral-opts "-t 8" --astral-Xms 8g --astral-Xmx 64g
-
-## Simulated baseline tests with memory params
-./test-stelar-simulated.sh -t 1000 -g 500 --stelar-opts "--xms 8g --xmx 64g"
-./test-baseline-simulated.sh -m astral -t 1000 -g 500 --astral-opts "-t 8" --astral-Xms 8g --astral-Xmx 64g
-./run-a10k.sh -m astral --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated --astral-opts "-t 8"
-./run-a10k.sh -m treeqmc --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated
-./run-a10k.sh -m wqfmtree --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated
-./run-a10k.sh -m supertriplets --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated
-./run-a10k.sh -m tmc --data-dir /home/user/phylogeny/datasets/10k-astral-dataset --tree-type estimated --tmc-opts "--nd 1000"
+# Estimated gene trees, both local and full search
+./run-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --tree-type estimated --opts-list "--search-mode local;--search-mode full"
 
 
-Astral 10K:
-============
+# Estimated gene trees, one setting
+./run-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --tree-type estimated --opts "--search-mode full"
 
-python cleaner.py data/a10k/R1/estimatedgenetrees.tre data/a10k/R1/est-r.tre
-./run-with-monitor.sh -i data/a10k/R1/est-r.tre -o data/a10k/R1/stelar-est-out.tre
+# Estimated gene trees, both local and full search
+./run-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --tree-type estimated --opts-list "--search-mode local;--search-mode full"
 
-python rf.py data/a10k/R1/stelar-est-out.tre data/a10k/R1/s_tree.trees
+# Estimated gene trees, selected replicate range
+./run-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --tree-type estimated --start-rep 1 --end-rep 5 --opts "--search-mode full"
 
-python cleaner.py data/a10k/R1/estimatedgenetrees.tre data/a10k/R1/est-r-og-0.tre --outgroup "0"
+# True gene trees, selected replicate list
+./run-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --tree-type true --replicates "R1,R3,R5" --opts "--search-mode local"
 
-./run-with-monitor.sh -i data/a10k/R1/est-r-og-0.tre -o data/a10k/R1/stelar-est-og-0-out.tre
-
-python rf.py data/a10k/R1/stelar-est-og-0-out.tre data/a10k/R1/s_tree.trees
-
-
-in branch ext: 
-./run-with-monitor.sh data/a10k/R1/est-r-og-0.tre data/a10k/R1/stelar-est-og-0-out-mixed.tre
-
-python rf.py data/a10k/R1/stelar-est-og-0-out-mixed.tre data/a10k/R1/s_tree.trees
-
-
-Avian 363:
-===========
-
-cd data 
-
-wget https://erda.ku.dk/archives/341f72708302f1d0c461ad616e783b86/B10K/data_upload/01_alignments_and_gene_trees/intergenic_regions/63430.gene.trees.gz
-
-gunzip 63430.gene.trees.gz
-
-python cleaner.py data/63430.gene.trees data/63k-r-rand.tre
-
-python cleaner.py data/63430.gene.trees data/63k-r-og-strcam.tre --outgroup "Struthio_camelus"
-
-./run-with-monitor.sh -i data/63k-r-rand.tre -o data/sp-63k-r-rand.tre
-
-./run-with-monitor.sh -i data/63k-r-og-strcam.tre -o data/sp-63k-r-og-strcam.tre
+# True gene trees, selected replicate list, both settings
+./run-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --tree-type true --replicates "R1,R3,R5" --opts-list "--search-mode local;--search-mode full"
 
 
 
+
+
+
+
+
+# test on custom input and output 
+
+./run-stelarx-with-monitor.sh -i all_gt_bs_rooted_37.tre -o out-37-stelarx.tre --opts "--search-mode local -vv --autocomplete-incomplete-gene-trees" --reference-species-tree true_37.tre
+
+
+
+
+# testing on simulated incomplete trees 
+./test-stelarx-simulated.sh --incomplete -t 200 -g 100 --sb 0.000001 --spmin 100000 --spmax 200000 -r R1 --stelarx-opts "--search-mode local -vv --xmx 12g --autocomplete-incomplete-gene-trees"
+ 
+./test-stelarx-simulated.sh -t 200 -g 100 --sb 0.000001 --spmin 100000 --spmax 200000 -r R1 --stelarx-opts "--search-mode local -vv --xmx 12g --autocomplete-incomplete-gene-trees"
+ 
+ 
+./run-bulk-simulated.sh --method stelarx --num-replicates 5 --opts-list "--search-mode local;--search-mode full"
+
+./collect-stats-simulated.sh --simphy-dir ./simphy --out stelarx-scale-taxa.csv
+
+
+./run.sh -i all_gt_bs_rooted_37.tre --gpu --gpu-batches 10 -vv --search-mode full
+
+###############################################################################
+# Build
+###############################################################################
+
+bash build.sh
+
+
+
+###############################################################
+## TESTING 
+###############################################################
+
+
+####### OVERALL
+
+bash test/run_tests.sh --cpu
+bash test/run_tests.sh --gpu
+
+####### SIMILARITY MATRIX TESTING 
+###############################################################
+
+
+
+# CPU path — all 4 hand-crafted cases
+bash test/simmat_comparison/run_simmat_tests.sh --no-gen
+
+# GPU path — same cases
+bash test/simmat_comparison/run_simmat_tests.sh --no-gen --mode gpu
+
+
+
+####### UPGMA GUIDE TREE TESTING 
+###############################################################
+
+bash test/simmat_comparison/run_upgma_tests.sh
+
+
+
+
+####### TREE COMPLETION TESTING 
+###############################################################
+ 
+
+python3 test/simmat_comparison/compare_completed_trees.py \
+  "$PHYLOGENY_DATA_DIR"/simphy/data/t_200_g_100_sb_0.000001_spmin_100000_spmax_200000_incomplete/R1/all_gt.tre
+
+python3 test/simmat_comparison/compare_completed_trees.py \
+  "$PHYLOGENY_DATA_DIR"/simphy/data/t_100_g_100_sb_0.000001_spmin_500000_spmax_1500000_incomplete/R1/all_gt.tre
+
+
+
+echo "=== Completed tree comparison on smaller t=100 datasets ==="
+for d in "$PHYLOGENY_DATA_DIR"/simphy/data/t_100_g_100_sb_0.000001_spmin_500000_spmax_1500000_incomplete/R1 \
+         "$PHYLOGENY_DATA_DIR"/simphy/data/t_100_g_100_sb_0.000001_spmin_500000_spmax_1500000_incomplete/R5 \
+         "$PHYLOGENY_DATA_DIR"/simphy/data/t_100_g_100_sb_0.000001_spmin_500000_spmax_1500000_incomplete/R10; do
+    F="$d/all_gt.tre"
+    if [[ -f "$F" ]]; then
+        echo "--- $(basename $d) ---"
+        python3 test/simmat_comparison/compare_completed_trees.py "$F" 2>&1 | tail -5
+        echo ""
+    fi
+done
+
+
+
+
+
+###############################################################################
+# GPU batching flags  (weight calculation phase)
+###############################################################################
+#
+# Default behaviour (no flags): adaptive single-batch — all splits in one GPU
+# launch.  Batching is only activated by one of the flags below.
+#
+# Flag priority (highest → lowest):
+#   --no-gpu-batch  >  --gpu-batches  >  --gpu-batch-size  >  auto
+#
+# --no-gpu-batch
+#     Disable batching entirely.  All splits sent in one kernel launch.
+#     Equivalent to original single-launch behaviour.
+#
+# --gpu-batches N
+#     Force exactly N batches regardless of available VRAM.
+#     batchSize = ceil(numSplits / N) is computed at runtime.
+#     USE THIS for VRAM experiments: watch peak GPU memory drop by ~N×
+#     while runtime stays flat (static data — orderings, invIndex, parts —
+#     is uploaded once and stays resident across all batches).
+#
+# --gpu-batch-size S
+#     Set an explicit splits-per-batch override.
+#     numBatches = ceil(numSplits / S).
+#
+# --gpu-vram-occupancy-factor F    (default: 0.75)
+#     When batching is auto (no explicit --gpu-batches / --gpu-batch-size),
+#     use F × freeVRAM as the usable budget for the split batch buffer.
+#     The remaining (1-F) is reserved as headroom for driver, kernel stack,
+#     and page tables.  E.g. F=0.9 uses 90% of free VRAM per batch.
+#
+# Memory layout after batching:
+#   Permanent on GPU  :  orderings + invIndex + parts   [O(n·k)]
+#   Per-batch on GPU  :  splits slice + scores slice     [batchSize × 48 B]
+#   Peak VRAM savings :  numSplits / numBatches  (exact reduction)
+#
+# Examples:
+
+# Disable batching (original behaviour)
+./run.sh -i all_gt_bs_rooted_37.tre --gpu --no-gpu-batch -vv
+
+# Auto adaptive batching (default when --gpu and no explicit batch flags)
+./run.sh -i all_gt_bs_rooted_37.tre --gpu -vv
+
+# Force exactly 10 batches (VRAM usage drops ~10×; use with nvidia-smi to verify)
+./run.sh -i all_gt_bs_rooted_37.tre --gpu --gpu-batches 10 -vv
+
+# Force exactly 1 batch (same as --no-gpu-batch but goes through batch loop)
+./run.sh -i all_gt_bs_rooted_37.tre --gpu --gpu-batches 1 -vv
+
+# Explicit batch size of 500 000 splits per launch
+./run.sh -i all_gt_bs_rooted_37.tre --gpu --gpu-batch-size 500000 -vv
+
+# Increase VRAM occupancy to 90% (less conservative headroom)
+./run.sh -i all_gt_bs_rooted_37.tre --gpu --gpu-vram-occupancy-factor 0.9 -vv
+
+# Conservative 50% occupancy (more headroom for fragmented VRAM situations)
+./run.sh -i all_gt_bs_rooted_37.tre --gpu --gpu-vram-occupancy-factor 0.5 -vv
+
+# A10K large run: force 10 batches to reduce peak VRAM on 6M splits
+./run-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --tree-type estimated \
+    --opts "--search-mode full --gpu --gpu-batches 10"
+
+# Sweep: compare 1, 5, 10 batches to verify runtime is flat and VRAM drops
+./run.sh -i all_gt_bs_rooted_37.tre --gpu --gpu-batches 1  -vv
+./run.sh -i all_gt_bs_rooted_37.tre --gpu --gpu-batches 5  -vv
+./run.sh -i all_gt_bs_rooted_37.tre --gpu --gpu-batches 10 -vv
+
+
+###############################################################################
+# Core single-run examples
+###############################################################################
+
+# 37-taxon style local/full runs
+./run.sh -i all_gt_bs_rooted_37.tre -o /tmp/stelarx37_local.tre --search-mode local -vv
+./run.sh -i all_gt_bs_rooted_37.tre -o /tmp/stelarx37_full.tre --search-mode full -vv
+
+# Wrapper alias
+./run-stelarx.sh -i all_gt_bs_rooted_37.tre -o /tmp/stelarx37_full_wrapper.tre --search-mode full -vv
+
+# Monitored run
+./run-stelarx-with-monitor.sh -i all_gt_bs_rooted_37.tre -o /tmp/stelarx37_monitored.tre --opts "--search-mode full -vv" --no-notify --no-build
+
+
+###############################################################################
+# Simulation generation
+###############################################################################
+
+# 100 taxa, 100 gene trees
+./sim.sh -t 100 -g 100 --sb 0.000001 --spmin 100000 --spmax 200000 -rs 1 --fresh
+
+# 1000 taxa, 1000 gene trees
+./sim.sh -t 1000 -g 1000 --sb 0.000001 --spmin 100000 --spmax 200000 -rs 1 --fresh
+
+
+###############################################################################
+# Simulated STELAR-X testing
+###############################################################################
+
+# Single simulated replicate, local search
+./test-stelarx-simulated.sh -t 100 -g 100 --sb 0.000001 --spmin 100000 --spmax 200000 -r R1 --fresh --opts "--search-mode local"
+
+# Single simulated replicate, full search
+./test-stelarx-simulated.sh -t 100 -g 100 --sb 0.000001 --spmin 100000 --spmax 200000 -r R1 --fresh --opts "--search-mode full"
+
+# Larger simulated case
+./test-stelarx-simulated.sh -t 1000 -g 1000 --sb 0.000001 --spmin 100000 --spmax 200000 -r R1 --fresh --opts "--search-mode full"
+
+# The script can auto-run sim.sh if the matching simulated dataset is missing
+
+
+
+
+###############################################################################
+# Simulated stats collection
+###############################################################################
+
+./collect-stats-simulated.sh --simphy-dir ./simphy --out /tmp/stelarx-simulated-stats.csv
+
+./run-bulk-simulated.sh \
+  --method stelarx \
+  --num-replicates 3 \
+  --opts-list "--search-mode local --weight-intersection-method smaller-side-traversal"
+
+
+
+# for small cases 
+
+./run-bulk-simulated.sh \
+  --method stelarx \
+  --num-replicates 5 \
+  --opts-list "--search-mode local --weight-intersection-method smaller-side-traversal; --search-mode full --weight-intersection-method smaller-side-traversal;"
+
+
+
+
+###############################################################################
+# Bulk simulated sweeps
+###############################################################################
+
+
+./run-bulk-simulated.sh \
+  --method stelarx \
+  --num-replicates 3 \
+  --opts-list "--search-mode local --weight-intersection-method smaller-side-traversal"
+
+
+./run-bulk-simulated.sh \
+  --method stelarx \
+  --num-replicates 5 \
+  --opts-list "--search-space S1 --intersection-method I1;--search-space S2 --intersection-method I1;--search-space S3 --intersection-method I1"
+
+./run-bulk-simulated.sh \
+  --method stelarx \
+  --num-replicates 5 \
+  --opts-list "--search-space S1 --intersection-method I1;" --no-notify 
+
+
+
+
+./run-bulk-simulated.sh --method stelarx --num-replicates 5 --opts-list "--search-mode local --weight-intersection-method smaller-side-traversal;--search-mode full --weight-intersection-method smaller-side-traversal"
+
+
+# One setting only
+./run-bulk-simulated.sh --method stelarx --num-replicates 1 --opts "--search-mode full"
+
+# Sweep over both main search modes
+./run-bulk-simulated.sh --method stelarx --num-replicates 1 --opts-list "--search-mode local;--search-mode full"
+
+
+###############################################################################
+# Clear all simulated data and inferred results
+###############################################################################
+
+# Preview the exact directory that would be removed
+./clear-bulk-simulated.sh --dry-run
+
+# Permanently remove $PHYLOGENY_DATA_DIR/simphy/data
+./clear-bulk-simulated.sh --yes
+
+
+###############################################################################
+# Standard dataset bulk runs
+###############################################################################
+
+
+
+./run-bulk-standard.sh \
+  --method stelarx \
+  --opts-list "--search-mode local --weight-intersection-method smaller-side-traversal;--search-mode full --weight-intersection-method smaller-side-traversal"
+
+
+./run-bulk-standard.sh \
+  --method stelarx \
+  --opts-list "--search-mode local --weight-intersection-method smaller-side-traversal;--search-mode full --weight-intersection-method smaller-side-traversal"
+
+
+./run-bulk-standard.sh \
+  --method stelarx \
+  --opts-list "--search-space S1 --intersection-method I1;--search-space S2 --intersection-method I1;--search-space S3 --intersection-method I1"
+
+
+# for local 
+./run-bulk-standard.sh \
+  --method stelarx \
+  --dataset-dir ~/research/phylogeny/datasets/phylo-standard-datasets \
+  --opts-list "--search-space S1 --intersection-method I1;--search-space S2 --intersection-method I1;--search-space S3 --intersection-method I1"
+
+
+
+"--search-mode full -vv --autocomplete-incomplete-gene-trees --consensus-experimental --stepb-quadratic-nn-balls --stepb-random-leftover-resolution --stepb-process-large-polytomies"
+
+
+./run-bulk-standard.sh \
+  --method stelarx \
+  --opts-list "--search-mode full -vv --autocomplete-incomplete-gene-trees --consensus-experimental --stepb-quadratic-nn-balls --stepb-random-leftover-resolution --stepb-process-large-polytomies"
+
+
+./run-bulk-standard.sh \
+  --method astral
+
+
+
+# All configured standard folders with one setting
+./run-bulk-standard.sh --method "stelarx" --opts "--search-mode full"
+
+# All configured standard folders with both local and full search
+./run-bulk-standard.sh --method "stelarx" --opts-list "--search-mode local;--search-mode full"
+
+# One standard folder only, both settings, force rerun
+./run-bulk-standard.sh --method "stelarx" --folder "37-taxon" --opts-list "--search-mode local;--search-mode full" --fresh
+
+
+./clear-bulk-standard.sh \
+  --method stelarx \
+  --all-results \
+  --yes
+
+./clear-bulk-standard.sh \
+  --method all \
+  --all-results \
+  --yes
+
+
+
+
+###############################################################################
+# Standard dataset stats collection
+###############################################################################
+
+./collect-stats-standard.sh
+
+# for local 
+./collect-stats-standard.sh --dataset-dir ~/research/phylogeny/datasets/phylo-standard-datasets --output /tmp/stelarx-standard-stats.csv
+
+
+###############################################################################
+# A10K runs
+###############################################################################
+
+"--search-mode full -vv --autocomplete-incomplete-gene-trees --consensus-experimental --stepb-quadratic-nn-balls --stepb-random-leftover-resolution --stepb-process-large-polytomies"
+
+
+./clear-a10k.sh \
+  --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset \
+  --yes
+
+--weight-intersection-method smaller-side-traversal
+
+
+
+./run-a10k.sh \
+  --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset \
+  --tree-type "true;estimated" \
+  --opts-list "--search-space S1 --intersection-method I1;--search-space S2 --intersection-method I1;--search-space S3 --intersection-method I1"
+
+
+./run-a10k.sh \
+  --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset \
+  --tree-type true \
+  --start-rep 1 --end-rep 10 \
+  --opts "--weight-intersection-method smaller-side-traversal --search-mode full -vv --autocomplete-incomplete-gene-trees --consensus-experimental --stepb-quadratic-nn-balls --stepb-random-leftover-resolution --stepb-process-large-polytomies"
+
+
+
+./run-a10k.sh \
+  --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset \
+  --tree-type estimated \
+  --start-rep 1 --end-rep 10 \
+  --opts "--weight-intersection-method smaller-side-traversal --search-mode full -vv --autocomplete-incomplete-gene-trees --consensus-experimental --stepb-quadratic-nn-balls --stepb-random-leftover-resolution --stepb-process-large-polytomies"
+
+
+
+./run-a10k.sh \
+  --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset \
+  --tree-type true \
+  --start-rep 1 --end-rep 10 \
+  --opts "--weight-intersection-method prefix-sum --search-mode full -vv --autocomplete-incomplete-gene-trees --consensus-experimental --stepb-quadratic-nn-balls --stepb-random-leftover-resolution --stepb-process-large-polytomies"
+
+
+./run-a10k.sh \
+  --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset \
+  --tree-type estimated \
+  --start-rep 1 --end-rep 10 \
+  --opts "--weight-intersection-method prefix-sum --search-mode full -vv --autocomplete-incomplete-gene-trees --consensus-experimental --stepb-quadratic-nn-balls --stepb-random-leftover-resolution --stepb-process-large-polytomies"
+
+
+
+
+
+
+
+# Estimated gene trees, one setting
+./run-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --tree-type estimated --opts "--search-mode full"
+
+# Estimated gene trees, both local and full search
+./run-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --tree-type estimated --opts-list "--search-mode local;--search-mode full"
+
+# Estimated gene trees, selected replicate range
+./run-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --tree-type estimated --start-rep 1 --end-rep 5 --opts "--search-mode full"
+
+# True gene trees, selected replicate list
+./run-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --tree-type true --replicates "R1,R3,R5" --opts "--search-mode local"
+
+# True gene trees, selected replicate list, both settings
+./run-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --tree-type true --replicates "R1,R3,R5" --opts-list "--search-mode local;--search-mode full"
+
+
+###############################################################################
+# A10K stats collection
+###############################################################################
+
+# also copies the merged CSV into the outputs mirror
+./collect-scores-a10k.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --start-rep 1 --end-rep 20
+
+# A10K outputs mirror: back-fill, publish (see the section at the top of this file)
+./sync-a10k-outputs.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset --dry-run
+./sync-a10k-outputs.sh --data-dir $PHYLOGENY_DATA_DIR/10k-astral-dataset
+./upload-a10k-outputs.sh --sync --dry-run
+./upload-a10k-outputs.sh --sync
+
+
+###############################################################################
+# Example output paths
+###############################################################################
+
+# Simulated
+$PHYLOGENY_DATA_DIR/simphy/data/t_100_g_100_sb_0.000001_spmin_100000_spmax_200000/R1/stelarx_outputs/search-mode_full/out-stelarx.tre
+$PHYLOGENY_DATA_DIR/simphy/data/t_100_g_100_sb_0.000001_spmin_100000_spmax_200000/R1/stelarx_outputs/search-mode_full/out-stelarx_stats.csv
+$PHYLOGENY_DATA_DIR/simphy/data/t_100_g_100_sb_0.000001_spmin_100000_spmax_200000/R1/stelarx_outputs/search-mode_full/stat-stelarx.csv
+$PHYLOGENY_DATA_DIR/simphy/data/t_100_g_100_sb_0.000001_spmin_100000_spmax_200000/R1/stelarx_outputs/search-mode_local/stat-stelarx.csv
+
+# A10K
+data/10k-astral-dataset/10k-simphy/R1/stelarx_outputs/estimated/search-mode_full/stat-stelarx.csv
+data/10k-astral-dataset/10k-simphy/R1/stelarx_outputs/estimated/search-mode_local/stat-stelarx.csv
+
+# A10K outputs mirror
+$PHYLOGENY_DATA_DIR/outputs/10k-astral-dataset/stelarx_outputs/a10k-dataset.command
+$PHYLOGENY_DATA_DIR/outputs/10k-astral-dataset/stelarx_outputs/a10k_stelarx_scores_merged.csv
+$PHYLOGENY_DATA_DIR/outputs/10k-astral-dataset/stelarx_outputs/R1/inputs.tsv
+$PHYLOGENY_DATA_DIR/outputs/10k-astral-dataset/stelarx_outputs/R1/estimated/search-mode_full/out-stelarx.tre
+$PHYLOGENY_DATA_DIR/outputs/10k-astral-dataset/stelarx_outputs/R1/estimated/search-mode_full/out-stelarx.command
+
+
+
+## QUARTET SCORING 
+
+
+./run.sh -i gene_trees.tre --score-species-tree species_tree.tre --gpu
+
+./run.sh -i all_gt_bs_rooted_37.tre --score-species-tree out-37-stelarx.tre --gpu
+
+
+./run.sh -i $PHYLOGENY_DATA_DIR/all_gt_angio.tre --score-species-tree $PHYLOGENY_DATA_DIR/s_tree_angio.tre --gpu
+
+
+./run.sh -i $PHYLOGENY_DATA_DIR/avian-363/63430.gene.trees --score-species-tree $PHYLOGENY_DATA_DIR/avian-363/ref-paper-st-63K.tre --gpu
+
+
+./run.sh -i $PHYLOGENY_DATA_DIR/avian-48/avian-14k-og-strca.tre --score-species-tree $PHYLOGENY_DATA_DIR/avian-48/avian14k_astral.tre --gpu
 
 
 ===========================================================================
@@ -389,22 +934,8 @@ CPU ONLY RUNS
 ===========================================================================
 
 ./run-bulk-simulated.sh \
-  -m stelar \
-  --stelar-opts "--cpu-parallel -s NONE" \
-  --num-replicates 5 \
-  -T 32
-
-./run-bulk-simulated.sh \
-  -m astral \
-  --num-replicates 5 \
-  --astral-opts "-C -T 32 -t 0"
-
-
-./run-bulk-simulated.sh \
-  -m aster \
-  --num-replicates 5 \
-  --aster-opts "-t 32"
+  -m stelarx \
+  --stelarx-opts "--cpu --threads 32 --search-mode local --weight-intersection-method smaller-side-traversal" \
+  --num-replicates 5
 
 ===========================================================================
-
-

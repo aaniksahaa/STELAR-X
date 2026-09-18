@@ -1,0 +1,46 @@
+=== Phase 3 Cluster Extraction Verification ===
+Taxa: 37  Trees: 200  Seeds: 2
+Unique clusters in X: 1200
+All-taxa hash: CH{size=37, sum0=b42cea20d51aec9a, xor0=3da11387221aa25f}
+
+
+--- Summary ---
+ALL ASSERTIONS PASSED
+
+--- Size distribution ---
+  size   1: 37 clusters
+  size   2: 66 clusters
+  size   3: 68 clusters
+  size   4: 65 clusters
+  size   5: 56 clusters
+  size   6: 49 clusters
+  size   7: 34 clusters
+  size   8: 36 clusters
+  size   9: 22 clusters
+  size  10: 22 clusters
+  size  11: 21 clusters
+  size  12: 22 clusters
+  size  13: 19 clusters
+  size  14: 13 clusters
+  size  15: 16 clusters
+  size  16: 18 clusters
+  size  17: 18 clusters
+  size  18: 18 clusters
+  size  19: 18 clusters
+  size  20: 18 clusters
+  size  21: 18 clusters
+  size  22: 16 clusters
+  size  23: 13 clusters
+  size  24: 19 clusters
+  size  25: 22 clusters
+  size  26: 21 clusters
+  size  27: 22 clusters
+  size  28: 22 clusters
+  size  29: 36 clusters
+  size  30: 34 clusters
+  size  31: 49 clusters
+  size  32: 56 clusters
+  size  33: 65 clusters
+  size  34: 68 clusters
+  size  35: 66 clusters
+  size  36: 37 clusters

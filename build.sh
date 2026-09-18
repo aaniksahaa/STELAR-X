@@ -1,13 +1,19 @@
 #!/bin/bash
-#
-# STELAR-X Build Script
-# ======================
-# Quick rebuild of STELAR-X (Java + CUDA).
-# Skips Java/JDK checks for fast iteration during development.
-#
-# Usage:
-#   ./build.sh              # Quick rebuild (auto-detects CUDA)
-#   ./build.sh --clean      # Clean rebuild from scratch
-#   ./build.sh --no-cuda    # Skip CUDA compilation
-#
-exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/install.sh" --quick "$@"
+set -e
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+SRC="$ROOT/src"
+BUILD="$ROOT/build"
+
+echo "=== Building STELAR-X ==="
+rm -rf "$BUILD"
+mkdir -p "$BUILD"
+
+TMP_SRC_LIST="$(mktemp /tmp/stelarx_src.XXXXXX.txt)"
+trap 'rm -f "$TMP_SRC_LIST"' EXIT
+find "$SRC" -name "*.java" > "$TMP_SRC_LIST"
+javac -d "$BUILD" -sourcepath "$SRC" @"$TMP_SRC_LIST"
+rm -f "$TMP_SRC_LIST"
+trap - EXIT
+
+echo "Build OK -> $BUILD"
+echo "Run: ./stelarx -i <rooted-input.tre> -vv --no-build"

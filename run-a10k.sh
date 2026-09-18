@@ -1,427 +1,390 @@
 #!/usr/bin/env bash
 # run-a10k.sh
-# Run baselines on the 10k-astral dataset directory structure.
-# For each replicate, run a baseline on either estimated or true gene trees,
-# store outputs under <R?>/<method>_outputs/{estimated,true}, and compute RF.
+# STELAR-X runner for the 10k-simphy dataset layout.
 
 set -euo pipefail
 
-NTFY_CHANNEL_NAME="anik-test"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/scripts/a10k-outputs-dir.sh"
 
-METHOD=""
-TREE_TYPE="estimated"   # estimated | true
+# Propagate terminal color preference to Java subprocesses even when this
+# script's output is piped through tee into the per-run log below.
+[[ -t 1 || -t 2 ]] && export FORCE_COLOR=1
+
+NTFY_CHANNEL_NAME="${NTFY_CHANNEL_NAME:-anik-phylo-stx}"
+
+# Exact invocation of this script, appended to each run's command record.
+SCRIPT_ARGV=("$0" "$@")
+
+TREE_TYPES_RAW="estimated"
 DATA_DIR=""
-BASE_DIR=""
-BASE_DIR_SET=false
-STELAR_ROOT=""
-STELAR_ROOT_SET=false
-BASELINES_DIR=""
-BASELINES_DIR_SET=false
+A10K_OUTPUTS_DIR=""
+OUTPUTS_MIRROR=true
 REPLICATES_SPEC=""
 START_REP=""
 END_REP=""
 FRESH=false
-
-# Method options
-ASTER_OPTS=""
-ASTER_BIN=""
-ASTRAL_OPTS=""
-ASTRAL_XMS=""
-ASTRAL_XMX=""
-TREEQMC_OPTS=""
-WQFM_OPTS=""
-SUPERTRIPLETS_OPTS=""
-TMC_OPTS=""
-STELAR_OPTS=""
-
-# Monitoring options (DEFAULT: ON)
+STELARX_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STELARX_OPTS="--search-space S2 -vv"
+STELARX_OPTS_LIST_RAW=""
 TIME_MONITOR=true
 GPU_MONITOR=true
 NO_NOTIFY=false
-DEBUG=0
+
+source "${STELARX_ROOT}/experiment-setting-name.sh"
+
+csv_get_field() {
+  local file="$1"
+  shift
+  local header data
+  header="$(head -n1 "$file" 2>/dev/null || true)"
+  data="$(sed -n '2p' "$file" 2>/dev/null || true)"
+  if [[ -z "$header" || -z "$data" ]]; then
+    echo ""
+    return 0
+  fi
+  IFS=',' read -r -a headers <<< "$header"
+  IFS=',' read -r -a values <<< "$data"
+  for key in "$@"; do
+    for i in "${!headers[@]}"; do
+      if [[ "${headers[$i]}" == "$key" ]]; then
+        echo "${values[$i]:-}"
+        return 0
+      fi
+    done
+  done
+  echo ""
+}
+
+# Example single setting:
+# STELARX_OPTS="--search-space S2 --intersection-method I2"
+#
+# Example sweep over search-space presets:
+# STELARX_OPTS_LIST_RAW="--search-space S1;--search-space S2;--search-space S3"
+#
+# This becomes search-space_S2__intersection-method_I2. Verbosity flags such as
+# -v/-vv are ignored when constructing the setting name.
 
 print_help() {
   cat <<EOF
 run-a10k.sh
 
 Required:
-  --method, -m         Method: stelar, aster, astral, treeqmc, wqfmtree, supertriplets, tmc
-  --data-dir           Path to dataset root (e.g., /home/user/phylogeny/datasets/10k-astral-dataset)
+  --data-dir           Path to A10K dataset root containing 10k-simphy/
 
 Optional:
-  --tree-type          estimated | true (default: estimated)
-  --replicates         Replicates to run (e.g., "1-20" or "R1,R2,R3"; default: all R* under 10k-simphy)
-  --start-rep, -sr     Start replicate number (1-20). Requires --end-rep.
-  --end-rep, -er       End replicate number (1-20). Requires --start-rep.
-  --fresh              Force rerun even if stat file exists
-  --base-dir, -b       Base dir (assumes STELAR-X at BASE_DIR/STELAR-X)
-  --stelar-root        Path to STELAR-X root (overrides --base-dir)
-  --baselines-dir      Path to baselines directory (overrides --stelar-root)
-  --no-time-monitor    Disable time-monitoring
-  --no-gpu-monitor     Disable GPU-monitoring
-  --no-notify, -nn     Disable ntfy.sh notifications
-  --debug              Enable shell tracing
+  --tree-type          estimated | true, or a semicolon-separated list
+                       such as "true;estimated" (default: estimated)
+  --replicates         Replicates to run, e.g. "1-20" or "R1,R2"
+  --start-rep, -sr     Start replicate number
+  --end-rep, -er       End replicate number
+  --stelarx-root       Path to STELAR-X root
+  --opts, --alg-opts   Extra options for the selected algorithm
+  --opts-list, --alg-opts-list
+                       Semicolon-separated list of option strings to loop over
+  --fresh              Force rerun even if stat-stelarx.csv exists
+  --a10k-outputs-dir   Reproducibility mirror root for the small run outputs
+                       (default: the "outputs" sibling of the dataset, i.e.
+                        ".../10k-astral-dataset" -> ".../outputs/10k-astral-dataset")
+  --no-outputs-mirror  Do not copy results into the outputs mirror
+  --no-time-monitor    Disable time monitoring
+  --no-gpu-monitor     Disable GPU monitoring
+  --no-notify, -nn     Disable ntfy notifications
 
-Method Options:
-  --aster-opts "..."         Extra options for ASTER
-  --aster-bin PATH          Path to ASTER binary (relative to ASTER root or absolute)
-  --astral-opts "..."        Extra options for ASTRAL
-  --astral-xms SIZE          ASTRAL Java Xms (e.g., 4g)
-  --astral-xmx SIZE          ASTRAL Java Xmx (e.g., 128g)
-  --astral-Xms SIZE          Same as --astral-xms
-  --astral-Xmx SIZE          Same as --astral-xmx
-  --treeqmc-opts "..."       Extra options for TreeQMC
-  --wqfm-opts "..."          Extra options for wQFM-TREE
-  --supertriplets-opts "..." Extra options for SuperTriplets wrapper
-  --tmc-opts "..."           Extra options for TMC wrapper
-  --stelar-opts "..."        Extra options for STELAR-X (passed to run-with-monitor.sh)
+Examples:
+  ./run-a10k.sh --data-dir /path/to/10k-astral-dataset --tree-type estimated --opts "--search-space S1 --intersection-method I2 -vv"
+  ./run-a10k.sh --data-dir /path/to/10k-astral-dataset --tree-type "true;estimated" --opts "--search-space S1 --intersection-method I2 -vv"
+  ./run-a10k.sh --data-dir /path/to/10k-astral-dataset --tree-type estimated --opts "--search-space S2 --intersection-method I2 -vv"
+  ./run-a10k.sh --data-dir /path/to/10k-astral-dataset --tree-type estimated --opts-list "--search-space S1 -vv;--search-space S2 -vv;--search-space S3 -vv"
+  The first example setting is search-space_S1__intersection-method_I2.
+  Verbosity is ignored; other meaningful options are appended to the name.
+
+Results are written to
+  <data-dir>/10k-simphy/<R>/stelarx_outputs/<tree-type>/<setting>
+as before and mirrored (with the dataset record and the replicate's input
+fingerprints) to
+  <outputs>/stelarx_outputs/<R>/<tree-type>/<setting>.
+Gene trees and species trees are never copied into the mirror.
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --method|-m) METHOD="$2"; shift 2 ;;
-    --tree-type) TREE_TYPE="$2"; shift 2 ;;
     --data-dir) DATA_DIR="$2"; shift 2 ;;
+    --tree-type) TREE_TYPES_RAW="$2"; shift 2 ;;
+    --tree-type=*) TREE_TYPES_RAW="${1#*=}"; shift ;;
     --replicates) REPLICATES_SPEC="$2"; shift 2 ;;
     --start-rep|-sr) START_REP="$2"; shift 2 ;;
     --end-rep|-er) END_REP="$2"; shift 2 ;;
+    --stelarx-root|--stelar-root) STELARX_ROOT="$2"; shift 2 ;;
+    --opts|--alg-opts|--stelarx-opts|--stelar-opts) STELARX_OPTS="$2"; shift 2 ;;
+    --opts-list|--alg-opts-list|--stelarx-opts-list|--stelar-opts-list) STELARX_OPTS_LIST_RAW="$2"; shift 2 ;;
     --fresh) FRESH=true; shift ;;
-    --base-dir|-b) BASE_DIR="$2"; BASE_DIR_SET=true; shift 2 ;;
-    --stelar-root) STELAR_ROOT="$2"; STELAR_ROOT_SET=true; shift 2 ;;
-    --baselines-dir) BASELINES_DIR="$2"; BASELINES_DIR_SET=true; shift 2 ;;
+    --a10k-outputs-dir|--outputs-dir) A10K_OUTPUTS_DIR="$2"; shift 2 ;;
+    --a10k-outputs-dir=*|--outputs-dir=*) A10K_OUTPUTS_DIR="${1#*=}"; shift ;;
+    --no-outputs-mirror) OUTPUTS_MIRROR=false; shift ;;
     --no-time-monitor) TIME_MONITOR=false; shift ;;
     --no-gpu-monitor) GPU_MONITOR=false; shift ;;
     --no-notify|-nn) NO_NOTIFY=true; shift ;;
-    --debug) DEBUG=1; shift ;;
-    --aster-opts) ASTER_OPTS="$2"; shift 2 ;;
-    --aster-opts=*) ASTER_OPTS="${1#*=}"; shift ;;
-    --aster-bin) ASTER_BIN="$2"; shift 2 ;;
-    --astral-opts) ASTRAL_OPTS="$2"; shift 2 ;;
-    --astral-opts=*) ASTRAL_OPTS="${1#*=}"; shift ;;
-    --astral-xms|--astral-Xms) ASTRAL_XMS="$2"; shift 2 ;;
-    --astral-xmx|--astral-Xmx) ASTRAL_XMX="$2"; shift 2 ;;
-    --treeqmc-opts) TREEQMC_OPTS="$2"; shift 2 ;;
-    --treeqmc-opts=*) TREEQMC_OPTS="${1#*=}"; shift ;;
-    --wqfm-opts) WQFM_OPTS="$2"; shift 2 ;;
-    --wqfm-opts=*) WQFM_OPTS="${1#*=}"; shift ;;
-    --supertriplets-opts) SUPERTRIPLETS_OPTS="$2"; shift 2 ;;
-    --supertriplets-opts=*) SUPERTRIPLETS_OPTS="${1#*=}"; shift ;;
-    --tmc-opts) TMC_OPTS="$2"; shift 2 ;;
-    --tmc-opts=*) TMC_OPTS="${1#*=}"; shift ;;
-    --stelar-opts) STELAR_OPTS="$2"; shift 2 ;;
-    --stelar-opts=*) STELAR_OPTS="${1#*=}"; shift ;;
     --help|-h) print_help; exit 0 ;;
-    *) echo "Unknown option: $1"; print_help; exit 1 ;;
+    *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
 
-if [[ -z "$METHOD" || -z "$DATA_DIR" ]]; then
-  echo "Error: --method and --data-dir are required."
-  print_help
+if [[ -z "$DATA_DIR" ]]; then
+  echo "Error: --data-dir is required."
   exit 2
 fi
 
-case "$METHOD" in
-  stelar|aster|astral|treeqmc|tree-qmc|wqfmtree|wqfm-tree|supertriplets|tmc) ;;
-  *) echo "Error: unknown method '$METHOD'"; exit 3 ;;
-esac
-if [[ "$METHOD" == "tree-qmc" ]]; then
-  METHOD="treeqmc"
-fi
-if [[ "$METHOD" == "wqfm-tree" ]]; then
-  METHOD="wqfmtree"
-fi
-
-if [[ "$TREE_TYPE" != "estimated" && "$TREE_TYPE" != "true" ]]; then
-  echo "Error: --tree-type must be 'estimated' or 'true'"
-  exit 4
-fi
-
-if [[ -n "$START_REP" || -n "$END_REP" ]]; then
-  if [[ -z "$START_REP" || -z "$END_REP" ]]; then
-    echo "Error: --start-rep and --end-rep must be provided together."
-    exit 4
-  fi
-  if [[ -n "$REPLICATES_SPEC" ]]; then
-    echo "Error: --replicates cannot be combined with --start-rep/--end-rep."
-    exit 4
-  fi
-  if [[ ! "$START_REP" =~ ^[0-9]+$ || ! "$END_REP" =~ ^[0-9]+$ ]]; then
-    echo "Error: --start-rep and --end-rep must be integers."
-    exit 4
-  fi
-  if (( START_REP < 1 || END_REP < 1 || START_REP > 20 || END_REP > 20 )); then
-    echo "Error: replicate range must be within 1-20."
-    exit 4
-  fi
-  if (( START_REP > END_REP )); then
-    echo "Error: --start-rep cannot be greater than --end-rep."
-    exit 4
-  fi
-fi
-
-if [[ "$STELAR_ROOT_SET" = false ]]; then
-  if [[ "$BASE_DIR_SET" = true ]]; then
-    STELAR_ROOT="${BASE_DIR%/}/STELAR-X"
-  else
-    STELAR_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  fi
-fi
-
-if [[ "$BASELINES_DIR_SET" = false ]]; then
-  BASELINES_DIR="${STELAR_ROOT%/}/baselines"
-fi
-
-DATA_DIR=$(realpath "$DATA_DIR")
-STELAR_ROOT=$(realpath "$STELAR_ROOT")
-BASELINES_DIR=$(realpath "$BASELINES_DIR")
-
-if [[ "${DEBUG:-0}" = "1" ]]; then
-  set -x
-fi
-
+STELARX_ROOT="$(realpath "$STELARX_ROOT")"
+PYTHON_BIN="${STELARX_PYTHON:-${STELARX_ROOT}/.venv/bin/python}"
+[[ -x "$PYTHON_BIN" ]] || PYTHON_BIN="python3"
+DATA_DIR="$(realpath "$DATA_DIR")"
 SIMPHY_DIR="${DATA_DIR%/}/10k-simphy"
 if [[ ! -d "$SIMPHY_DIR" ]]; then
-  echo "Error: expected simphy dir at $SIMPHY_DIR"
-  exit 5
+  echo "Error: expected 10k-simphy at $SIMPHY_DIR"
+  exit 3
 fi
 
-if [[ -n "$START_REP" && -n "$END_REP" ]]; then
-  REPL_LIST=()
-  for i in $(seq "$START_REP" "$END_REP"); do
-    REPL_LIST+=("R${i}")
+if [[ "$OUTPUTS_MIRROR" == true ]]; then
+  A10K_OUTPUTS_DIR="$(stelarx_prepare_a10k_outputs_dir "$A10K_OUTPUTS_DIR" "$DATA_DIR")" || exit 2
+else
+  A10K_OUTPUTS_DIR="(disabled)"
+fi
+
+# Copy one results directory into the reproducibility mirror. A mirror problem
+# is reported loudly but never changes the outcome of the run itself.
+mirror_results_dir() {
+  local results_dir="$1" mirrored
+  [[ "$OUTPUTS_MIRROR" == true ]] || return 0
+  [[ -d "$results_dir" ]] || return 0
+  if mirrored="$(stelarx_mirror_a10k_results "$DATA_DIR" "$A10K_OUTPUTS_DIR" "$results_dir")"; then
+    echo "Mirrored outputs to: $mirrored"
+  else
+    echo "WARNING: outputs mirror was not updated for $results_dir" >&2
+  fi
+}
+
+# Complete the command record (out-stelarx.command, written by the wrapper with
+# the exact run.sh invocation) with the outer commands that produced this run.
+# Reads the loop variables of the case currently being run.
+append_a10k_command_context() {
+  local rf_rate="$1"
+  [[ -f "$COMMAND_FILE" ]] || return 0
+  {
+    echo "# --- A10K run context (run-a10k.sh) ---"
+    echo "# dataset:      $(basename "$DATA_DIR")"
+    echo "# replicate:    $REPL"
+    echo "# tree type:    $TREE_TYPE"
+    echo "# setting:      $SETTING_NAME"
+    echo "# gene trees:   $GT_FILE"
+    echo "# true tree:    $TRUE_TREE"
+    echo "# rf_rate:      $rf_rate"
+    printf '# invoked as: '
+    printf ' %q' "${SCRIPT_ARGV[@]}"
+    printf '\n'
+    printf '# wrapper cmd:'
+    printf ' %q' "${CMD[@]}"
+    printf '\n'
+  } >> "$COMMAND_FILE" 2>/dev/null || echo "Warning: could not append to command record $COMMAND_FILE" >&2
+}
+
+TREE_TYPES=()
+IFS=';' read -r -a raw_tree_types <<< "$TREE_TYPES_RAW"
+for tree_type in "${raw_tree_types[@]}"; do
+  tree_type="${tree_type//[[:space:]]/}"
+  tree_type="${tree_type,,}"
+  [[ -n "$tree_type" ]] || continue
+  case "$tree_type" in
+    true|estimated) ;;
+    *)
+      echo "Error: invalid --tree-type value '$tree_type' (expected true, estimated, or a semicolon-separated list)."
+      exit 2
+      ;;
+  esac
+
+  duplicate=false
+  for existing_tree_type in "${TREE_TYPES[@]}"; do
+    if [[ "$existing_tree_type" == "$tree_type" ]]; then
+      duplicate=true
+      break
+    fi
   done
+  [[ "$duplicate" == false ]] && TREE_TYPES+=("$tree_type")
+done
+if [[ ${#TREE_TYPES[@]} -eq 0 ]]; then
+  echo "Error: --tree-type must contain at least one of: true, estimated."
+  exit 2
+fi
+
+STELARX_OPTS_LIST=()
+if [[ -n "$STELARX_OPTS_LIST_RAW" ]]; then
+  IFS=';' read -r -a raw_opts_list <<< "$STELARX_OPTS_LIST_RAW"
+  for opts in "${raw_opts_list[@]}"; do
+    opts="$(echo "$opts" | sed 's/^ *//;s/ *$//')"
+    [[ -n "$opts" ]] && STELARX_OPTS_LIST+=("$opts")
+  done
+fi
+if [[ ${#STELARX_OPTS_LIST[@]} -eq 0 ]]; then
+  STELARX_OPTS_LIST+=("${STELARX_OPTS}")
+fi
+echo "[DEBUG] opts list (${#STELARX_OPTS_LIST[@]} items): ${STELARX_OPTS_LIST[*]}"
+echo "[DEBUG] tree types (${#TREE_TYPES[@]} items): ${TREE_TYPES[*]}"
+echo "[DEBUG] replicates spec: '${REPLICATES_SPEC}' | fresh: ${FRESH}"
+echo "[DEBUG] outputs mirror: ${A10K_OUTPUTS_DIR}"
+
+REPL_LIST=()
+if [[ -n "$START_REP" || -n "$END_REP" ]]; then
+  for i in $(seq "$START_REP" "$END_REP"); do REPL_LIST+=("R${i}"); done
 elif [[ -n "$REPLICATES_SPEC" ]]; then
-  REPL_LIST=()
   if [[ "$REPLICATES_SPEC" =~ ^[0-9]+-[0-9]+$ ]]; then
     start="${REPLICATES_SPEC%-*}"
     end="${REPLICATES_SPEC#*-}"
-    for i in $(seq "$start" "$end"); do
-      REPL_LIST+=("R${i}")
-    done
+    for i in $(seq "$start" "$end"); do REPL_LIST+=("R${i}"); done
   else
     IFS=',' read -r -a parts <<< "$REPLICATES_SPEC"
     for p in "${parts[@]}"; do
-      p_trim="$(echo "$p" | sed 's/^ *//;s/ *$//')"
-      if [[ "$p_trim" =~ ^R[0-9]+$ ]]; then
-        REPL_LIST+=("$p_trim")
-      elif [[ "$p_trim" =~ ^[0-9]+$ ]]; then
-        REPL_LIST+=("R${p_trim}")
-      fi
+      p="${p// /}"
+      [[ "$p" =~ ^R ]] || p="R${p}"
+      REPL_LIST+=("$p")
     done
   fi
 else
-  REPL_LIST=()
   while IFS= read -r -d '' d; do
     REPL_LIST+=("$(basename "$d")")
   done < <(find "$SIMPHY_DIR" -maxdepth 1 -type d -name 'R*' -print0 | sort -z -V)
 fi
 
-if [[ ${#REPL_LIST[@]} -eq 0 ]]; then
-  echo "Error: no replicates found."
-  exit 6
-fi
+echo "[DEBUG] replicate list (${#REPL_LIST[@]} items): ${REPL_LIST[*]}"
 
-for REPL in "${REPL_LIST[@]}"; do
-  if [[ "$REPL" =~ ^R([0-9]+)$ ]]; then
-    rep_num="${BASH_REMATCH[1]}"
-    if (( rep_num > 20 )); then
-      echo "Error: replicate ${REPL} is out of range (max 20)."
-      exit 6
-    fi
-  fi
+for TREE_TYPE in "${TREE_TYPES[@]}"; do
+  echo "==> Processing A10K tree type: ${TREE_TYPE}"
+  for REPL in "${REPL_LIST[@]}"; do
   REPL_DIR="${SIMPHY_DIR%/}/${REPL}"
   if [[ ! -d "$REPL_DIR" ]]; then
-    echo "Skipping missing replicate dir: $REPL_DIR"
+    echo "[DEBUG] SKIP ${REPL}: directory not found: ${REPL_DIR}"
     continue
   fi
 
   if [[ "$TREE_TYPE" == "estimated" ]]; then
-    GT_DIR="${REPL_DIR%/}/estimatedgenetrees"
-  else
-    GT_DIR="${REPL_DIR%/}"
-  fi
-
-  GT_FILE=""
-  if [[ -f "${GT_DIR%/}/estimatedgenetrees.tre" ]]; then
-    GT_FILE="${GT_DIR%/}/estimatedgenetrees.tre"
-  elif [[ -f "${GT_DIR%/}/truegenetrees" ]]; then
-    GT_FILE="${GT_DIR%/}/truegenetrees"
-  else
-    GT_FILE="$(find "$GT_DIR" -maxdepth 1 -type f -name '*.tre' | head -n1 || true)"
-  fi
-
-  TRUE_TREE="${REPL_DIR%/}/s_tree.trees"
-  if [[ -z "$GT_FILE" || ! -f "$GT_FILE" ]]; then
-    echo "Skipping ${REPL}: gene trees not found in $GT_DIR"
-    continue
-  fi
-  if [[ ! -f "$TRUE_TREE" ]]; then
-    echo "Skipping ${REPL}: species tree not found at $TRUE_TREE"
-    continue
-  fi
-
-  # For STELAR on estimated trees, root unrooted gene trees with outgroup "0"
-  ROOTED_GT=""
-  if [[ "$METHOD" == "stelar" && "$TREE_TYPE" == "estimated" ]]; then
-    ROOTED_GT="${GT_DIR%/}/estimatedgenetrees.rooted.tre"
-    if [[ "$FRESH" = true || ! -f "$ROOTED_GT" ]]; then
-      if [[ ! -x "${STELAR_ROOT%/}/process_unrooted.sh" ]]; then
-        echo "Error: process_unrooted.sh not found or not executable at ${STELAR_ROOT%/}/process_unrooted.sh"
+    GT_DIR="${REPL_DIR}/estimatedgenetrees"
+    GT_FILE="${GT_DIR}/estimatedgenetrees.tre"
+    ROOTED_GT="${GT_DIR}/estimatedgenetrees.rooted.tre"
+    if [[ ! -f "$ROOTED_GT" ]]; then
+      if [[ ! -x "${STELARX_ROOT%/}/process_unrooted.sh" ]]; then
+        echo "Error: process_unrooted.sh not found or not executable at ${STELARX_ROOT%/}/process_unrooted.sh"
         exit 7
       fi
       echo "Rooting estimated gene trees for ${REPL} with outgroup 0..."
-      "${STELAR_ROOT%/}/process_unrooted.sh" -i "$GT_FILE" -o "$ROOTED_GT" -og "0"
+      "${STELARX_ROOT%/}/process_unrooted.sh" -i "$GT_FILE" -o "$ROOTED_GT" -og "0"
     fi
     GT_FILE="$ROOTED_GT"
-  fi
-
-  OUT_DIR="${REPL_DIR%/}/${METHOD}_outputs/${TREE_TYPE}"
-  mkdir -p "$OUT_DIR"
-  OUT_FILE="${OUT_DIR%/}/out-${METHOD}.tre"
-  STAT_FILE="${OUT_DIR%/}/stat-${METHOD}.csv"
-
-  if [[ "$FRESH" = false && -f "$STAT_FILE" ]]; then
-    echo "SKIPPING: ${STAT_FILE} exists. Use --fresh to rerun."
-    continue
-  fi
-
-  # Choose int128 for ASTER if not provided and taxa is large
-  if [[ "$METHOD" == "aster" && -z "$ASTER_BIN" ]]; then
-    ASTER_BIN="bin/astral4_int128"
-  fi
-
-  if [[ "$METHOD" == "stelar" ]]; then
-    CMD=("${STELAR_ROOT%/}/run-with-monitor.sh" -i "$GT_FILE" -o "$OUT_FILE" --stelar-root "$STELAR_ROOT")
-    if [[ "$TIME_MONITOR" = false ]]; then CMD+=(--no-time-monitor); fi
-    if [[ "$GPU_MONITOR" = false ]]; then CMD+=(--no-gpu-monitor); fi
-    if [[ "$NO_NOTIFY" = true ]]; then CMD+=(--no-notify); fi
-    if [[ "$DEBUG" = 1 ]]; then CMD+=(--debug); fi
-    if [[ -n "$STELAR_OPTS" ]]; then CMD+=($STELAR_OPTS); fi
   else
-    CMD=("${STELAR_ROOT%/}/run-baseline-with-monitor.sh" -m "$METHOD" -i "$GT_FILE" -o "$OUT_FILE" --stelar-root "$STELAR_ROOT" --baselines-dir "$BASELINES_DIR")
-    if [[ "$TIME_MONITOR" = false ]]; then CMD+=(--no-time-monitor); fi
-    if [[ "$GPU_MONITOR" = false ]]; then CMD+=(--no-gpu-monitor); fi
-    if [[ "$NO_NOTIFY" = true ]]; then CMD+=(--no-notify); fi
-    if [[ "$DEBUG" = 1 ]]; then CMD+=(--debug); fi
-
-    if [[ -n "$ASTER_OPTS" ]]; then CMD+=(--aster-opts "$ASTER_OPTS"); fi
-    if [[ -n "$ASTER_BIN" ]]; then CMD+=(--aster-bin "$ASTER_BIN"); fi
-  if [[ -n "$ASTRAL_OPTS" ]]; then CMD+=(--astral-opts "$ASTRAL_OPTS"); fi
-  if [[ -n "$ASTRAL_XMS" ]]; then CMD+=(--astral-xms "$ASTRAL_XMS"); fi
-  if [[ -n "$ASTRAL_XMX" ]]; then CMD+=(--astral-xmx "$ASTRAL_XMX"); fi
-    if [[ -n "$TREEQMC_OPTS" ]]; then CMD+=(--treeqmc-opts "$TREEQMC_OPTS"); fi
-    if [[ -n "$WQFM_OPTS" ]]; then CMD+=(--wqfm-opts "$WQFM_OPTS"); fi
-    if [[ -n "$SUPERTRIPLETS_OPTS" ]]; then CMD+=(--supertriplets-opts "$SUPERTRIPLETS_OPTS"); fi
-    if [[ -n "$TMC_OPTS" ]]; then CMD+=(--tmc-opts "$TMC_OPTS"); fi
+    GT_FILE="${REPL_DIR}/truegenetrees"
   fi
-
-  echo "==> Running ${METHOD} on ${REPL} (${TREE_TYPE})"
-  echo "Command: ${CMD[*]}"
-  set +e
-  "${CMD[@]}"
-  RUN_EXIT=$?
-  set -e
-
-  STATS_FROM_BASELINE="${OUT_FILE%.tre}_stats.csv"
-  if [[ "$RUN_EXIT" -ne 0 || ! -f "$STATS_FROM_BASELINE" ]]; then
-    echo "Run failed for ${REPL} (exit: ${RUN_EXIT}). Skipping RF/stat."
+  TRUE_TREE="${REPL_DIR}/s_tree.trees"
+  if [[ ! -f "$GT_FILE" || ! -f "$TRUE_TREE" ]]; then
+    echo "[DEBUG] SKIP ${REPL}: missing files (gt=${GT_FILE} exists=$([ -f "$GT_FILE" ] && echo yes || echo no), true_tree=${TRUE_TREE} exists=$([ -f "$TRUE_TREE" ] && echo yes || echo no))"
     continue
   fi
 
-  HEADER_LINE="$(head -n1 "$STATS_FROM_BASELINE" || true)"
-  DATA_LINE="$(sed -n '2p' "$STATS_FROM_BASELINE" || true)"
+  for STELARX_OPTS_ITEM in "${STELARX_OPTS_LIST[@]}"; do
+    SETTING_NAME="$(build_setting_name_from_opts "$STELARX_OPTS_ITEM")"
+    OUT_DIR="${REPL_DIR}/stelarx_outputs/${TREE_TYPE}/${SETTING_NAME}"
+    OUT_FILE="${OUT_DIR}/out-stelarx.tre"
+    STAT_FILE="${OUT_DIR}/stat-stelarx.csv"
+    RUN_LOG="${OUT_DIR}/.stelarx_run.log"
+    COMMAND_FILE="${OUT_FILE%.*}.command"
 
-  csv_get_field() {
-    local file="$1"
-    shift
-    local header data
-    header="$(head -n1 "$file" || true)"
-    data="$(sed -n '2p' "$file" || true)"
-    if [[ -z "$header" || -z "$data" ]]; then
-      echo ""
-      return 0
+    if [[ "$FRESH" == false && -f "$STAT_FILE" ]]; then
+      echo "SKIPPING: ${STAT_FILE} exists."
+      # Keep the reproducibility mirror complete even for runs finished earlier.
+      mirror_results_dir "$OUT_DIR"
+      continue
+    elif [[ "$FRESH" == true && -f "$STAT_FILE" ]]; then
+      echo "[DEBUG] --fresh set, overwriting existing: ${STAT_FILE}"
     fi
-    IFS=',' read -r -a headers <<< "$header"
-    IFS=',' read -r -a values <<< "$data"
-    for key in "$@"; do
-      for i in "${!headers[@]}"; do
-        if [[ "${headers[$i]}" == "$key" ]]; then
-          echo "${values[$i]:-}"
-          return 0
-        fi
-      done
+
+    mkdir -p "$OUT_DIR"
+    rm -f "$RUN_LOG"
+    CMD=("${STELARX_ROOT}/run-stelarx-with-monitor.sh" -i "$GT_FILE" -o "$OUT_FILE" --stelarx-root "$STELARX_ROOT")
+    if [[ "$TIME_MONITOR" == false ]]; then CMD+=(--no-time-monitor); fi
+    if [[ "$GPU_MONITOR" == false ]]; then CMD+=(--no-gpu-monitor); fi
+    if [[ "$NO_NOTIFY" == true ]]; then CMD+=(--no-notify); fi
+    if [[ -n "$STELARX_OPTS_ITEM" ]]; then
+      CMD+=(--opts "$STELARX_OPTS_ITEM")
+    fi
+
+    echo "==> Running stelarx on ${REPL} (${TREE_TYPE}, ${SETTING_NAME})"
+    echo "Command: ${CMD[*]}"
+    set +e
+    "${CMD[@]}" 2>&1 | tee "$RUN_LOG"
+    RUN_EXIT=${PIPESTATUS[0]}
+    set -e
+
+    SIDE_STATS="${OUT_FILE%.tre}_stats.csv"
+    if [[ "$RUN_EXIT" -ne 0 || ! -f "$SIDE_STATS" ]]; then
+      echo "Run failed for ${REPL} (${TREE_TYPE}, ${SETTING_NAME}); skipping RF/stat summary."
+      # The failed run's log and command record are still worth keeping.
+      append_a10k_command_context "NA"
+      mirror_results_dir "$OUT_DIR"
+      continue
+    fi
+
+    RUNNING_TIME="$(csv_get_field "$SIDE_STATS" "running_time_s" "running-time-s")"
+    MAX_CPU_MB="$(csv_get_field "$SIDE_STATS" "max_cpu_mb" "max-cpu-mb")"
+    MAX_GPU_MB="$(csv_get_field "$SIDE_STATS" "max_gpu_mb" "max-gpu-mb")"
+    OPTIMAL_TRIPLET_SCORE="$(csv_get_field "$SIDE_STATS" "optimal_triplet_score" "optimal-triplet-score")"
+    EXIT_CODE="$(csv_get_field "$SIDE_STATS" "exit_code" "exit-code")"
+    if [[ -z "$EXIT_CODE" ]]; then
+      EXIT_CODE="$RUN_EXIT"
+    fi
+
+    RF_RATE="NA"
+    if [[ -f "$OUT_FILE" && -f "$TRUE_TREE" ]]; then
+      rf_output=$("$PYTHON_BIN" "${STELARX_ROOT}/rf.py" "$OUT_FILE" "$TRUE_TREE" 2>&1) || true
+      rf_line=$(echo "$rf_output" | grep -i "Robinson-Foulds distance" | tail -n1 || true)
+      if [[ -n "$rf_line" ]]; then
+        RF_RATE=$(echo "$rf_line" | grep -Eo '[0-9]+(\.[0-9]+)?' | tail -n1 || echo "NA")
+      fi
+    fi
+
+    echo "alg,setting,replicate,tree_type,rf-rate,optimal-triplet-score,running-time-s,max-cpu-mb,max-gpu-mb" > "$STAT_FILE"
+    echo "stelarx,${SETTING_NAME},${REPL},${TREE_TYPE},${RF_RATE},${OPTIMAL_TRIPLET_SCORE},${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB}" >> "$STAT_FILE"
+    echo
+    echo "=== A10K STELAR-X Summary ==="
+    echo "Replicate:      ${REPL}"
+    echo "Tree type:      ${TREE_TYPE}"
+    echo "Setting:        ${SETTING_NAME}"
+    echo "RF rate:        ${RF_RATE}"
+    echo "Triplet score:  ${OPTIMAL_TRIPLET_SCORE}"
+    echo "Running time:   ${RUNNING_TIME}s"
+    echo "Max CPU RAM:    ${MAX_CPU_MB} MB"
+    echo "Max GPU VRAM:   ${MAX_GPU_MB} MB"
+    echo "Output tree:    ${OUT_FILE}"
+    echo "Stats file:     ${STAT_FILE}"
+    echo "Saved $STAT_FILE"
+
+    append_a10k_command_context "$RF_RATE"
+    mirror_results_dir "$OUT_DIR"
+
+    if [[ "$NO_NOTIFY" == false ]] && command -v curl >/dev/null 2>&1; then
+      curl -s -d "✅ STELAR-X A10K completed
+
+Replicate: ${REPL}
+Tree type: ${TREE_TYPE}
+Setting: ${SETTING_NAME}
+
+RF: ${RF_RATE}
+Triplet score: ${OPTIMAL_TRIPLET_SCORE}
+Time: ${RUNNING_TIME}s
+CPU: ${MAX_CPU_MB} MB
+GPU: ${MAX_GPU_MB} MB
+Exit: ${EXIT_CODE}
+
+Tree: $(basename "$OUT_FILE")
+Stats: $(basename "$STAT_FILE")" "https://ntfy.sh/${NTFY_CHANNEL_NAME}" >/dev/null 2>&1 || true
+    fi
     done
-    echo ""
-  }
-
-  RUNNING_TIME="$(csv_get_field "$STATS_FROM_BASELINE" "running_time_s" "running-time-s")"
-  MAX_CPU_MB="$(csv_get_field "$STATS_FROM_BASELINE" "max_cpu_mb" "max-cpu-mb")"
-  MAX_GPU_MB="$(csv_get_field "$STATS_FROM_BASELINE" "max_gpu_mb" "max-gpu-mb")"
-  EXIT_CODE="$(csv_get_field "$STATS_FROM_BASELINE" "exit_code" "exit-code")"
-
-  if [[ -z "$EXIT_CODE" ]]; then
-    echo "Run failed for ${REPL}: could not read exit_code from stats. Skipping RF/stat."
-    echo "Stats file:  $STATS_FROM_BASELINE"
-    echo "Header line: ${HEADER_LINE:-<empty>}"
-    echo "Data line:   ${DATA_LINE:-<empty>}"
-    continue
-  fi
-  if [[ "$EXIT_CODE" != "0" ]]; then
-    echo "Run failed for ${REPL} (stats exit: ${EXIT_CODE}). Skipping RF/stat."
-    echo "Stats file:  $STATS_FROM_BASELINE"
-    echo "Header line: ${HEADER_LINE:-<empty>}"
-    echo "Data line:   ${DATA_LINE:-<empty>}"
-    continue
-  fi
-
-  RF_RATE="NA"
-  if [[ -f "${STELAR_ROOT%/}/rf.py" && -x "$(command -v python3)" ]]; then
-    rf_output=$(python3 "${STELAR_ROOT%/}/rf.py" "$OUT_FILE" "$TRUE_TREE" 2>&1) || true
-    rf_candidate=$(echo "$rf_output" | grep -Eo '[0-9]+(\.[0-9]+)?' | head -n1 || true)
-    if [[ -n "$rf_candidate" ]]; then
-      RF_RATE="$rf_candidate"
-    fi
-  fi
-
-  CSV_ROW="a10k,${METHOD},${REPL},${TREE_TYPE},${RF_RATE},${RUNNING_TIME},${MAX_CPU_MB},${MAX_GPU_MB},${EXIT_CODE}"
-  echo "dataset,alg,replicate,tree_type,rf-rate,running-time-s,max-cpu-mb,max-gpu-mb,exit-code" > "$STAT_FILE"
-  echo "$CSV_ROW" >> "$STAT_FILE"
-  echo "Wrote stats to $STAT_FILE"
-
-  if [[ "$NO_NOTIFY" != true && -n "$NTFY_CHANNEL_NAME" && -x "$(command -v curl)" ]]; then
-    OPTS_MSG=""
-    if [[ "$METHOD" == "stelar" ]]; then
-      OPTS_MSG="STELAR opts: ${STELAR_OPTS:-<none>}"
-    elif [[ "$METHOD" == "aster" ]]; then
-      OPTS_MSG="ASTER opts: ${ASTER_OPTS:-<none>} | ASTER bin: ${ASTER_BIN:-<default>}"
-    elif [[ "$METHOD" == "astral" ]]; then
-      OPTS_MSG="ASTRAL opts: ${ASTRAL_OPTS:-<none>} | Xms: ${ASTRAL_XMS:-<default>} | Xmx: ${ASTRAL_XMX:-<default>}"
-    elif [[ "$METHOD" == "treeqmc" ]]; then
-      OPTS_MSG="TreeQMC opts: ${TREEQMC_OPTS:-<none>}"
-    elif [[ "$METHOD" == "wqfmtree" ]]; then
-      OPTS_MSG="wQFM opts: ${WQFM_OPTS:-<none>}"
-    elif [[ "$METHOD" == "supertriplets" ]]; then
-      OPTS_MSG="SuperTriplets opts: ${SUPERTRIPLETS_OPTS:-<none>}"
-    elif [[ "$METHOD" == "tmc" ]]; then
-      OPTS_MSG="TMC opts: ${TMC_OPTS:-<none>}"
-    fi
-
-    NTFY_MSG="✅ ${METHOD} for ASTRAL-10K ${REPL} (${TREE_TYPE}) completed
-
-⚙️ ${OPTS_MSG}
-
-📊 Results:
-RF: ${RF_RATE} | Time: ${RUNNING_TIME}s
-CPU: ${MAX_CPU_MB} MB | GPU: ${MAX_GPU_MB} MB | Exit: ${EXIT_CODE}
-
-📁 ${STAT_FILE}
-
-📋 CSV Row:
-${CSV_ROW}"
-    curl -s -d "$NTFY_MSG" "https://ntfy.sh/${NTFY_CHANNEL_NAME}" >/dev/null 2>&1 || true
-  fi
+  done
 done
-
-echo "All runs finished."

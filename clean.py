@@ -191,7 +191,15 @@ def process_single_tree_from_string(
     print(f"Tips final: {tips_final}")
     print("Degree freq final (deg -> count):", dict(sorted(freq_final.items())))
 
-    s = tree.as_string(schema="newick", suppress_rooting=True).strip()
+    # Match STELAR-X's canonical label form: ordinary underscore names are
+    # emitted unquoted, while labels containing real spaces/punctuation remain
+    # valid quoted Newick labels.
+    s = tree.as_string(
+        schema="newick",
+        suppress_rooting=True,
+        unquoted_underscores=True,
+        preserve_spaces=True,
+    ).strip()
     if not s.endswith(";"):
         s = s + ";"
 

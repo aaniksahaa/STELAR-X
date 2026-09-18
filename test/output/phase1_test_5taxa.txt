@@ -1,0 +1,107 @@
+=== Phase 1 Parse Verification ===
+Total taxa: 5
+Total trees: 4
+
+--- Taxon ID assignments ---
+  A = 0
+  B = 1
+  C = 2
+  D = 3
+  E = 4
+
+--- Tree 0 ----
+  leafCount  : 5
+  isComplete : true
+  postorder  : [A, B, C, D, E]
+  postorder  : [0, 1, 2, 3, 4]  (IDs)
+  positionMap:
+    A(id=0) -> pos 0
+    B(id=1) -> pos 1
+    C(id=2) -> pos 2
+    D(id=3) -> pos 3
+    E(id=4) -> pos 4
+  node ranges (DFS pre-order):
+    internal [0,5)
+      internal [0,2)
+        leaf A : [0,1)
+        leaf B : [1,2)
+      internal [2,5)
+        leaf C : [2,3)
+        internal [3,5)
+          leaf D : [3,4)
+          leaf E : [4,5)
+  --- assertions ---
+  ALL ASSERTIONS PASSED
+
+--- Tree 1 ----
+  leafCount  : 5
+  isComplete : true
+  postorder  : [A, C, B, D, E]
+  postorder  : [0, 2, 1, 3, 4]  (IDs)
+  positionMap:
+    A(id=0) -> pos 0
+    B(id=1) -> pos 2
+    C(id=2) -> pos 1
+    D(id=3) -> pos 3
+    E(id=4) -> pos 4
+  node ranges (DFS pre-order):
+    internal [0,5)
+      internal [0,2)
+        leaf A : [0,1)
+        leaf C : [1,2)
+      internal [2,5)
+        leaf B : [2,3)
+        internal [3,5)
+          leaf D : [3,4)
+          leaf E : [4,5)
+  --- assertions ---
+  ALL ASSERTIONS PASSED
+
+--- Tree 2 ----
+  leafCount  : 5
+  isComplete : true
+  postorder  : [A, B, C, D, E]
+  postorder  : [0, 1, 2, 3, 4]  (IDs)
+  positionMap:
+    A(id=0) -> pos 0
+    B(id=1) -> pos 1
+    C(id=2) -> pos 2
+    D(id=3) -> pos 3
+    E(id=4) -> pos 4
+  node ranges (DFS pre-order):
+    internal [0,5)
+      internal [0,4)
+        internal [0,2)
+          leaf A : [0,1)
+          leaf B : [1,2)
+        internal [2,4)
+          leaf C : [2,3)
+          leaf D : [3,4)
+      leaf E : [4,5)
+  --- assertions ---
+  ALL ASSERTIONS PASSED
+
+--- Tree 3 ----
+  leafCount  : 5
+  isComplete : true
+  postorder  : [A, B, C, D, E]
+  postorder  : [0, 1, 2, 3, 4]  (IDs)
+  positionMap:
+    A(id=0) -> pos 0
+    B(id=1) -> pos 1
+    C(id=2) -> pos 2
+    D(id=3) -> pos 3
+    E(id=4) -> pos 4
+  node ranges (DFS pre-order):
+    internal [0,5)
+      internal [0,4)
+        internal [0,3)
+          internal [0,2)
+            leaf A : [0,1)
+            leaf B : [1,2)
+          leaf C : [2,3)
+        leaf D : [3,4)
+      leaf E : [4,5)
+  --- assertions ---
+  ALL ASSERTIONS PASSED
+

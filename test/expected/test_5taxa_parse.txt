@@ -1,0 +1,65 @@
+Test trees on 5 taxa: A=0, B=1, C=2, D=3, E=4
+(IDs assigned in order of first appearance across all trees)
+
+Tree 0: ((A,B),(C,(D,E)))
+  Postorder (L-to-R leaves): [A, B, C, D, E] = [0, 1, 2, 3, 4]
+  Position map: A->0, B->1, C->2, D->3, E->4
+  Node ranges:
+    leaf A: [0,1)
+    leaf B: [1,2)
+    node(A,B): [0,2)
+    leaf C: [2,3)
+    leaf D: [3,4)
+    leaf E: [4,5)
+    node(D,E): [3,5)
+    node(C,(D,E)): [2,5)
+    root: [0,5)
+
+Tree 1: ((A,C),(B,(D,E)))
+  Postorder: [A, C, B, D, E] = [0, 2, 1, 3, 4]
+  Position map: A->0, B->2, C->1, D->3, E->4
+  Node ranges:
+    leaf A: [0,1)
+    leaf C: [1,2)
+    node(A,C): [0,2)
+    leaf B: [2,3)
+    leaf D: [3,4)
+    leaf E: [4,5)
+    node(D,E): [3,5)
+    node(B,(D,E)): [2,5)
+    root: [0,5)
+
+Tree 2: (((A,B),(C,D)),E)
+  Postorder: [A, B, C, D, E] = [0, 1, 2, 3, 4]
+  Position map: A->0, B->1, C->2, D->3, E->4
+  Node ranges:
+    leaf A: [0,1)
+    leaf B: [1,2)
+    node(A,B): [0,2)
+    leaf C: [2,3)
+    leaf D: [3,4)
+    node(C,D): [2,4)
+    node((A,B),(C,D)): [0,4)
+    leaf E: [4,5)
+    root: [0,5)
+
+Tree 3: ((((A,B),C),D),E)  (caterpillar)
+  Postorder: [A, B, C, D, E] = [0, 1, 2, 3, 4]
+  Position map: A->0, B->1, C->2, D->3, E->4
+  Node ranges:
+    leaf A: [0,1)
+    leaf B: [1,2)
+    node(A,B): [0,2)
+    leaf C: [2,3)
+    node((A,B),C): [0,3)
+    leaf D: [3,4)
+    node(((A,B),C),D): [0,4)
+    leaf E: [4,5)
+    root: [0,5)
+
+Key tricky aspects covered:
+- Tree 1: A and C swap sides vs Tree 0, so postorder differs
+- Tree 0 and Tree 2: same postorder [0,1,2,3,4] but different topologies
+- Tree 3: caterpillar = deeply nested, tests complement chain
+- Cluster {A,B} appears in trees 0,2,3 -- tests deduplication
+- Cluster {D,E} appears in trees 0,1 -- tests cross-tree matching

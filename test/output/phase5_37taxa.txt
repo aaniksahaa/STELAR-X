@@ -1,0 +1,49 @@
+=== Phase 5 DP Search Space Verification ===
+Taxa: 37  Trees: 200  Clusters in X: 1200
+Clusters with splits: 1130
+Unique splits total:  2656
+Transitions emitted:  13984 (before dedup)
+
+Root splits: 13
+Check 2 (size consistency): PASSED
+Check 3 (cluster membership): PASSED
+
+Expected Type1 transitions (incl. root): 7200
+Expected Type2 transitions: 6784
+Total emitted (Type1+Type2): 13984  (expected 13984)
+Check 4 (transition count): PASSED
+
+--- Summary ---
+ALL ASSERTIONS PASSED
+
+--- Splits-per-cluster distribution ---
+  splits= 1 : 782 clusters
+  splits= 2 : 133 clusters
+  splits= 3 : 81 clusters
+  splits= 4 : 25 clusters
+  splits= 5 : 24 clusters
+  splits= 6 : 13 clusters
+  splits= 7 : 10 clusters
+  splits= 8 : 11 clusters
+  splits= 9 : 10 clusters
+  splits=10 : 6 clusters
+  splits=11 : 4 clusters
+  splits=12 : 3 clusters
+  splits=13 : 3 clusters
+  splits=14 : 3 clusters
+  splits=15 : 2 clusters
+  splits=16 : 2 clusters
+  splits=17 : 1 clusters
+  splits=18 : 1 clusters
+  splits=19 : 1 clusters
+  splits=23 : 1 clusters
+  splits=24 : 1 clusters
+  splits=27 : 5 clusters
+  splits=28 : 1 clusters
+  splits=33 : 1 clusters
+  splits=36 : 1 clusters
+  splits=37 : 1 clusters
+  splits=38 : 1 clusters
+  splits=39 : 1 clusters
+  splits=41 : 1 clusters
+  splits=48 : 1 clusters

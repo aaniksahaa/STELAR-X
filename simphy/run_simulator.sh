@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../scripts/phylogeny-data-dir.sh"
+PYTHON_BIN="${STELARX_PYTHON:-${SCRIPT_DIR}/../.venv/bin/python}"
+[[ -x "$PYTHON_BIN" ]] || PYTHON_BIN="python3"
+
 # Default values
 sb="0.000001"
 spmin="500000"
 spmax="1500000"
 out_dir=""
-data_base_dir="data"  # Default data directory (backward compatible)
+data_base_dir=""
 replicates="10"  # Default number of replicates
 # Required (no defaults)
 taxa_num=""
@@ -22,7 +27,8 @@ Required:
 
 Optional:
   -o, --out_dir     Output directory (if omitted, auto-built from params)
-  -d, --data_dir    Base data directory (default: ${data_base_dir})
+  -d, --data_dir    Base data directory
+                    (default: \$PHYLOGENY_DATA_DIR/simphy/data)
       --replicates  Number of replicates (default: ${replicates})
       --sb          Substitution/birthrate parameter (default: ${sb})
       --spmin       Population size minimum (default: ${spmin})
@@ -65,8 +71,8 @@ if [ -z "${taxa_num}" ] || [ -z "${gene_trees}" ]; then
   exit 1
 fi
 
-# Ensure data base directory exists
-mkdir -p "${data_base_dir}"
+# Resolve and create the data base directory.
+data_base_dir="$(stelarx_prepare_simphy_data_dir "$data_base_dir")"
 
 # Construct output folder if not provided
 if [ -z "${out_dir}" ]; then
@@ -114,7 +120,7 @@ echo ""
 # cs Seed
 
 # Run SimPhy (adjust path to simphy_lnx64 if necessary)
-./simphy_lnx64 \
+"${SCRIPT_DIR}/simphy_lnx64" \
   -sb f:${sb} \
   -ld f:0 \
   -lb f:0 \
@@ -158,7 +164,7 @@ echo "Running concat_gene_trees.py on all replicates..."
 for i in $(seq 1 ${replicates}); do
   if [ -d "${out_dir}/${i}" ]; then
     echo "Processing replicate ${i}..."
-    python concat_gene_trees.py "${out_dir}/${i}"
+    "$PYTHON_BIN" "${SCRIPT_DIR}/concat_gene_trees.py" "${out_dir}/${i}"
   else
     echo "Warning: replicate directory ${out_dir}/${i} not found. Skipping concat_gene_trees.py."
   fi
@@ -166,6 +172,6 @@ done
 
 # Reorganize all trees in dataset (run once after all concat operations)
 echo "Reorganizing all trees in dataset..."
-python reorganize_trees.py "${out_dir}"
+"$PYTHON_BIN" "${SCRIPT_DIR}/reorganize_trees.py" "${out_dir}"
 
 echo "Done. Output in ${out_dir}"

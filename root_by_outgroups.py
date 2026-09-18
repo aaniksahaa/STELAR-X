@@ -422,7 +422,15 @@ def process_single_tree(
             if verbose:
                 print(f"{Colors.RED}✗ Random rooting failed; tree left as-is.{Colors.RESET}")
 
-    s = tree.as_string(schema="newick", suppress_rooting=True).strip()
+    # Canonical project form: underscores remain literal taxon characters but
+    # do not acquire cosmetic quotes. Labels that genuinely contain spaces or
+    # Newick punctuation remain quoted by DendroPy.
+    s = tree.as_string(
+        schema="newick",
+        suppress_rooting=True,
+        unquoted_underscores=True,
+        preserve_spaces=True,
+    ).strip()
     if not s.endswith(";"):
         s = s + ";"
     return s, stats

@@ -1,36 +1,24 @@
 simphy/data/
 
+data/*
+
+
 *.class
 
 *.log
+
+# Runtime diagnostics generated after an unexpected Java/JVM failure.
+crash_logs/
 
 backups/
 
 *.zip
 
-stelar-x-paper-writing/
+# Self-contained release images and archives produced by build_portable.*
+dist/
 
-ascode/
+# Local Python environment created by setup_dev.sh
+.venv/
 
-*tmp/*
-
-MY-UTILS/
-
-*.pyc
-
+# Python bytecode caches
 __pycache__/
-
-data/*
-
-# Build artifacts
-target/
-bin/
-dependency-reduced-pom.xml
-
-# Keep the CUDA .so (pre-built for convenience), but ignore .o files
-cuda/*.o
-
-# JVM crash logs
-hs_err_pid*.log
-
-# Tree output files at root level (keep data/ tree files via data/* rule above)
