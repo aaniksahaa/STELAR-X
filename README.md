@@ -6,7 +6,7 @@
 
 ## 🎉 Updates
 
-- **2026-09-18 — v2.0.0 released.** Implementation-level optimizations make STELAR-X much faster and leaner: the 100,000-taxon × 1,000-gene dataset now runs in ~34 minutes using 58 GB RAM, down from ~8.5 hours and 86 GB. Self-contained release archives (no Java or CUDA installation needed) are available on the [Releases](https://github.com/aaniksahaa/STELAR-X/releases) page.
+- **2026-09-18 — v2.0.0 released.** Implementation-level optimizations make STELAR-X much faster and leaner: the 100,000-taxon × 1,000-gene dataset now runs in ~34 minutes using 58 GB RAM, down from ~8.5 hours and 86 GB. **We, therefore, request you to download and use the updated version (v2.0.0) of STELAR-X instead of using the earlier one.** Self-contained release archives (no Java or CUDA installation needed) are available on the [Releases](https://github.com/aaniksahaa/STELAR-X/releases) page.
 
 ## Citation
 
