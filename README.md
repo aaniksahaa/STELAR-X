@@ -18,14 +18,19 @@ If you use **STELAR-X**, its source code, or results produced by it in your rese
 > Genome Research, 2026. https://doi.org/10.1101/gr.282257.126
 
 ```bibtex
-@article{saha2026stelarx,
-  title   = {Scaling coalescent-based species tree inference to
-             100,000 taxa with {STELAR-X}},
-  author  = {Saha, Anik and Bayzid, Md. Shamsuzzoha},
-  journal = {Genome Research},
-  year    = {2026},
-  doi     = {10.1101/gr.282257.126},
-  note    = {Accepted at RECOMB 2026}
+@article{Saha2026,
+  title     = {Scaling coalescent-based species tree inference to
+               100,000 taxa with {STELAR-X}},
+  author    = {Saha, Anik and Bayzid, Md Shamsuzzoha},
+  journal   = {Genome Research},
+  publisher = {Cold Spring Harbor Laboratory},
+  year      = {2026},
+  month     = oct,
+  pages     = {gr.282257.126},
+  ISSN      = {1088-9051},
+  DOI       = {10.1101/gr.282257.126},
+  url       = {http://dx.doi.org/10.1101/gr.282257.126},
+  note      = {Accepted at RECOMB 2026}
 }
 ```
 
