@@ -69,7 +69,8 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
-NTFY_CHANNEL_NAME="${NTFY_CHANNEL_NAME:-anik-phylo-stx}"
+NOTIFY_BIN="${NOTIFY_BIN:-$HOME/utils/notify/notify}"
+NOTIFY_TOPIC="${NOTIFY_TOPIC:-${NTFY_CHANNEL_NAME:-anik-phylo}}"   # NTFY_CHANNEL_NAME still honoured for old commands
 
 RUNNER_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${RUNNER_ROOT}/experiment-setting-name.sh"
@@ -286,7 +287,7 @@ send_run_notification() {
     if [[ "$NO_NOTIFY" = true ]]; then
       return 0
     fi
-    if ! command -v curl >/dev/null 2>&1; then
+    if ! [ -x "$NOTIFY_BIN" ]; then
       return 0
     fi
 
@@ -316,7 +317,7 @@ Stats CSV row:
 ${stats_header}
 ${stats_row}"
 
-    curl -s -d "$notify_msg" "https://ntfy.sh/${NTFY_CHANNEL_NAME}" >/dev/null 2>&1 || true
+    [ -x "$NOTIFY_BIN" ] && "$NOTIFY_BIN" -q "$NOTIFY_TOPIC" "$notify_msg" >/dev/null 2>&1 || true
 }
 
 validate_algorithm_binaries() {
@@ -737,7 +738,7 @@ Multi-algorithm dataset runner supporting STELAR-X, ASTER, ASTRAL, TreeQMC, wQFM
 --supertriplets-opts Override default SUPERTRIPLETS_OPTS
 --tmc-opts          Override default TMC_OPTS
 --fresh             Force rerun even if stat-<alg>.csv exists
---no-notify, -nn    Disable bulk-level ntfy notifications
+--no-notify, -nn    Disable bulk-level notifications
 --help, -h          Show this help
 
 Algorithms available: stelarx, aster, astral, treeqmc, wqfmtree, supertriplets, stp-nni, tmc

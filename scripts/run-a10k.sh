@@ -11,7 +11,8 @@ source "${SCRIPT_DIR}/a10k-outputs-dir.sh"
 # script's output is piped through tee into the per-run log below.
 [[ -t 1 || -t 2 ]] && export FORCE_COLOR=1
 
-NTFY_CHANNEL_NAME="${NTFY_CHANNEL_NAME:-anik-phylo-stx}"
+NOTIFY_BIN="${NOTIFY_BIN:-$HOME/utils/notify/notify}"
+NOTIFY_TOPIC="${NOTIFY_TOPIC:-${NTFY_CHANNEL_NAME:-anik-phylo}}"   # NTFY_CHANNEL_NAME still honoured for old commands
 
 # Exact invocation of this script, appended to each run's command record.
 SCRIPT_ARGV=("$0" "$@")
@@ -89,7 +90,7 @@ Optional:
   --no-outputs-mirror  Do not copy results into the outputs mirror
   --no-time-monitor    Disable time monitoring
   --no-gpu-monitor     Disable GPU monitoring
-  --no-notify, -nn     Disable ntfy notifications
+  --no-notify, -nn     Disable notifications
 
 Examples:
   ./scripts/run-a10k.sh --data-dir /path/to/10k-astral-dataset --tree-type estimated --opts "--search-space S1 --intersection-method I2 -vv"
@@ -368,8 +369,8 @@ for TREE_TYPE in "${TREE_TYPES[@]}"; do
     append_a10k_command_context "$RF_RATE"
     mirror_results_dir "$OUT_DIR"
 
-    if [[ "$NO_NOTIFY" == false ]] && command -v curl >/dev/null 2>&1; then
-      curl -s -d "✅ STELAR-X A10K completed
+    if [[ "$NO_NOTIFY" == false ]] && [ -x "$NOTIFY_BIN" ]; then
+      [ -x "$NOTIFY_BIN" ] && "$NOTIFY_BIN" -q "$NOTIFY_TOPIC" "✅ STELAR-X A10K completed
 
 Replicate: ${REPL}
 Tree type: ${TREE_TYPE}
@@ -383,7 +384,7 @@ GPU: ${MAX_GPU_MB} MB
 Exit: ${EXIT_CODE}
 
 Tree: $(basename "$OUT_FILE")
-Stats: $(basename "$STAT_FILE")" "https://ntfy.sh/${NTFY_CHANNEL_NAME}" >/dev/null 2>&1 || true
+Stats: $(basename "$STAT_FILE")" >/dev/null 2>&1 || true
     fi
     done
   done

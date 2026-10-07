@@ -11,7 +11,8 @@ set -euo pipefail
 # terminal is connected.  Java's Banner.detectColor() honours FORCE_COLOR.
 [[ -t 1 || -t 2 ]] && export FORCE_COLOR=1
 
-NTFY_CHANNEL_NAME="${NTFY_CHANNEL_NAME:-anik-phylo-stx}"
+NOTIFY_BIN="${NOTIFY_BIN:-$HOME/utils/notify/notify}"
+NOTIFY_TOPIC="${NOTIFY_TOPIC:-${NTFY_CHANNEL_NAME:-anik-phylo}}"   # NTFY_CHANNEL_NAME still honoured for old commands
 
 INPUT_FILE=""
 OUTPUT_FILE=""
@@ -53,7 +54,7 @@ Optional:
   --log-file FILE        Save run messages to FILE (progress remains terminal-only)
   --no-time-monitor     Disable time monitoring
   --no-gpu-monitor      Disable GPU monitoring
-  --no-notify, -nn      Disable ntfy notifications
+  --no-notify, -nn      Disable notifications
   --debug               Enable shell tracing
   --help, -h            Show this message
 EOF
@@ -364,7 +365,7 @@ if [[ -f "$COMMAND_FILE" ]]; then
   echo "Command saved to: $COMMAND_FILE"
 fi
 
-if [[ "$NO_NOTIFY" == false ]] && command -v curl >/dev/null 2>&1; then
+if [[ "$NO_NOTIFY" == false ]] && [ -x "$NOTIFY_BIN" ]; then
   STATUS_EMOJI=$(if [[ $STELARX_EXIT_CODE -eq 0 ]]; then echo "✅"; else echo "❌"; fi)
   STATUS_TEXT=$(if [[ $STELARX_EXIT_CODE -eq 0 ]]; then echo "completed"; else echo "failed (exit $STELARX_EXIT_CODE)"; fi)
   NOTIFY_BODY="${STATUS_EMOJI} STELAR-X ${STATUS_TEXT}
@@ -383,7 +384,7 @@ RF rate: ${RF_RATE}"
 Input: $(basename "$INPUT_FILE")
 Output: $(basename "$OUTPUT_FILE")
 Stats: $(basename "$STATS_FILE")"
-  curl -s -d "$NOTIFY_BODY" "https://ntfy.sh/${NTFY_CHANNEL_NAME}" >/dev/null 2>&1 || true
+  [ -x "$NOTIFY_BIN" ] && "$NOTIFY_BIN" -q "$NOTIFY_TOPIC" "$NOTIFY_BODY" >/dev/null 2>&1 || true
 fi
 
 exit "$STELARX_EXIT_CODE"
