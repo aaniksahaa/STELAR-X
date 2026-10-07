@@ -9,16 +9,16 @@ MOCK_BIN="${WORK}/bin"
 mkdir -p "$MOCK_BIN"
 printf '%s\n' \
   '#!/usr/bin/env bash' \
-  'printf "%s\n" "$@" > "$NTFY_CAPTURE"' \
-  > "${MOCK_BIN}/curl"
-chmod +x "${MOCK_BIN}/curl"
+  'printf "%s\n" "$@" > "$NOTIFY_CAPTURE"' \
+  > "${MOCK_BIN}/notify"
+chmod +x "${MOCK_BIN}/notify"
 
 GENES="${ROOT}/test/input/test_5taxa.tre"
 CANDIDATE="${ROOT}/test/input/stelar_candidate_5taxa.tre"
 OUTPUT="${WORK}/inferred.tre"
-MONITOR_CAPTURE="${WORK}/monitor-ntfy.txt"
+MONITOR_CAPTURE="${WORK}/monitor-notify.txt"
 
-PATH="${MOCK_BIN}:${PATH}" NTFY_CAPTURE="$MONITOR_CAPTURE" \
+NOTIFY_BIN="${MOCK_BIN}/notify" NOTIFY_CAPTURE="$MONITOR_CAPTURE" \
   "${ROOT}/scripts/run-stelarx-with-monitor.sh" \
   --input "$GENES" --output "$OUTPUT" \
   --opts "--cpu -q --no-build" --no-time-monitor --no-gpu-monitor \
@@ -33,8 +33,8 @@ grep -Eq "Triplet score:[[:space:]]*${TRIPLET_SCORE}" "${WORK}/monitor.log"
 grep -Eq "Triplet score:[[:space:]]*${TRIPLET_SCORE}" "$MONITOR_CAPTURE"
 ! grep -qi 'quartet' "${WORK}/monitor.log" "$MONITOR_CAPTURE"
 
-SCORE_CAPTURE="${WORK}/score-only-ntfy.txt"
-PATH="${MOCK_BIN}:${PATH}" NTFY_CAPTURE="$SCORE_CAPTURE" NO_COLOR=1 \
+SCORE_CAPTURE="${WORK}/score-only-notify.txt"
+NOTIFY_BIN="${MOCK_BIN}/notify" NOTIFY_CAPTURE="$SCORE_CAPTURE" NO_COLOR=1 \
   "${ROOT}/scripts/run.sh" --no-build --input "$GENES" \
   --score-species-tree "$CANDIDATE" --cpu -q --xms 64m --xmx 1g \
   > "${WORK}/score-only.log" 2>&1
@@ -44,4 +44,4 @@ grep -q 'STELAR-X score-only completed' "$SCORE_CAPTURE"
 grep -q 'Triplet score: 21' "$SCORE_CAPTURE"
 ! grep -qi 'quartet' "${WORK}/score-only.log" "$SCORE_CAPTURE"
 
-echo "Triplet score reporting and ntfy: PASS"
+echo "Triplet score reporting and notification: PASS"

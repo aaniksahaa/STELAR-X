@@ -320,7 +320,7 @@ GPU batching and VRAM controls (`--gpu-batch-size`, `--gpu-vram-occupancy-factor
 | `STELARX_CRASH_DIR` | Directory for Java/JVM fatal-error reports | default `crash_logs/` in the checkout |
 | `STELARX_PYTHON` | Python interpreter with DendroPy used for RF rates by the monitor script | default `.venv/bin/python`, then `python3` |
 | `PHYLOGENY_DATA_DIR` | Root directory for simulated datasets and experiment outputs (see below) | `export PHYLOGENY_DATA_DIR=$HOME/phylogeny-data` |
-| `NTFY_CHANNEL_NAME` | Channel for the optional completion notification (disable with `--no-notify`) | — |
+| `NOTIFY_TOPIC` | Topic for the optional completion notification sent through the local command `~/utils/notify/notify` (default `anik-phylo`; a machine without it sends nothing; disable with `--no-notify` / `-nn`) | — |
 
 ---
 
